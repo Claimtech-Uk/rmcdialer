@@ -204,8 +204,11 @@ app.get('/', (_req, res) => {
   });
 });
 
-// API routes will be added here
-// TODO: Add route imports and middleware
+// Import routes
+import authRoutes from './routes/auth.routes';
+
+// API routes
+app.use('/api/auth', authRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
