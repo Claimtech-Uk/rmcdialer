@@ -10,6 +10,8 @@ import { CallPage } from './pages/CallPage';
 import { DashboardPage } from './pages/DashboardPage';
 import SMSPage from './pages/SMSPage';
 import { MagicLinksPage } from './pages/MagicLinksPage';
+import { ProfilePage } from './pages/ProfilePage';
+import { CallHistoryPage } from './pages/CallHistoryPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,6 +74,8 @@ function AppRoutes() {
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/sms" element={<SMSPage />} />
                   <Route path="/magic-links" element={<MagicLinksPage />} />
+                  <Route path="/calls" element={<CallHistoryPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>

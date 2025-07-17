@@ -43,6 +43,7 @@ export function Layout({ children }: LayoutProps) {
     { name: 'Queue', href: '/queue', icon: '📋', roles: ['agent', 'supervisor', 'admin'] },
     { name: 'SMS', href: '/sms', icon: '💬', roles: ['agent', 'supervisor', 'admin'] },
     { name: 'Magic Links', href: '/magic-links', icon: '🔗', roles: ['agent', 'supervisor', 'admin'] },
+    { name: 'Call History', href: '/calls', icon: '📞', roles: ['agent', 'supervisor', 'admin'] },
     { name: 'Dashboard', href: '/dashboard', icon: '📊', roles: ['supervisor', 'admin'] },
   ].filter(item => agent?.role && item.roles.includes(agent.role));
 
@@ -144,6 +145,16 @@ export function Layout({ children }: LayoutProps) {
                           </div>
                         </div>
                       </div>
+
+                      {/* Profile Link - Available to all users */}
+                      <Link
+                        to="/profile"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        onClick={() => setUserDropdownOpen(false)}
+                      >
+                        <span className="mr-3">👤</span>
+                        Profile & Settings
+                      </Link>
 
                       {/* Role-based menu items */}
                       {(agent?.role === 'supervisor' || agent?.role === 'admin') && (
