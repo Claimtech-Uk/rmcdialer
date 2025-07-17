@@ -451,42 +451,42 @@ export class SMSService {
    * Send magic link via SMS
    */
   async sendMagicLink(userId: number, phoneNumber: string, linkType: string, agentId?: number, callSessionId?: string) {
-    // Generate magic link (this would integrate with existing magic link service)
-    const mlid = Buffer.from(userId.toString()).toString('base64');
-    const baseUrl = process.env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk';
-    const magicLink = `${baseUrl}/claims?mlid=${mlid}`;
-
+    // Use the comprehensive magic link service
+    const { magicLinkService } = await import('./magic-link.service');
+    
     const user = this.getMockUserData(userId);
-    const message = `Hi ${user.firstName}, here's your secure link to access your claim: ${magicLink}. This link is valid for 24 hours.`;
+    
+    try {
+      const result = await magicLinkService.sendMagicLink({
+        userId,
+        linkType: linkType as any, // Type assertion since the types should match
+        deliveryMethod: 'sms',
+        phoneNumber,
+        userName: user.firstName,
+        agentId,
+        callSessionId
+      });
 
-    const result = await this.sendSMS({
-      phoneNumber,
-      message,
-      agentId,
-      userId,
-      callSessionId,
-      messageType: 'magic_link'
-    });
+      logger.info('Magic link sent via SMS service integration', {
+        userId,
+        linkType,
+        trackingId: result.magicLink.trackingId,
+        agentId,
+        callSessionId
+      });
 
-    // Log magic link activity
-    const magicLinkData: any = {
-      userId,
-      linkType,
-      linkToken: mlid,
-      sentVia: 'sms',
-      sentByAgentId: agentId,
-      sentAt: new Date()
-    };
+      return {
+        messageId: result.deliveryResult.messageId,
+        twilioSid: result.deliveryResult.twilioSid,
+        magicLinkId: result.magicLink.id,
+        trackingId: result.magicLink.trackingId,
+        status: 'sent'
+      };
 
-    if (callSessionId) {
-      magicLinkData.callSessionId = callSessionId;
+    } catch (error) {
+      logger.error('Failed to send magic link via SMS service integration:', error);
+      throw error;
     }
-
-    await prisma.magicLinkActivity.create({
-      data: magicLinkData
-    });
-
-    return result;
   }
 
   /**

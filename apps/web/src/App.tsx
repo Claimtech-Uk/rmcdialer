@@ -9,6 +9,7 @@ import { QueuePage } from './pages/QueuePage';
 import { CallPage } from './pages/CallPage';
 import { DashboardPage } from './pages/DashboardPage';
 import SMSPage from './pages/SMSPage';
+import { MagicLinksPage } from './pages/MagicLinksPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -70,6 +71,7 @@ function AppRoutes() {
                   <Route path="/call/:id" element={<CallPage />} />
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/sms" element={<SMSPage />} />
+                  <Route path="/magic-links" element={<MagicLinksPage />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>

@@ -42,6 +42,7 @@ export function Layout({ children }: LayoutProps) {
   const navigation = [
     { name: 'Queue', href: '/queue', icon: '📋', roles: ['agent', 'supervisor', 'admin'] },
     { name: 'SMS', href: '/sms', icon: '💬', roles: ['agent', 'supervisor', 'admin'] },
+    { name: 'Magic Links', href: '/magic-links', icon: '🔗', roles: ['agent', 'supervisor', 'admin'] },
     { name: 'Dashboard', href: '/dashboard', icon: '📊', roles: ['supervisor', 'admin'] },
   ].filter(item => agent?.role && item.roles.includes(agent.role));
 

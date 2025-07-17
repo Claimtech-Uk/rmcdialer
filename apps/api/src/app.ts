@@ -209,12 +209,14 @@ import authRoutes from './routes/auth.routes';
 import queueRoutes from './routes/queue.routes';
 import callRoutes from './routes/call.routes';
 import smsRoutes from './routes/sms.routes';
+import magicLinkRoutes from './routes/magic-link.routes';
 
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/queue', queueRoutes);
 app.use('/api/calls', callRoutes);
 app.use('/api/sms', smsRoutes);
+app.use('/api/magic-links', magicLinkRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

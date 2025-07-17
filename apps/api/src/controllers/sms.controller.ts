@@ -368,7 +368,9 @@ export const sendMagicLink = async (req: AuthRequest, res: Response, next: NextF
       data: {
         message: 'Magic link sent successfully',
         messageId: result.messageId,
-        conversationId: result.conversation.id
+        magicLinkId: result.magicLinkId,
+        trackingId: result.trackingId,
+        status: result.status
       }
     });
 
