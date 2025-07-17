@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
@@ -8,9 +8,6 @@ import {
   ClockIcon,
   CheckCircleIcon,
   XCircleIcon,
-  CogIcon,
-  CalendarIcon,
-  ChartBarIcon,
   EyeIcon,
   PencilIcon
 } from '@heroicons/react/24/outline';
@@ -440,7 +437,6 @@ function ProfileSettings({ profile, onSave }: ProfileSettingsProps) {
 export function ProfilePage() {
   const { agent } = useAuthStore();
   const queryClient = useQueryClient();
-  const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
 
   // Fetch agent status
   const { data: agentStatus, isLoading: statusLoading } = useQuery({
@@ -459,7 +455,7 @@ export function ProfilePage() {
   });
 
   // Fetch recent calls
-  const { data: recentCalls, isLoading: callsLoading } = useQuery({
+  const { data: recentCalls } = useQuery({
     queryKey: ['agent-calls', agent?.id],
     queryFn: () => apiClient.get<CallHistoryItem[]>(`/api/agents/${agent?.id}/calls?limit=10`),
     enabled: !!agent?.id,
@@ -493,7 +489,6 @@ export function ProfilePage() {
   };
 
   const handleViewCallDetails = (callId: string) => {
-    setSelectedCallId(callId);
     // Here you could open a modal or navigate to call details
     console.log('View call details:', callId);
   };

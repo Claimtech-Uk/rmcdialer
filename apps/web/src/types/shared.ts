@@ -4,6 +4,22 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface LoginResponse {
+  success: boolean;
+  data: {
+    agent: {
+      id: number;
+      email: string;
+      firstName: string;
+      lastName: string;
+      role: string;
+      isActive: boolean;
+    };
+    accessToken: string;
+    refreshToken: string;
+  };
+}
+
 export interface AgentProfile {
   id: number;
   email: string;

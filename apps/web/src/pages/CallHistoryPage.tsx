@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import { useAuthStore } from '@/store/auth';
 import { 
   MagnifyingGlassIcon,
   FunnelIcon,
@@ -458,7 +457,6 @@ function CallTable({ calls, onViewDetails, isLoading }: CallTableProps) {
 }
 
 export function CallHistoryPage() {
-  const { agent } = useAuthStore();
   const [filters, setFilters] = useState<CallHistoryFilters>({
     dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 7 days
     dateTo: new Date().toISOString().split('T')[0]

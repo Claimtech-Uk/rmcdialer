@@ -1,4 +1,4 @@
-import { LoginRequest, LoginResponse, AgentProfile } from '@dialler/shared';
+import { LoginRequest, LoginResponse, AgentProfile } from '@/types/shared';
 
 const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
 

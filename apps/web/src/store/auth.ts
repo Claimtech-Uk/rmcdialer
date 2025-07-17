@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AgentProfile, LoginRequest } from '@dialler/shared';
+import { AgentProfile, LoginRequest } from '@/types/shared';
 import { apiClient, tokenStorage, getErrorMessage } from '../lib/api-client';
 
 interface AuthState {

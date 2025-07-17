@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { 
-  ChartBarIcon, 
   UsersIcon, 
   PhoneIcon, 
   ClockIcon,
