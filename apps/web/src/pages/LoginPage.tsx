@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../store/auth';
-import { LoginRequest } from '@dialler/shared';
+import { LoginRequest } from '@/types/shared';
 
 interface LoginFormData {
   email: string;

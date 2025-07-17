@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import { UserCallContext, CallSession, CallOutcomeType, MagicLinkType } from '@dialler/shared';
+import { UserCallContext, CallSession, CallOutcomeType, MagicLinkType } from '@/types/shared';
 import { MagicLinkPanel } from '@/components/MagicLinkPanel';
 
 interface CallControlsProps {

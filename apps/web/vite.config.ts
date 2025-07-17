@@ -8,7 +8,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@dialler/shared': path.resolve(__dirname, '../../packages/shared/src'),
     },
   },
   server: {
