@@ -2,18 +2,13 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
     "module": "CommonJS",
-    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "allowJs": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "noEmit": false,
-    "allowImportingTsExtensions": false,
-    "jsx": "preserve",
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
+    "strict": true,
+    "moduleResolution": "node",
     "baseUrl": "./src",
     "paths": {
       "@/*": ["./*"],
@@ -21,26 +16,28 @@
       "@/controllers/*": ["./controllers/*"],
       "@/middleware/*": ["./middleware/*"],
       "@/models/*": ["./models/*"],
+      "@/routes/*": ["./routes/*"],
       "@/services/*": ["./services/*"],
+      "@/types/*": ["./types/*"],
       "@/utils/*": ["./utils/*"],
-      "@/workers/*": ["./workers/*"],
-      "@dialler/shared": ["../../packages/shared/src"],
-      "@dialler/shared/*": ["../../packages/shared/src/*"]
-    }
+      "@/workers/*": ["./workers/*"]
+    },
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
   },
   "include": [
     "src/**/*",
-    "prisma/**/*"
+    "prisma/seed.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "**/*.test.ts",
     "**/*.spec.ts"
-  ],
-  "references": [
-    {
-      "path": "../../packages/shared"
-    }
   ]
 } 
