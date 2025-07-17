@@ -8,13 +8,6 @@
         "includeFiles": "apps/api/prisma/**",
         "maxLambdaSize": "50mb"
       }
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "apps/web/dist"
-      }
     }
   ],
   "routes": [
@@ -24,7 +17,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "apps/web/$1"
+      "dest": "/index.html"
     }
   ],
   "env": {
