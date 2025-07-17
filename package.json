@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "build:web": "turbo run build --filter=@dialler/shared && turbo run build --filter=@dialler/web",
     "start": "turbo run start",
     "test": "turbo run test",
     "test:integration": "turbo run test:integration",

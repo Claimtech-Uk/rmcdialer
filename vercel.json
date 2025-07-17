@@ -10,10 +10,10 @@
       }
     },
     {
-      "src": "apps/web/package.json",
+      "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "dist"
+        "distDir": "apps/web/dist"
       }
     }
   ],
@@ -32,6 +32,6 @@
   },
   "regions": ["lhr1"],
   "installCommand": "npm install",
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build:web",
   "outputDirectory": "apps/web/dist"
 } 
