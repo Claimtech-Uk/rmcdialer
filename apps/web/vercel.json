@@ -1,6 +1,41 @@
 {
   "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": null,
   "rewrites": [
+    {
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/queue",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/call/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sms",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/magic-links",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/calls",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/profile",
+      "destination": "/index.html"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
