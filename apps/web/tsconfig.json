@@ -24,9 +24,7 @@
       "@/lib/*": ["./lib/*"],
       "@/pages/*": ["./pages/*"],
       "@/store/*": ["./store/*"],
-      "@/types/*": ["./types/*"],
-      "@dialler/shared": ["../../packages/shared/src"],
-      "@dialler/shared/*": ["../../packages/shared/src/*"]
+      "@/types/*": ["./types/*"]
     }
   },
   "include": [
@@ -37,10 +35,5 @@
   "exclude": [
     "node_modules",
     "dist"
-  ],
-  "references": [
-    {
-      "path": "../../packages/shared"
-    }
   ]
 } 
