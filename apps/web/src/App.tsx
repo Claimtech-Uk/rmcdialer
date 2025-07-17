@@ -1,6 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './components/AuthProvider';
 import { useAuthStore } from './store/auth';
 import { Layout } from './components/Layout';
@@ -12,18 +10,6 @@ import SMSPage from './pages/SMSPage';
 import { MagicLinksPage } from './pages/MagicLinksPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { CallHistoryPage } from './pages/CallHistoryPage';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: (failureCount, error: any) => {
-        // Don't retry on authentication errors
-        if (error?.status === 401) return false;
-        return failureCount < 3;
-      },
-    },
-  },
-});
 
 // Protected Route Component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -47,9 +33,9 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function AppRoutes() {
+function App() {
   return (
-    <Router>
+    <AuthProvider>
       <Routes>
         {/* Public routes */}
         <Route 
@@ -82,18 +68,7 @@ function AppRoutes() {
           } 
         />
       </Routes>
-    </Router>
-  );
-}
-
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
+    </AuthProvider>
   );
 }
 
