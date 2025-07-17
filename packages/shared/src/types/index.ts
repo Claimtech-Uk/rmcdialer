@@ -15,6 +15,44 @@ export interface ApiResponse<T = any> {
   };
 }
 
+// Authentication Types
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  success: boolean;
+  data: {
+    agent: {
+      id: number;
+      email: string;
+      firstName: string;
+      lastName: string;
+      role: string;
+      isActive: boolean;
+    };
+    accessToken: string;
+    refreshToken: string;
+  };
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string;
+}
+
+export interface AgentProfile {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  isActive: boolean;
+  isAiAgent: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Agent Types
 export interface Agent {
   id: number;

@@ -206,9 +206,15 @@ app.get('/', (_req, res) => {
 
 // Import routes
 import authRoutes from './routes/auth.routes';
+import queueRoutes from './routes/queue.routes';
+import callRoutes from './routes/call.routes';
+import smsRoutes from './routes/sms.routes';
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/queue', queueRoutes);
+app.use('/api/calls', callRoutes);
+app.use('/api/sms', smsRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

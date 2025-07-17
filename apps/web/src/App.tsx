@@ -1,47 +1,93 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { AuthProvider } from './components/AuthProvider';
 import { useAuthStore } from './store/auth';
+import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { QueuePage } from './pages/QueuePage';
 import { CallPage } from './pages/CallPage';
 import { DashboardPage } from './pages/DashboardPage';
-import { SMSPage } from './pages/SMSPage';
-import { Layout } from './components/Layout';
+import SMSPage from './pages/SMSPage';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error: any) => {
+        // Don't retry on authentication errors
+        if (error?.status === 401) return false;
+        return failureCount < 3;
+      },
+    },
+  },
+});
+
+// Protected Route Component
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuthStore();
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
+}
+
+// Public Route Component (redirect to dashboard if authenticated)
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuthStore();
+  
+  if (isAuthenticated) {
+    return <Navigate to="/queue" replace />;
+  }
+  
+  return <>{children}</>;
+}
+
+function AppRoutes() {
+  return (
+    <Router>
+      <Routes>
+        {/* Public routes */}
+        <Route 
+          path="/login" 
+          element={
+            <PublicRoute>
+              <LoginPage />
+            </PublicRoute>
+          } 
+        />
+        
+        {/* Protected routes */}
+        <Route 
+          path="/*" 
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Routes>
+                  <Route path="/" element={<Navigate to="/queue" replace />} />
+                  <Route path="/queue" element={<QueuePage />} />
+                  <Route path="/call/:id" element={<CallPage />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/sms" element={<SMSPage />} />
+                </Routes>
+              </Layout>
+            </ProtectedRoute>
+          } 
+        />
+      </Routes>
+    </Router>
+  );
+}
 
 function App() {
-  const { agent, isAuthenticated } = useAuthStore();
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Layout>
-        <Routes>
-          {/* Agent Routes */}
-          <Route path="/queue" element={<QueuePage />} />
-          <Route path="/call/:sessionId" element={<CallPage />} />
-          <Route path="/sms" element={<SMSPage />} />
-          
-          {/* Supervisor Routes */}
-          {(agent?.role === 'supervisor' || agent?.role === 'admin') && (
-            <Route path="/dashboard" element={<DashboardPage />} />
-          )}
-          
-          {/* Default redirects */}
-          <Route path="/" element={<Navigate to="/queue" replace />} />
-          <Route path="/login" element={<Navigate to="/queue" replace />} />
-          <Route path="*" element={<Navigate to="/queue" replace />} />
-        </Routes>
-      </Layout>
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   );
 }
 

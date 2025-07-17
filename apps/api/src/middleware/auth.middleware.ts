@@ -102,7 +102,7 @@ export function requireRole(...allowedRoles: string[]) {
       res.status(401).json({
         success: false,
         error: {
-          code: 'AUTHENTICATION_REQUIRED',
+          code: 'UNAUTHORIZED',
           message: 'Authentication required'
         }
       });
@@ -110,13 +110,6 @@ export function requireRole(...allowedRoles: string[]) {
     }
     
     if (!allowedRoles.includes(req.agent.role)) {
-      logger.warn('Authorization failed - insufficient role', {
-        agentId: req.agent.id,
-        agentRole: req.agent.role,
-        requiredRoles: allowedRoles,
-        route: req.path || req.url
-      });
-      
       res.status(403).json({
         success: false,
         error: {
@@ -136,7 +129,7 @@ export function requireRole(...allowedRoles: string[]) {
  */
 export async function optionalAuth(
   req: AuthenticatedRequest, 
-  res: Response, 
+  _res: Response, 
   next: NextFunction
 ): Promise<void> {
   try {
@@ -144,15 +137,16 @@ export async function optionalAuth(
     const token = extractTokenFromHeader(authHeader);
     
     if (!token) {
-      // No token provided, continue without authentication
       next();
       return;
     }
     
+    // Verify the token
     const decoded = verifyAccessToken(token);
     
+    // Get the agent from database
     const agent = await prisma.agent.findUnique({
-      where: { id: decoded.agentId },
+      where: { id: decoded.agentId, isActive: true },
       select: {
         id: true,
         email: true,
@@ -163,14 +157,14 @@ export async function optionalAuth(
       }
     });
     
-    if (agent && agent.isActive) {
+    if (agent) {
       req.agent = agent;
     }
     
-    next();
-    
   } catch (error) {
-    // If token is invalid, just continue without authentication
-    next();
+    // For optional auth, we don't fail on invalid tokens
+    logger.debug('Optional auth failed:', error);
   }
+  
+  next();
 } 
