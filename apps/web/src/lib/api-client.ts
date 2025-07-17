@@ -1,6 +1,6 @@
 import { LoginRequest, LoginResponse, AgentProfile } from '@/types/shared';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'https://rmcdialer-5iwvexexb-james-campbells-projects-6c4e4922.vercel.app';
 
 // Token storage utilities
 export const tokenStorage = {

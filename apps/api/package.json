@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "description": "Dialler System API - Node.js backend with Express, Prisma, and Twilio",
   "private": true,
-  "main": "dist/app.js",
+  "main": "src/app.ts",
   "scripts": {
     "dev": "tsx watch src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
+    "vercel-build": "prisma generate && npm run build",
     "test": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest --watch",
@@ -22,8 +23,6 @@
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",
-    "@types/bcrypt": "^5.0.2",
-    "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
     "bull": "^4.11.5",
     "cors": "^2.8.5",
