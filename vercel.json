@@ -2,29 +2,20 @@
   "version": 2,
   "builds": [
     {
-      "src": "apps/api/src/app.ts",
-      "use": "@vercel/node",
+      "src": "apps/web/package.json",
+      "use": "@vercel/static-build",
       "config": {
-        "includeFiles": "apps/api/prisma/**",
-        "maxLambdaSize": "50mb"
+        "distDir": "dist"
       }
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "apps/api/src/app.ts"
-    },
-    {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "apps/web/$1"
     }
   ],
-  "env": {
-    "NODE_ENV": "production"
-  },
-  "regions": ["lhr1"],
   "installCommand": "npm install",
-  "buildCommand": "npm run build:web",
+  "buildCommand": "cd apps/web && npm run build",
   "outputDirectory": "apps/web/dist"
 } 
