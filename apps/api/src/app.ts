@@ -18,14 +18,8 @@ export const prisma = new PrismaClient({
 
 export const redis = createClient({ 
   url: process.env.REDIS_URL || 'redis://localhost:6379',
-  retry_strategy: (options: any) => {
-    if (options.error && options.error.code === 'ECONNREFUSED') {
-      return new Error('Redis server refused connection');
-    }
-    if (options.total_retry_time > 1000 * 60 * 60) {
-      return new Error('Retry time exhausted');
-    }
-    return Math.min(options.attempt * 100, 3000);
+  socket: {
+    reconnectStrategy: (retries) => Math.min(retries * 50, 500)
   }
 });
 
@@ -98,7 +92,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging middleware
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
   logger.info('Request received', {
     method: req.method,
     url: req.url,
@@ -110,7 +104,7 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoint
-app.get('/health', async (req, res) => {
+app.get('/health', async (_req, res) => {
   const checks = {
     timestamp: new Date().toISOString(),
     status: 'healthy',
@@ -120,8 +114,8 @@ app.get('/health', async (req, res) => {
         uptime: process.uptime(),
         memory: process.memoryUsage()
       },
-      database: { status: 'checking' },
-      redis: { status: 'checking' }
+      database: { status: 'checking' } as any,
+      redis: { status: 'checking' } as any
     }
   };
   
@@ -148,7 +142,7 @@ app.get('/health', async (req, res) => {
   }
   
   const allHealthy = Object.values(checks.checks)
-    .every(check => check.status === 'healthy');
+    .every((check: any) => check.status === 'healthy');
   
   checks.status = allHealthy ? 'healthy' : 'degraded';
   
@@ -156,7 +150,7 @@ app.get('/health', async (req, res) => {
 });
 
 // Basic API info endpoint
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   res.json({
     success: true,
     data: {
@@ -183,7 +177,7 @@ app.use('*', (req, res) => {
 });
 
 // Global error handler
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error('Unhandled error:', {
     error: err.message,
     stack: err.stack,
