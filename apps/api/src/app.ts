@@ -16,12 +16,47 @@ export const prisma = new PrismaClient({
   errorFormat: 'pretty'
 });
 
-export const redis = createClient({ 
-  url: process.env.REDIS_URL || 'redis://localhost:6379',
-  socket: {
-    reconnectStrategy: (retries) => Math.min(retries * 50, 500)
-  }
-});
+// Redis client setup (optional)
+let redis: any = null;
+let redisAvailable = false;
+
+// Helper functions for optional Redis usage
+export const cache = {
+  get: async (key: string) => {
+    if (!redisAvailable || !redis) return null;
+    try {
+      return await redis.get(key);
+    } catch (err: any) {
+      logger.warn('Redis get failed:', err);
+      return null;
+    }
+  },
+  set: async (key: string, value: string, ttl?: number) => {
+    if (!redisAvailable || !redis) return false;
+    try {
+      if (ttl) {
+        await redis.setex(key, ttl, value);
+      } else {
+        await redis.set(key, value);
+      }
+      return true;
+    } catch (err: any) {
+      logger.warn('Redis set failed:', err);
+      return false;
+    }
+  },
+  del: async (key: string) => {
+    if (!redisAvailable || !redis) return false;
+    try {
+      await redis.del(key);
+      return true;
+    } catch (err: any) {
+      logger.warn('Redis delete failed:', err);
+      return false;
+    }
+  },
+  isAvailable: () => redisAvailable
+};
 
 export const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -130,19 +165,26 @@ app.get('/health', async (_req, res) => {
     logger.error('Database health check failed:', error);
   }
   
-  try {
-    await redis.ping();
-    checks.checks.redis = { status: 'healthy' };
-  } catch (error) {
+  if (redis && redisAvailable) {
+    try {
+      await redis.ping();
+      checks.checks.redis = { status: 'healthy' };
+    } catch (error) {
+      checks.checks.redis = { 
+        status: 'unhealthy', 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+      logger.error('Redis health check failed:', error);
+    }
+  } else {
     checks.checks.redis = { 
-      status: 'unhealthy', 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+      status: 'disabled', 
+      message: 'Redis not configured or unavailable' 
     };
-    logger.error('Redis health check failed:', error);
   }
   
   const allHealthy = Object.values(checks.checks)
-    .every((check: any) => check.status === 'healthy');
+    .every((check: any) => check.status === 'healthy' || check.status === 'disabled');
   
   checks.status = allHealthy ? 'healthy' : 'degraded';
   
@@ -207,11 +249,13 @@ const gracefulShutdown = async () => {
     logger.error('Error closing database connection:', error);
   }
   
-  try {
-    await redis.quit();
-    logger.info('Redis connection closed');
-  } catch (error) {
-    logger.error('Error closing Redis connection:', error);
+  if (redis && redisAvailable) {
+    try {
+      await redis.quit();
+      logger.info('Redis connection closed');
+    } catch (error) {
+      logger.error('Error closing Redis connection:', error);
+    }
   }
   
   process.exit(0);
@@ -220,18 +264,53 @@ const gracefulShutdown = async () => {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
-// Initialize Redis connection
-redis.on('error', (err) => {
-  logger.error('Redis connection error:', err);
-});
+// Initialize Redis connection (optional)
+async function initializeRedis() {
+  if (!process.env.REDIS_URL && process.env.NODE_ENV === 'development') {
+    logger.info('Redis URL not provided, running without Redis cache');
+    return;
+  }
+  
+  try {
+    redis = createClient({ 
+      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      socket: {
+        reconnectStrategy: (retries) => {
+          if (retries > 2) return false; // Stop retrying after 2 attempts
+          return Math.min(retries * 50, 500);
+        }
+      }
+    });
 
-redis.on('connect', () => {
-  logger.info('Redis connected successfully');
-});
+    redis.on('error', (err: any) => {
+      logger.warn('Redis connection error (continuing without cache):', err.message);
+      redisAvailable = false;
+    });
 
-redis.connect().catch((err) => {
-  logger.error('Failed to connect to Redis:', err);
-});
+    redis.on('connect', () => {
+      logger.info('Redis connected successfully');
+      redisAvailable = true;
+    });
+
+    // Connect with timeout
+    const connectPromise = redis.connect();
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Redis connection timeout')), 3000)
+    );
+
+    await Promise.race([connectPromise, timeoutPromise]);
+    redisAvailable = true;
+    logger.info('Redis initialized successfully');
+    
+  } catch (err: any) {
+    logger.warn('Redis initialization failed, continuing without cache:', err.message);
+    redis = null;
+    redisAvailable = false;
+  }
+}
+
+// Initialize Redis on startup
+initializeRedis();
 
 const PORT = process.env.PORT || 3000;
 
