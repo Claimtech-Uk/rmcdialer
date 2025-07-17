@@ -1,0 +1,961 @@
+---
+alwaysApply: true
+---
+
+# Dialler System Cursor Rules & Project Guidelines
+
+## 🎯 Project Overview
+
+### What We're Building
+A standalone dialler system (dialler.resolvemyclaim.co.uk) that enables agents to efficiently contact users about their financial claims. The system reads user data from the main claims platform but operates completely independently with no write-backs.
+
+
+
+### Core Business Goals
+- **Increase claim completion rates** by proactively contacting users with pending requirements
+- **Reduce friction** in the claims process by sending magic links for passwordless authentication to the other app
+- **Prioritize high-value claims** through intelligent scoring and queue management
+- **Track all interactions** for compliance and quality improvement
+- **Scale operations** with both human and AI agents
+
+### Key User Journeys
+1. **Agent Login** → View Queue → Call User → Disposition Call → Next Call
+2. **User Receives Call** → Agent Explains Requirements → Receives Magic Link → Completes Claim
+3. **Supervisor Views Dashboard** → Monitors Performance → Adjusts Strategies
+
+## 📊 Database Architecture & Schema
+
+### Two-Database Strategy
+```
+┌─────────────────────┐         ┌──────────────────────┐
+│   MySQL Replica     │ ◄────── │  Main Laravel App    │
+│  (Read-Only Data)   │ 4hr     │  claim.resolvemy...  │
+└─────────────────────┘ sync    └──────────────────────┘
+         │                                    
+         ▼ Cache (Redis)                     
+┌─────────────────────┐         ┌──────────────────────┐
+│   PostgreSQL        │         │   Dialler React App  │
+│ (Dialler Features)  │ ◄────── │ dialler.resolvemy... │
+└─────────────────────┘         └──────────────────────┘
+```
+
+### Read-Only Tables from Main System (MySQL Replica)
+
+#### USERS Table
+```sql
+-- Core user information for contact
+users (
+  id BIGINT PRIMARY KEY,
+  first_name VARCHAR(255),
+  last_name VARCHAR(255),
+  email VARCHAR(255),
+  phone_number VARCHAR(255),        -- Primary contact number
+  status VARCHAR(255),              -- active, inactive, etc.
+  is_enabled BOOLEAN,               -- Can we contact them?
+  introducer VARCHAR(255),          -- Lead source
+  solicitor VARCHAR(255),           -- Assigned legal team
+  current_user_address_id VARCHAR(36), -- Links to addresses
+  last_login TIMESTAMP,
+  created_at TIMESTAMP
+)
+```
+
+#### CLAIMS Table
+```sql
+-- User's financial claims
+claims (
+  id BIGINT PRIMARY KEY,
+  user_id BIGINT,                   -- FK → users.id
+  type VARCHAR(255),                -- VEHICLE, BANK_FRAUD, etc.
+  status VARCHAR(255),              -- incomplete, documents_needed, complete
+  lender VARCHAR(255),              -- Which lender to discuss
+  solicitor VARCHAR(255),           -- Legal team handling
+  client_last_updated_at DATETIME,  -- Last user activity
+  created_at TIMESTAMP
+)
+```
+
+#### USER_ADDRESSES Table
+```sql
+-- Contact addresses (current and historical)
+user_addresses (
+  id VARCHAR(36) PRIMARY KEY,
+  user_id INT,                      -- FK → users.id
+  type VARCHAR(255),                -- address_now, previous_address
+  full_address VARCHAR(255),
+  post_code VARCHAR(255),           -- For regional filtering
+  county VARCHAR(255),              -- Geographic grouping
+  created_at TIMESTAMP
+)
+```
+
+#### CLAIM_REQUIREMENTS Table
+```sql
+-- Documents/info needed from users
+claim_requirements (
+  id VARCHAR(36) PRIMARY KEY,
+  claim_id BIGINT,                  -- FK → claims.id
+  type VARCHAR(255),                -- ID_DOCUMENT, BANK_STATEMENTS, etc.
+  status VARCHAR(255),              -- PENDING, UPLOADED, APPROVED, REJECTED
+  claim_requirement_reason TEXT,     -- Why we need this
+  claim_requirement_rejection_reason TEXT,
+  created_at TIMESTAMP
+)
+```
+
+#### CLAIM_VEHICLE_PACKAGES Table
+```sql
+-- Finance agreements (for context during calls)
+claim_vehicle_packages (
+  id VARCHAR(36) PRIMARY KEY,
+  claim_id BIGINT,                  -- FK → claims.id
+  vehicle_registration VARCHAR(255),
+  vehicle_make VARCHAR(255),
+  vehicle_model VARCHAR(255),
+  dealership_name VARCHAR(255),     -- Where they bought
+  monthly_payment DECIMAL(10,2),
+  contract_start_date DATETIME,
+  status VARCHAR(255),              -- ACTIVE, SETTLED, etc.
+)
+```
+
+#### USER_LOGS Table
+```sql
+-- User activity history (read-only for context)
+user_logs (
+  id VARCHAR(36) PRIMARY KEY,
+  user_id BIGINT,                   -- FK → users.id
+  action VARCHAR(255),              -- LOGIN, CLAIM_UPDATE, etc.
+  message TEXT,
+  created_at TIMESTAMP
+)
+```
+
+### Dialler-Specific Tables (PostgreSQL - Read/Write)
+
+#### AGENTS Table
+```sql
+-- Dialler system users
+agents (
+  id SERIAL PRIMARY KEY,
+  email VARCHAR(255) UNIQUE,
+  password_hash VARCHAR(255),
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  role VARCHAR(50),                 -- agent, supervisor, admin
+  is_active BOOLEAN DEFAULT true,
+  is_ai_agent BOOLEAN DEFAULT false,
+  twilio_worker_sid VARCHAR(255),   -- For Twilio integration
+  created_at TIMESTAMP
+)
+```
+
+#### AGENT_SESSIONS Table
+```sql
+-- Track who's online and available
+agent_sessions (
+  id UUID PRIMARY KEY,
+  agent_id INT,                     -- FK → agents.id
+  status VARCHAR(20),               -- available, on_call, break, offline
+  current_call_session_id UUID,
+  login_at TIMESTAMP,
+  logout_at TIMESTAMP,
+  calls_completed_today INT DEFAULT 0,
+  total_talk_time_seconds INT DEFAULT 0
+)
+```
+
+#### USER_CALL_SCORES Table
+```sql
+-- Intelligent prioritization system
+user_call_scores (
+  id UUID PRIMARY KEY,
+  user_id BIGINT,                   -- FK → users.id (replica)
+  current_score INT DEFAULT 0,      -- Lower = higher priority
+  next_call_after TIMESTAMP,        -- Respect time delays
+  last_call_at TIMESTAMP,
+  total_attempts INT DEFAULT 0,
+  successful_calls INT DEFAULT 0,
+  last_outcome VARCHAR(50),         -- contacted, no_answer, etc.
+  -- Score breakdown for transparency
+  base_score INT DEFAULT 0,
+  outcome_penalty_score INT DEFAULT 0,
+  time_penalty_score INT DEFAULT 0
+)
+```
+
+#### CALL_QUEUE Table
+```sql
+-- Active queue management
+call_queue (
+  id UUID PRIMARY KEY,
+  user_id BIGINT,                   -- FK → users.id (replica)
+  claim_id BIGINT,                  -- FK → claims.id (replica)
+  queue_type VARCHAR(50),           -- priority_call, callback, follow_up
+  priority_score INT,               -- From user_call_scores
+  queue_position INT,
+  status VARCHAR(20),               -- pending, assigned, completed
+  queue_reason VARCHAR(255),        -- Why they're in queue
+  assigned_to_agent_id INT,         -- FK → agents.id
+  assigned_at TIMESTAMP,
+  callback_id UUID,                 -- FK → callbacks.id
+  available_from TIMESTAMP          -- For scheduled callbacks
+)
+```
+
+#### CALL_SESSIONS Table
+```sql
+-- Individual call records
+call_sessions (
+  id UUID PRIMARY KEY,
+  user_id BIGINT,                   -- FK → users.id (replica)
+  agent_id INT,                     -- FK → agents.id
+  call_queue_id UUID,               -- FK → call_queue.id
+  twilio_call_sid VARCHAR(255),     -- Twilio's unique ID
+  status VARCHAR(20),               -- initiated, connected, completed, failed
+  direction VARCHAR(10),            -- outbound, inbound
+  started_at TIMESTAMP,
+  connected_at TIMESTAMP,
+  ended_at TIMESTAMP,
+  duration_seconds INT,
+  talk_time_seconds INT,
+  user_claims_context JSON          -- Snapshot of claims at call time
+)
+```
+
+#### CALL_OUTCOMES Table
+```sql
+-- Call results and dispositions
+call_outcomes (
+  id UUID PRIMARY KEY,
+  call_session_id UUID,             -- FK → call_sessions.id
+  outcome_type VARCHAR(50),         -- contacted, no_answer, callback_requested, etc.
+  outcome_notes TEXT,               -- Agent's detailed notes
+  next_call_delay_hours INT,        -- How long to wait
+  score_adjustment INT,             -- Points to add/subtract
+  magic_link_sent BOOLEAN,
+  sms_sent BOOLEAN,
+  documents_requested JSON,         -- Which requirements discussed
+  recorded_by_agent_id INT          -- FK → agents.id
+)
+```
+
+#### CALLBACKS Table
+```sql
+-- Scheduled callbacks
+callbacks (
+  id UUID PRIMARY KEY,
+  user_id BIGINT,                   -- FK → users.id (replica)
+  scheduled_for TIMESTAMP,
+  callback_reason TEXT,
+  preferred_agent_id INT,           -- FK → agents.id
+  original_call_session_id UUID,    -- FK → call_sessions.id
+  status VARCHAR(20),               -- pending, completed, cancelled
+  completed_call_session_id UUID    -- When callback was done
+)
+```
+
+#### MAGIC_LINK_ACTIVITIES Table
+```sql
+-- Track magic links sent
+magic_link_activities (
+  id UUID PRIMARY KEY,
+  user_id BIGINT,                   -- FK → users.id (replica)
+  link_type VARCHAR(50),            -- portal_access, document_upload, etc.
+  link_token VARCHAR(255),          -- base64(user_id)
+  sent_via VARCHAR(20),             -- sms, whatsapp
+  sent_by_agent_id INT,             -- FK → agents.id
+  sent_at TIMESTAMP,
+  accessed_at TIMESTAMP,
+  call_session_id UUID              -- FK → call_sessions.id
+)
+```
+
+#### SMS_CONVERSATIONS Table
+```sql
+-- Two-way SMS tracking
+sms_conversations (
+  id UUID PRIMARY KEY,
+  user_id BIGINT,                   -- FK → users.id (replica)
+  phone_number VARCHAR(50),
+  status VARCHAR(20),               -- active, closed
+  last_message_at TIMESTAMP,
+  assigned_agent_id INT             -- FK → agents.id
+)
+```
+
+### Critical Relationships & Query Patterns
+
+#### Get Complete User Context for Call
+```sql
+SELECT 
+  u.id, u.first_name, u.last_name, u.phone_number, u.email,
+  ua.full_address, ua.post_code,
+  c.id as claim_id, c.type as claim_type, c.status as claim_status, c.lender,
+  COUNT(DISTINCT cr.id) as pending_requirements,
+  COUNT(DISTINCT cvp.id) as active_agreements,
+  ucs.current_score, ucs.last_outcome, ucs.next_call_after
+FROM users u
+LEFT JOIN user_addresses ua ON u.current_user_address_id = ua.id
+LEFT JOIN claims c ON u.id = c.user_id
+LEFT JOIN claim_requirements cr ON c.id = cr.claim_id AND cr.status = 'PENDING'
+LEFT JOIN claim_vehicle_packages cvp ON c.id = cvp.claim_id
+LEFT JOIN user_call_scores ucs ON u.id = ucs.user_id
+WHERE u.id = ?
+GROUP BY u.id, c.id;
+```
+
+## 📁 Project Structure
+```
+dialler-system/
+├── apps/
+│   ├── api/                    # Node.js/Express backend
+│   │   ├── src/
+│   │   │   ├── config/         # Database, Redis, Twilio configs
+│   │   │   ├── controllers/    # Route handlers
+│   │   │   ├── middleware/     # Auth, error handling, validation
+│   │   │   ├── models/         # TypeScript interfaces & schemas
+│   │   │   ├── services/       # Business logic layer
+│   │   │   ├── utils/          # Helpers and utilities
+│   │   │   ├── workers/        # Background jobs (sync, cleanup)
+│   │   │   └── app.ts          # Express app setup
+│   │   ├── prisma/             # Database schema & migrations
+│   │   └── package.json
+│   │
+│   └── web/                    # React frontend (Vite)
+│       ├── src/
+│       │   ├── components/     # UI components
+│       │   ├── features/       # Feature-based modules
+│       │   ├── hooks/          # Custom React hooks
+│       │   ├── lib/            # API client, utilities
+│       │   ├── pages/          # Route pages
+│       │   ├── store/          # Zustand state management
+│       │   └── types/          # Shared TypeScript types
+│       └── package.json
+│
+├── packages/
+│   └── shared/                 # Shared types between api/web
+│       ├── src/
+│       │   └── types/
+│       └── package.json
+│
+└── infrastructure/
+    ├── docker/                 # Docker configs
+    ├── redis/                  # Redis configs
+    └── scripts/                # Deployment & maintenance scripts
+```
+
+## 🔧 Technology Stack
+
+### Backend (API)
+- **Runtime**: Node.js 20+ with TypeScript
+- **Framework**: Express.js
+- **Database**: PostgreSQL (dialler features) + MySQL read replica (main data)
+- **ORM**: Prisma
+- **Cache**: Redis
+- **Queue**: Bull (Redis-based)
+- **Voice**: Twilio SDK
+- **Validation**: Zod
+- **Logging**: Winston
+
+### Frontend (Web)
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **Routing**: React Router v6
+- **State**: Zustand
+- **UI Library**: Tailwind CSS + Radix UI
+- **Forms**: React Hook Form + Zod
+- **Data Fetching**: TanStack Query
+- **Real-time**: Socket.io-client
+- **Tables**: TanStack Table
+
+## 📝 Coding Conventions
+
+### API Response Format
+```typescript
+// ALWAYS use this format for consistency
+interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+    details?: any;
+  };
+  meta?: {
+    page?: number;
+    limit?: number;
+    total?: number;
+    totalPages?: number;
+  };
+}
+```
+
+### Error Handling Pattern
+```typescript
+// Backend error handling
+export class AppError extends Error {
+  constructor(
+    public statusCode: number,
+    public code: string,
+    message: string,
+    public details?: any
+  ) {
+    super(message);
+  }
+}
+
+// Usage
+try {
+  const result = await someOperation();
+  return res.json({ success: true, data: result });
+} catch (error) {
+  logger.error('Operation failed:', error);
+  if (error instanceof AppError) {
+    return res.status(error.statusCode).json({
+      success: false,
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+  }
+  // Generic error
+  return res.status(500).json({
+    success: false,
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: 'An unexpected error occurred'
+    }
+  });
+}
+```
+
+### Database Query Pattern
+```typescript
+// Always use typed queries with Prisma
+interface GetUsersOptions {
+  page?: number;
+  limit?: number;
+  filters?: {
+    status?: string;
+    search?: string;
+    hasRequirements?: boolean;
+  };
+  orderBy?: {
+    field: string;
+    direction: 'asc' | 'desc';
+  };
+}
+
+async function getUsersWithClaims(options: GetUsersOptions) {
+  const { page = 1, limit = 20, filters = {}, orderBy } = options;
+  
+  // Build complex queries step by step
+  const where = {
+    ...(filters.status && { status: filters.status }),
+    ...(filters.hasRequirements && {
+      claims: {
+        some: {
+          requirements: {
+            some: { status: 'PENDING' }
+          }
+        }
+      }
+    })
+  };
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      include: {
+        claims: {
+          include: {
+            requirements: true,
+            vehiclePackages: true
+          }
+        }
+      },
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: orderBy ? { [orderBy.field]: orderBy.direction } : undefined
+    }),
+    prisma.user.count({ where })
+  ]);
+
+  return {
+    users,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
+}
+```
+
+### File Naming Conventions
+```
+- Components: PascalCase       (CallInterface.tsx, QueueDashboard.tsx)
+- Hooks: camelCase            (useCallSession.ts, useQueue.ts)
+- Utils: camelCase            (formatPhone.ts, calculateScore.ts)
+- Types: camelCase            (user.types.ts, call.types.ts)
+- API Routes: kebab-case      (call-sessions.ts, magic-links.ts)
+- Database: snake_case        (call_sessions, user_scores)
+```
+
+## 🛠 Development Workflow
+
+### 1. Type-First Development
+Always define types before implementation:
+```typescript
+// 1. Define the complete type structure
+interface UserCallContext {
+  user: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    email: string;
+    address?: {
+      fullAddress: string;
+      postCode: string;
+      county: string;
+    };
+  };
+  claims: Array<{
+    id: number;
+    type: string;
+    status: string;
+    lender: string;
+    requirements: Array<{
+      id: string;
+      type: string;
+      status: string;
+      reason: string;
+    }>;
+    vehiclePackages: Array<{
+      registration: string;
+      make: string;
+      model: string;
+      dealershipName: string;
+    }>;
+  }>;
+  callScore: {
+    currentScore: number;
+    lastOutcome?: string;
+    nextCallAfter?: Date;
+  };
+}
+
+// 2. Implement with type safety
+const getUserCallContext = async (userId: number): Promise<UserCallContext> => {
+  // Implementation
+};
+```
+
+### 2. API-First Approach
+Define endpoints before UI:
+```typescript
+// Define API contract first
+POST   /api/auth/login
+GET    /api/auth/me
+
+GET    /api/queue                   # Get current queue
+POST   /api/queue/:id/assign        # Assign call to agent
+
+POST   /api/call-sessions           # Start new call
+GET    /api/call-sessions/:id       # Get call details
+PUT    /api/call-sessions/:id/status # Update call status
+POST   /api/call-sessions/:id/outcome # Record outcome
+
+POST   /api/magic-links             # Generate and send
+GET    /api/magic-links/history     # View sent links
+
+POST   /api/callbacks               # Schedule callback
+GET    /api/callbacks/upcoming      # View scheduled
+
+// Then build UI to consume
+```
+
+### 3. Component Structure
+```typescript
+// Feature-based organization
+features/
+├── calls/
+│   ├── components/
+│   │   ├── CallInterface.tsx       # Main call UI
+│   │   ├── CallControls.tsx        # Buttons and actions
+│   │   ├── CallTimer.tsx           # Duration display
+│   │   └── UserContext.tsx         # User info panel
+│   ├── hooks/
+│   │   ├── useCallSession.ts       # Call state management
+│   │   └── useTwilio.ts            # Twilio integration
+│   ├── api/
+│   │   └── callsApi.ts             # API endpoints
+│   └── types/
+│       └── calls.types.ts          # Type definitions
+```
+
+## 🔐 Authentication & Security
+
+### JWT Token Structure
+```typescript
+interface JwtPayload {
+  agentId: number;
+  email: string;
+  role: 'agent' | 'supervisor' | 'admin';
+  iat: number;
+  exp: number;
+}
+
+// Token generation
+const generateToken = (agent: Agent): string => {
+  return jwt.sign(
+    { 
+      agentId: agent.id, 
+      email: agent.email, 
+      role: agent.role 
+    },
+    process.env.JWT_SECRET!,
+    { expiresIn: '8h' }
+  );
+};
+```
+
+### Magic Link Generation
+```typescript
+// Maintain compatibility with main system
+const generateMagicLink = (userId: number, type: MagicLinkType): string => {
+  const mlid = Buffer.from(userId.toString()).toString('base64');
+  const baseUrl = process.env.MAIN_APP_URL;
+  
+  const routes: Record<MagicLinkType, string> = {
+    firstLogin: `/first-login?base64_user_id=${mlid}`,
+    claimPortal: `/claims?mlid=${mlid}`,
+    documentUpload: `/claim/requirements?mlid=${mlid}`,
+    claimCompletion: `/claim/incomplete-redirect?mlid=${mlid}`
+  };
+  
+  return `${baseUrl}${routes[type]}`;
+};
+
+// Track magic link activity
+const sendMagicLink = async (
+  userId: number, 
+  type: MagicLinkType, 
+  method: 'sms' | 'whatsapp',
+  agentId: number,
+  sessionId: string
+) => {
+  const link = generateMagicLink(userId, type);
+  
+  // Send via Twilio
+  await twilioService.sendMessage(phoneNumber, {
+    body: `Hi ${firstName}, here's your secure link to access your claim: ${link}`,
+    method
+  });
+  
+  // Record activity
+  await prisma.magicLinkActivity.create({
+    data: {
+      userId,
+      linkType: type,
+      linkToken: Buffer.from(userId.toString()).toString('base64'),
+      sentVia: method,
+      sentByAgentId: agentId,
+      callSessionId: sessionId,
+      sentAt: new Date()
+    }
+  });
+};
+```
+
+## 📊 Queue Management & Scoring
+
+### Priority Scoring Algorithm
+```typescript
+const calculateUserScore = async (userId: number): Promise<number> => {
+  const factors = await gatherScoringFactors(userId);
+  let score = 0;
+  
+  // Base factors
+  score += Math.min(factors.daysSinceLastContact * 2, 60);  // Max 60 points
+  score -= factors.pendingRequirements * 15;                // Urgent = lower score
+  score -= factors.claimValue > 10000 ? 20 : 0;            // High value priority
+  
+  // Outcome penalties
+  const outcomeScores = {
+    'not_interested': 50,
+    'no_answer': 10,
+    'wrong_number': 100,
+    'callback_requested': -20,  // Negative = higher priority
+    'contacted': 5
+  };
+  score += outcomeScores[factors.lastOutcome] || 0;
+  
+  // Time restrictions
+  if (factors.lastOutcome === 'not_interested') {
+    // No calls for 48 hours
+    await setNextCallAfter(userId, 48);
+  }
+  
+  return score;
+};
+```
+
+### Queue Population Strategy
+```sql
+-- Automated queue refresh (runs every minute)
+INSERT INTO call_queue (user_id, claim_id, priority_score, queue_type)
+SELECT 
+  ucs.user_id,
+  c.id as claim_id,
+  ucs.current_score,
+  'priority_call'
+FROM user_call_scores ucs
+JOIN users u ON ucs.user_id = u.id
+JOIN claims c ON u.id = c.user_id
+WHERE 
+  ucs.next_call_after <= NOW()
+  AND u.is_enabled = true
+  AND c.status != 'complete'
+  AND NOT EXISTS (
+    SELECT 1 FROM call_queue cq 
+    WHERE cq.user_id = ucs.user_id 
+    AND cq.status IN ('pending', 'assigned')
+  )
+ORDER BY ucs.current_score ASC
+LIMIT 100;
+```
+
+## 🚀 Performance Guidelines
+
+### Caching Strategy
+```typescript
+// Redis key patterns
+const cacheKeys = {
+  user: (id: number) => `user:${id}`,
+  userClaims: (userId: number) => `user:${userId}:claims`,
+  userRequirements: (userId: number) => `user:${userId}:requirements`,
+  queue: (status: string, page: number) => `queue:${status}:${page}`,
+  agentStats: (agentId: number, date: string) => `agent:${agentId}:stats:${date}`
+};
+
+// Cache with appropriate TTL
+const cacheUser = async (userId: number, data: any) => {
+  await redis.setex(
+    cacheKeys.user(userId), 
+    900, // 15 minutes for user data
+    JSON.stringify(data)
+  );
+};
+
+// Invalidate related caches
+const invalidateUserCache = async (userId: number) => {
+  const keys = [
+    cacheKeys.user(userId),
+    cacheKeys.userClaims(userId),
+    cacheKeys.userRequirements(userId)
+  ];
+  await redis.del(...keys);
+};
+```
+
+### Database Optimization
+```sql
+-- Critical indexes for performance
+CREATE INDEX idx_call_sessions_date ON call_sessions(created_at DESC);
+CREATE INDEX idx_call_outcomes_session ON call_outcomes(call_session_id);
+CREATE INDEX idx_user_scores_composite ON user_call_scores(next_call_after, current_score);
+CREATE INDEX idx_queue_composite ON call_queue(status, priority_score, created_at);
+CREATE INDEX idx_claims_user_status ON claims(user_id, status);
+CREATE INDEX idx_requirements_claim_status ON claim_requirements(claim_id, status);
+```
+
+## 🧪 Testing Requirements
+
+### Test Structure
+```
+__tests__/
+├── unit/           # Individual functions
+├── integration/    # API endpoints
+├── e2e/           # User workflows
+└── fixtures/      # Test data
+
+// Example test data that matches schema
+const testUser = {
+  id: 12345,
+  firstName: 'John',
+  lastName: 'Doe',
+  phoneNumber: '+447900123456',
+  claims: [{
+    id: 456,
+    type: 'VEHICLE',
+    status: 'documents_needed',
+    lender: 'Santander',
+    requirements: [{
+      type: 'BANK_STATEMENTS',
+      status: 'PENDING'
+    }]
+  }]
+};
+```
+
+### Test Patterns
+```typescript
+describe('Queue Service', () => {
+  it('should prioritize users with pending requirements', async () => {
+    // Create test data matching schema
+    const userWithRequirements = await createTestUser({
+      claims: [{
+        requirements: [
+          { type: 'ID_DOCUMENT', status: 'PENDING' }
+        ]
+      }]
+    });
+    
+    const userWithoutRequirements = await createTestUser({
+      claims: [{
+        requirements: []
+      }]
+    });
+    
+    const queue = await queueService.refreshQueue();
+    
+    // User with requirements should be higher in queue
+    expect(queue[0].userId).toBe(userWithRequirements.id);
+  });
+});
+```
+
+## 📈 Monitoring & Logging
+
+### Structured Logging
+```typescript
+logger.info('Call initiated', {
+  event: 'call_started',
+  callId: session.id,
+  userId: session.userId,
+  agentId: session.agentId,
+  userPhone: session.userPhone,
+  claimId: session.claimId,
+  claimType: session.claimType,
+  lender: session.lender,
+  pendingRequirements: session.pendingRequirements,
+  timestamp: new Date().toISOString()
+});
+```
+
+### Key Metrics to Track
+- **Call Metrics**: Duration, outcomes, connections per hour
+- **Queue Metrics**: Depth, wait times, assignment rates
+- **Agent Metrics**: Utilization, handle times, outcomes
+- **Business Metrics**: Requirements completed, magic links sent, callbacks scheduled
+
+## 🚢 Deployment
+
+### Environment Variables
+```env
+# Database
+DATABASE_URL=postgresql://user:pass@host:5432/dialler_features
+REPLICA_DATABASE_URL=mysql://readonly:pass@replica:3306/main_db
+
+# Redis
+REDIS_URL=redis://host:6379
+
+# Twilio
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
+TWILIO_TWIML_APP_SID=
+
+# Application URLs
+MAIN_APP_URL=https://claim.resolvemyclaim.co.uk
+DIALLER_APP_URL=https://dialler.resolvemyclaim.co.uk
+
+# Security
+JWT_SECRET=
+ENCRYPTION_KEY=
+
+# Feature Flags
+ENABLE_AI_AGENTS=false
+ENABLE_SMS_REPLIES=true
+```
+
+### Vercel Configuration
+```json
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "apps/api/src/app.ts",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "apps/web/package.json",
+      "use": "@vercel/static-build"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/apps/api/src/app.ts"
+    }
+  ]
+}
+```
+
+## 🎨 UI/UX Principles
+
+1. **Call-First Interface**: Everything optimized for making calls quickly
+2. **Keyboard Navigation**: All actions accessible via keyboard shortcuts
+3. **Context at a Glance**: Show all relevant user info without scrolling
+4. **One-Click Actions**: Magic links, callbacks, dispositions in single clicks
+5. **Real-time Updates**: Queue and stats update without refresh
+
+## 🔄 Git Workflow
+
+### Branch Naming
+```
+feature/add-sms-conversations
+fix/queue-priority-calculation
+refactor/scoring-algorithm
+chore/update-dependencies
+```
+
+### Commit Messages
+```
+feat: add magic link tracking to outcomes
+fix: correct timezone handling in callbacks
+refactor: optimize user context queries
+docs: update queue algorithm documentation
+test: add scoring service edge cases
+```
+
+## 📋 Critical Success Factors
+
+### Data Integrity
+- Never modify replica data
+- Always validate phone numbers before calling
+- Maintain audit trail of all actions
+
+### Performance Targets
+- Queue refresh: < 5 seconds
+- Call initiation: < 2 seconds
+- Page load: < 1 second
+- API response: < 200ms (cached), < 500ms (database)
+
+### Compliance Requirements
+- Record all call outcomes
+- Track consent and opt-outs
+- Respect time-based restrictions
+- Maintain call recordings (via Twilio)
+
+### Business Rules
+- No calls before 9 AM or after 8 PM local time
+- Maximum 3 attempts per user per week
+- 48-hour cooldown after "not interested"
+- Callbacks take priority

@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "name": "rmcdialer",
+  "builds": [
+    {
+      "src": "apps/api/src/app.ts",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": "apps/api/prisma/**"
+      }
+    },
+    {
+      "src": "apps/web/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "apps/api/src/app.ts"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "apps/web/$1"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "apps/api/src/app.ts": {
+      "maxDuration": 30
+    }
+  },
+  "regions": ["lhr1"],
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "apps/web/dist"
+} 
