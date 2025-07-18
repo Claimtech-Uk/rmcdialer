@@ -18,7 +18,7 @@ export async function GET() {
     console.log('✅ Environment variable exists')
     
     // Parse URL to show connection details (without password)
-    let connectionInfo = 'Hidden for security'
+    let connectionInfo: any = 'Hidden for security'
     try {
       const url = new URL(replicaUrl)
       connectionInfo = {
@@ -101,7 +101,7 @@ export async function GET() {
             userCount,
             connectionTimeMs: connectionTime,
             hasSampleUser: !!sampleUser,
-            sampleUserHasClaims: sampleUser?.claims?.length > 0
+            sampleUserHasClaims: (sampleUser?.claims?.length ?? 0) > 0
           },
           tests: {
             environmentVariable: '✅ Found',
