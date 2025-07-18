@@ -94,6 +94,7 @@ function generateTwilioAccessToken(
     sub: accountSid,
     nbf: now,
     exp: exp,
+    iat: now,
     grants: {
       identity: identity,
       voice: voiceGrant
