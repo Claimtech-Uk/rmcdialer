@@ -3,9 +3,6 @@
 // =============================================================================
 // Main analytics dashboard for supervisors and admins
 
-'use client'
-
-import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { 
   Phone, 
@@ -314,11 +311,6 @@ function AgentStatusList({ agents }: AgentStatusListProps) {
 }
 
 export default function DashboardPage() {
-  const [dateRange, setDateRange] = useState({
-    start: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0]
-  });
-
   // Mock data for development - will be replaced with real tRPC queries
   const mockMetrics: DashboardMetrics = {
     callMetrics: {
@@ -384,11 +376,6 @@ export default function DashboardPage() {
     }
   ];
 
-  const handleRefresh = () => {
-    // Placeholder for refresh functionality
-    console.log('Refreshing dashboard data...');
-  };
-
   const metrics = mockMetrics;
   const agents = mockAgents;
 
@@ -399,26 +386,9 @@ export default function DashboardPage() {
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">📊 Supervisor Dashboard</h1>
           <div className="flex items-center space-x-4">
-            {/* Date Range Selector */}
-            <div className="flex items-center space-x-2">
-              <input
-                type="date"
-                value={dateRange.start}
-                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <span className="text-gray-500">to</span>
-              <input
-                type="date"
-                value={dateRange.end}
-                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            
-            <Button onClick={handleRefresh}>
-              Refresh
-            </Button>
+            <span className="text-sm text-gray-500">
+              Data refreshes automatically every 30 seconds
+            </span>
           </div>
         </div>
         <p className="text-gray-600 mt-1">Real-time agent performance and system metrics</p>
@@ -528,15 +498,24 @@ export default function DashboardPage() {
             <h3 className="text-lg font-semibold text-blue-800">Quick Actions</h3>
           </div>
           <div className="mt-4 space-y-2">
-            <button className="w-full text-left px-3 py-2 bg-white border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100">
-              🔄 Refresh Queue Priority
-            </button>
-            <button className="w-full text-left px-3 py-2 bg-white border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100">
-              📊 Export Call Report
-            </button>
-            <button className="w-full text-left px-3 py-2 bg-white border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100">
-              👥 Manage Agent Schedules
-            </button>
+            <Link 
+              href="/queue" 
+              className="block w-full text-left px-3 py-2 bg-white border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
+            >
+              🔄 View Call Queue
+            </Link>
+            <Link 
+              href="/calls/history" 
+              className="block w-full text-left px-3 py-2 bg-white border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
+            >
+              📊 View Call History
+            </Link>
+            <Link 
+              href="/sms" 
+              className="block w-full text-left px-3 py-2 bg-white border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
+            >
+              💬 SMS Conversations
+            </Link>
           </div>
         </Card>
       </div>
