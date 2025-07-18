@@ -1,19 +1,18 @@
-// Calls Module - Call Sessions, Outcomes, Twilio Integration & Analytics
-// This module handles call sessions, outcomes, Twilio integration, callbacks, and call analytics
+// Calls Module Exports
+// Services, types, components, and hooks for call management
 
-// Services (main business logic)
-export { CallService } from './services/call.service'
-export { TwilioVoiceService } from './services/twilio-voice.service'
+// Services
+export { CallService } from './services/call.service';
 
-// Types (for other modules and tRPC)
+// Types
 export type {
   CallSession,
   CallSessionOptions,
   CallUpdateOptions,
-  CallOutcomeOptions,
   CallOutcome,
-  CallSessionWithContext,
+  CallOutcomeOptions,
   UserCallContext,
+  CallSessionWithContext,
   GetCallHistoryOptions,
   CallHistoryResult,
   CallAnalytics,
@@ -23,37 +22,18 @@ export type {
   GetCallbacksOptions,
   CallbacksResult,
   TwilioWebhookData,
-  TwilioCallStatus,
   InitiateCallRequest,
   InitiateCallResponse,
   LiveCallStatus,
-  CallError,
-  CallOutcomeWithDetails,
-  AgentCallStats,
-  DailyCallMetrics
-} from './types/call.types'
+  CallError
+} from './types/call.types';
 
-// Twilio Voice Service types
-export type {
-  TwilioVoiceConfig,
-  CallStatus,
-  OutgoingCallParams
-} from './services/twilio-voice.service'
-
-// Components (will be added later)
-// export { CallInterface } from './components/CallInterface'
-// export { CallControls } from './components/CallControls'
-// export { CallTimer } from './components/CallTimer'
-// export { OutcomeForm } from './components/OutcomeForm'
-// export { CallHistory } from './components/CallHistory'
+// Components
+export { CallInterface } from './components/CallInterface';
+export { CallOutcomeModal } from './components/CallOutcomeModal';
 
 // Hooks
-// export { useCallSession } from './hooks/useCallSession'
-export { useTwilioVoice } from './hooks/useTwilioVoice'
-export type { UseTwilioVoiceOptions, UseTwilioVoiceReturn } from './hooks/useTwilioVoice'
-// export { useCallTimer } from './hooks/useCallTimer'
-// export { useCallHistory } from './hooks/useCallHistory'
+export { useTwilioVoice } from './hooks/useTwilioVoice';
 
-// Utils (will be added later)
-// export { formatCallDuration } from './utils/call.utils'
-// export { getOutcomeColor } from './utils/outcome.utils'
+// Utils
+// (Add utils exports here when created)

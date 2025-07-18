@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useTwilioVoice } from '@/modules/calls/hooks/useTwilioVoice';
+import { CallInterface } from '@/modules/calls';
 import { api } from '@/lib/trpc/client';
 import type { UserCallContext } from '@/modules/users';
+import type { CallOutcomeOptions, UserCallContext as CallUserContext } from '@/modules/calls';
 
 // Format duration from seconds to MM:SS
 function formatDuration(seconds: number): string {
@@ -15,6 +17,7 @@ function formatDuration(seconds: number): string {
 export default function TestCallPage() {
   const [selectedUser, setSelectedUser] = useState<UserCallContext | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('+447738585850'); // Your test number
+  const [showProfessionalUI, setShowProfessionalUI] = useState(false);
   
   // Mock agent info (in production, get from auth context)
   const agentId = 'test_agent_1';
@@ -70,6 +73,37 @@ export default function TestCallPage() {
   // Handle DTMF pad
   const handleDigit = (digit: string) => {
     sendDigits(digit);
+  };
+
+  // Handle call outcome completion
+  const handleCallComplete = (outcome: CallOutcomeOptions) => {
+    console.log('Call completed with outcome:', outcome);
+    // In production, this would trigger navigation to next user or dashboard
+  };
+
+  // Convert between UserCallContext types (users module vs calls module)
+  const convertToCallUserContext = (user: UserCallContext): CallUserContext => {
+    return {
+      userId: user.user.id,
+      firstName: user.user.firstName || 'Unknown',
+      lastName: user.user.lastName || 'User',
+      email: user.user.email || '',
+      phoneNumber: user.user.phoneNumber || '',
+      address: user.user.address || undefined,
+      claims: user.claims.map(claim => ({
+        id: claim.id,
+        type: claim.type || 'Unknown',
+        status: claim.status || 'Unknown',
+        lender: claim.lender || 'Unknown',
+        value: claim.value || 0,
+        requirements: claim.requirements,
+        vehiclePackages: claim.vehiclePackages
+      })),
+      callScore: user.callScore || {
+        currentScore: 50,
+        totalAttempts: 0
+      }
+    };
   };
   
   return (
@@ -247,9 +281,57 @@ export default function TestCallPage() {
           )}
         </div>
       </div>
+
+      {/* UI Mode Toggle */}
+      <div className="mt-8 flex justify-center">
+        <div className="bg-white rounded-lg border p-1 flex">
+          <button
+            onClick={() => setShowProfessionalUI(false)}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              !showProfessionalUI 
+                ? 'bg-blue-500 text-white' 
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Test Interface
+          </button>
+          <button
+            onClick={() => setShowProfessionalUI(true)}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              showProfessionalUI 
+                ? 'bg-blue-500 text-white' 
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Professional Interface
+          </button>
+        </div>
+      </div>
+
+      {/* Professional Call Interface */}
+      {showProfessionalUI && selectedUser && (
+        <div className="mt-8">
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <h2 className="text-xl font-semibold text-blue-800 mb-2">
+              🎯 Professional Call Interface
+            </h2>
+            <p className="text-blue-700">
+              This is the production-ready interface that agents will use. It includes user context, 
+              call controls, and automatic outcome recording after each call.
+            </p>
+          </div>
+          
+          <CallInterface
+            userContext={convertToCallUserContext(selectedUser)}
+            onCallComplete={handleCallComplete}
+            agentId={agentId}
+            agentEmail={agentEmail}
+          />
+        </div>
+      )}
       
       {/* Instructions */}
-      <div className="mt-8 bg-gray-50 rounded-lg p-6">
+      <div className={`mt-8 bg-gray-50 rounded-lg p-6 ${showProfessionalUI ? 'hidden' : ''}`}>
         <h3 className="font-semibold mb-2">📋 Test Instructions:</h3>
         <ul className="space-y-1 text-sm text-gray-700">
           <li>• Twilio Device will auto-connect when page loads</li>
