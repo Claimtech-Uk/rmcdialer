@@ -54,11 +54,13 @@ export default function TestCallPage() {
     
     try {
       await makeCall({
-        to: phoneNumber,
-        userId: selectedUser?.user.id || 0,
-        userName: selectedUser ? `${selectedUser.user.firstName} ${selectedUser.user.lastName}` : 'Test User',
-        claimId: selectedUser?.claims[0]?.id,
-        callReason: 'Test call from Twilio integration'
+        phoneNumber: phoneNumber,
+        userContext: selectedUser ? {
+          userId: selectedUser.user.id,
+          firstName: selectedUser.user.firstName || 'Unknown',
+          lastName: selectedUser.user.lastName || 'User',
+          claimId: selectedUser.claims[0]?.id
+        } : undefined
       });
     } catch (err) {
       console.error('Failed to make call:', err);

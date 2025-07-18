@@ -1,4 +1,29 @@
-import { Device, Call } from '@twilio/voice-sdk';
+// Global Twilio SDK types (loaded via script tag)
+declare global {
+  interface Window {
+    Twilio: {
+      Device: new(accessToken: string, options?: any) => DeviceInstance;
+    };
+  }
+}
+
+interface DeviceInstance {
+  register(): void;
+  unregister(): void;
+  connect(options?: any): CallInstance;
+  on(event: string, handler: Function): void;
+  state: string;
+  isBusy: boolean;
+}
+
+interface CallInstance {
+  disconnect(): void;
+  mute(shouldMute?: boolean): void;
+  sendDigits(digits: string): void;
+  on(event: string, handler: Function): void;
+  status(): string;
+  parameters: any;
+}
 
 export interface TwilioVoiceConfig {
   agentId: string | number;
@@ -8,38 +33,39 @@ export interface TwilioVoiceConfig {
 }
 
 export interface CallStatus {
-  state: 'ready' | 'connecting' | 'connected' | 'disconnecting' | 'disconnected' | 'error';
-  callSid?: string;
-  duration?: number;
+  state: 'connecting' | 'ready' | 'offline' | 'busy' | 'error' | 'connected' | 'disconnected';
   error?: string;
+  callSid?: string;
 }
 
 export interface OutgoingCallParams {
-  to: string;
-  userId: number;
-  userName: string;
-  claimId?: number;
-  callReason?: string;
+  phoneNumber: string;
+  userContext?: {
+    userId: number;
+    firstName: string;
+    lastName: string;
+    claimId?: number;
+  };
 }
 
 export class TwilioVoiceService {
-  private device: Device | null = null;
-  private currentCall: Call | null = null;
+  private device: DeviceInstance | null = null;
+  private currentCall: CallInstance | null = null;
   private config: TwilioVoiceConfig;
   private isInitialized = false;
-  private callStartTime: number | null = null;
 
   constructor(config: TwilioVoiceConfig) {
     this.config = config;
-    console.log('🎧 TwilioVoiceService initialized for agent:', config.agentId);
   }
 
-  /**
-   * Initialize Twilio Device with access token
-   */
   async initialize(): Promise<void> {
     try {
       console.log('🔧 Initializing Twilio Device...');
+
+      // Check if Twilio SDK is loaded
+      if (typeof window === 'undefined' || !window.Twilio) {
+        throw new Error('Twilio Voice SDK not loaded. Make sure the script tag is included.');
+      }
 
       // Get access token from our API
       const tokenResponse = await fetch('/api/twilio/access-token', {
@@ -60,8 +86,8 @@ export class TwilioVoiceService {
       const { accessToken, development } = await tokenResponse.json();
       console.log(`🔑 Access token received (${development ? 'development' : 'production'} mode)`);
 
-      // Initialize Twilio Device
-      this.device = new Device(accessToken, {
+      // Initialize Twilio Device using global SDK
+      this.device = new window.Twilio.Device(accessToken, {
         // Edge locations for better connectivity  
         edge: ['dublin', 'london']
       });
@@ -69,281 +95,183 @@ export class TwilioVoiceService {
       // Set up device event handlers
       this.setupDeviceEventHandlers();
 
-      // Register the device
-      await this.device.register();
-      
+      // Register device
+      this.device.register();
       this.isInitialized = true;
-      console.log('✅ Twilio Device initialized and registered');
-      
-      this.updateCallStatus({ state: 'ready' });
+      console.log('✅ Twilio Device registered successfully');
 
     } catch (error) {
       console.error('❌ Failed to initialize Twilio Device:', error);
-      this.handleError(error as Error);
+      this.config.onError?.(error as Error);
+      this.config.onCallStatusChange?.({
+        state: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
+  }
+
+  private setupDeviceEventHandlers(): void {
+    if (!this.device) return;
+
+    // Device ready event
+    this.device.on('ready', () => {
+      console.log('📱 Twilio Device is ready for calls');
+      this.config.onCallStatusChange?.({ state: 'ready' });
+    });
+
+    // Device error event
+    this.device.on('error', (error: any) => {
+      console.error('📱 Twilio Device error:', error);
+      this.config.onError?.(error);
+      this.config.onCallStatusChange?.({
+        state: 'error',
+        error: error.message || 'Device error'
+      });
+    });
+
+    // Incoming call event (for future use)
+    this.device.on('incoming', (call: CallInstance) => {
+      console.log('📞 Incoming call received');
+      // Handle incoming calls if needed
+    });
+
+    // Device offline event
+    this.device.on('offline', () => {
+      console.log('📱 Twilio Device is offline');
+      this.config.onCallStatusChange?.({ state: 'offline' });
+    });
+  }
+
+  /**
+   * Check if the device is ready to make calls
+   */
+  isReady(): boolean {
+    return this.isInitialized && this.device !== null && this.device.state === 'ready';
+  }
+
+  /**
+   * Make an outbound call
+   */
+  async makeCall(params: OutgoingCallParams): Promise<void> {
+    if (!this.device || !this.isReady()) {
+      throw new Error('Twilio Device is not ready. Please initialize first.');
+    }
+
+    try {
+      console.log(`📞 Making call to ${params.phoneNumber}...`);
+
+      // Prepare call parameters
+      const callParams = {
+        To: params.phoneNumber,
+        // Add user context as call parameters
+        ...(params.userContext && {
+          userId: params.userContext.userId.toString(),
+          userName: `${params.userContext.firstName} ${params.userContext.lastName}`,
+          claimId: params.userContext.claimId?.toString() || ''
+        })
+      };
+
+      // Make the call
+      this.currentCall = this.device.connect(callParams);
+      this.setupCallEventHandlers(this.currentCall);
+
+      this.config.onCallStatusChange?.({ state: 'connecting' });
+
+    } catch (error) {
+      console.error('❌ Failed to make call:', error);
+      this.config.onError?.(error as Error);
       throw error;
     }
   }
 
   /**
-   * Make an outgoing call
+   * Set up event handlers for the current call
    */
-  async makeCall(params: OutgoingCallParams): Promise<void> {
-    if (!this.device || !this.isInitialized) {
-      throw new Error('Twilio Device not initialized');
-    }
+  private setupCallEventHandlers(call: CallInstance): void {
+    // Call connected
+    call.on('accept', () => {
+      console.log('✅ Call connected successfully');
+      this.config.onCallStatusChange?.({
+        state: 'connected',
+        callSid: call.parameters?.CallSid
+      });
+    });
 
-    if (this.currentCall) {
-      throw new Error('Call already in progress');
-    }
+    // Call disconnected
+    call.on('disconnect', () => {
+      console.log('📴 Call disconnected');
+      this.currentCall = null;
+      this.config.onCallStatusChange?.({ state: 'disconnected' });
+    });
 
-    try {
-      console.log(`📞 Making call to ${params.to} for user ${params.userName} (ID: ${params.userId})`);
+    // Call rejected or failed
+    call.on('reject', () => {
+      console.log('❌ Call rejected');
+      this.currentCall = null;
+      this.config.onCallStatusChange?.({
+        state: 'error',
+        error: 'Call was rejected'
+      });
+    });
 
-      // Custom parameters to pass to our webhook
-      const callParams = {
-        To: params.to,
-        userId: params.userId.toString(),
-        userName: params.userName,
-        claimId: params.claimId?.toString() || '',
-        callReason: params.callReason || 'General follow-up',
-        agentId: this.config.agentId.toString(),
-        agentEmail: this.config.agentEmail,
-      };
-
-      // Make the call
-      this.currentCall = await this.device.connect({ params: callParams });
-      
-      // Set up call event handlers
-      this.setupCallEventHandlers(this.currentCall);
-      
-      this.updateCallStatus({ state: 'connecting' });
-
-    } catch (error) {
-      console.error('❌ Failed to make call:', error);
-      this.handleError(error as Error);
-      throw error;
-    }
+    // Call error
+    call.on('error', (error: any) => {
+      console.error('❌ Call error:', error);
+      this.currentCall = null;
+      this.config.onError?.(error);
+      this.config.onCallStatusChange?.({
+        state: 'error',
+        error: error.message || 'Call error'
+      });
+    });
   }
 
   /**
    * Hang up the current call
    */
   hangUp(): void {
-    if (!this.currentCall) {
-      console.warn('No active call to hang up');
-      return;
-    }
-
-    try {
-      console.log('📞 Hanging up call...');
+    if (this.currentCall) {
+      console.log('📴 Hanging up call...');
       this.currentCall.disconnect();
-    } catch (error) {
-      console.error('❌ Failed to hang up:', error);
-      this.handleError(error as Error);
+      this.currentCall = null;
     }
   }
 
   /**
-   * Mute/unmute the microphone
+   * Mute or unmute the current call
    */
-  toggleMute(): boolean {
-    if (!this.currentCall) {
-      console.warn('No active call to mute/unmute');
-      return false;
-    }
-
-    try {
-      const isMuted = this.currentCall.isMuted();
-      this.currentCall.mute(!isMuted);
-      console.log(`🎤 Microphone ${!isMuted ? 'muted' : 'unmuted'}`);
-      return !isMuted;
-    } catch (error) {
-      console.error('❌ Failed to toggle mute:', error);
-      this.handleError(error as Error);
-      return false;
+  mute(shouldMute: boolean = true): void {
+    if (this.currentCall) {
+      this.currentCall.mute(shouldMute);
+      console.log(`🔇 Call ${shouldMute ? 'muted' : 'unmuted'}`);
     }
   }
 
   /**
-   * Get current call duration in seconds
-   */
-  getCallDuration(): number {
-    if (!this.callStartTime) return 0;
-    return Math.floor((Date.now() - this.callStartTime) / 1000);
-  }
-
-  /**
-   * Send DTMF tones (for phone menus)
+   * Send DTMF digits during a call
    */
   sendDigits(digits: string): void {
-    if (!this.currentCall) {
-      console.warn('No active call to send digits');
-      return;
-    }
-
-    try {
+    if (this.currentCall) {
       this.currentCall.sendDigits(digits);
-      console.log(`🔢 Sent digits: ${digits}`);
-    } catch (error) {
-      console.error('❌ Failed to send digits:', error);
-      this.handleError(error as Error);
+      console.log(`📞 Sent digits: ${digits}`);
     }
   }
 
   /**
-   * Clean up and destroy the device
+   * Cleanup and unregister the device
    */
   destroy(): void {
-    try {
-      if (this.currentCall) {
-        this.currentCall.disconnect();
-      }
-
-      if (this.device) {
-        this.device.destroy();
-        this.device = null;
-      }
-
-      this.isInitialized = false;
-      console.log('🧹 Twilio Device destroyed');
-    } catch (error) {
-      console.error('❌ Error destroying Twilio Device:', error);
+    if (this.currentCall) {
+      this.hangUp();
     }
-  }
 
-  /**
-   * Get current device state
-   */
-  getDeviceState(): string {
-    if (!this.device) return 'uninitialized';
-    return this.device.state;
-  }
-
-  /**
-   * Check if device is ready
-   */
-  isReady(): boolean {
-    return this.isInitialized && this.device?.state === 'registered';
-  }
-
-  // Private helper methods
-
-  private setupDeviceEventHandlers(): void {
-    if (!this.device) return;
-
-    this.device.on('registered', () => {
-      console.log('✅ Device registered and ready');
-      this.updateCallStatus({ state: 'ready' });
-    });
-
-    this.device.on('unregistered', () => {
-      console.log('❌ Device unregistered');
-      this.updateCallStatus({ state: 'disconnected' });
-    });
-
-    this.device.on('error', (error) => {
-      console.error('❌ Device error:', error);
-      this.handleError(error);
-    });
-
-    this.device.on('incoming', (call) => {
-      console.log('📞 Incoming call - rejecting (agents only make outbound calls)');
-      call.reject();
-    });
-
-    this.device.on('tokenWillExpire', async () => {
-      console.log('🔑 Access token will expire soon, refreshing...');
-      await this.refreshAccessToken();
-    });
-  }
-
-  private setupCallEventHandlers(call: Call): void {
-    call.on('accept', () => {
-      console.log('✅ Call accepted');
-      this.callStartTime = Date.now();
-      this.updateCallStatus({ 
-        state: 'connected',
-        callSid: call.parameters.CallSid
-      });
-    });
-
-    call.on('disconnect', () => {
-      console.log('📞 Call disconnected');
-      const duration = this.getCallDuration();
-      this.updateCallStatus({ 
-        state: 'disconnected',
-        duration
-      });
-      this.currentCall = null;
-      this.callStartTime = null;
-    });
-
-    call.on('cancel', () => {
-      console.log('❌ Call cancelled');
-      this.updateCallStatus({ state: 'disconnected' });
-      this.currentCall = null;
-    });
-
-    call.on('reject', () => {
-      console.log('❌ Call rejected');
-      this.updateCallStatus({ state: 'disconnected' });
-      this.currentCall = null;
-    });
-
-    call.on('error', (error) => {
-      console.error('❌ Call error:', error);
-      this.handleError(error);
-      this.currentCall = null;
-    });
-
-    call.on('mute', (isMuted) => {
-      console.log(`🎤 Call ${isMuted ? 'muted' : 'unmuted'}`);
-    });
-  }
-
-  private async refreshAccessToken(): Promise<void> {
-    try {
-      const tokenResponse = await fetch('/api/twilio/access-token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          agentId: this.config.agentId,
-          agentEmail: this.config.agentEmail,
-        }),
-      });
-
-      if (!tokenResponse.ok) {
-        throw new Error('Failed to refresh access token');
-      }
-
-      const { accessToken } = await tokenResponse.json();
-      
-      if (this.device) {
-        this.device.updateToken(accessToken);
-        console.log('✅ Access token refreshed');
-      }
-    } catch (error) {
-      console.error('❌ Failed to refresh access token:', error);
-      this.handleError(error as Error);
+    if (this.device) {
+      this.device.unregister();
+      this.device = null;
     }
-  }
 
-  private updateCallStatus(status: CallStatus): void {
-    if (this.config.onCallStatusChange) {
-      this.config.onCallStatusChange(status);
-    }
-  }
-
-  private handleError(error: Error): void {
-    this.updateCallStatus({ 
-      state: 'error',
-      error: error.message 
-    });
-
-    if (this.config.onError) {
-      this.config.onError(error);
-    }
+    this.isInitialized = false;
+    console.log('🧹 Twilio Voice Service destroyed');
   }
 } 
