@@ -131,9 +131,10 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
       return;
     }
     
-    const newMuteState = twilioServiceRef.current.toggleMute();
+    const newMuteState = !isMuted;
+    twilioServiceRef.current.mute(newMuteState);
     setIsMuted(newMuteState);
-  }, []);
+  }, [isMuted]);
   
   // Send DTMF digits
   const sendDigits = useCallback((digits: string) => {
@@ -146,12 +147,15 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
   }, []);
   
   // Duration timer management
+  const callStartTimeRef = useRef<number | null>(null);
+  
   const startDurationTimer = useCallback(() => {
     if (durationIntervalRef.current) return;
     
+    callStartTimeRef.current = Date.now();
     durationIntervalRef.current = setInterval(() => {
-      if (twilioServiceRef.current) {
-        const duration = twilioServiceRef.current.getCallDuration();
+      if (callStartTimeRef.current) {
+        const duration = Math.floor((Date.now() - callStartTimeRef.current) / 1000);
         setCallDuration(duration);
       }
     }, 1000);
@@ -162,6 +166,7 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
       clearInterval(durationIntervalRef.current);
       durationIntervalRef.current = null;
     }
+    callStartTimeRef.current = null;
   }, []);
   
   // Auto-connect on mount
