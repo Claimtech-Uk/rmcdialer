@@ -2,7 +2,7 @@
 // Domain: User data management and call context building
 
 // Services (main interface)
-export { UserService } from './services/user.service';
+export { UserService, type CompleteUserDetails } from './services/user.service';
 
 // Types (for other modules and tRPC)
 export type {

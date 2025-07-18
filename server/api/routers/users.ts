@@ -32,6 +32,37 @@ const CheckQueueEligibilitySchema = z.object({
 
 export const usersRouter = createTRPCRouter({
   /**
+   * Get complete user details with ALL connected data
+   * Includes claims, requirements, call history, magic links, callbacks, logs
+   */
+  getCompleteUserDetails: protectedProcedure
+    .input(z.object({
+      userId: z.number().int().positive()
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const details = await userService.getCompleteUserDetails(input.userId);
+        
+        if (!details) {
+          throw new Error(`User ${input.userId} not found`);
+        }
+
+        // Log access for audit trail
+        console.log(`Agent ${ctx.agent.id} accessed complete details for user ${input.userId}`);
+
+        return {
+          success: true,
+          data: details,
+          message: `Complete user details retrieved for ${details.user.firstName} ${details.user.lastName}`
+        };
+
+      } catch (error: any) {
+        console.error(`Failed to get complete user details for ${input.userId}:`, error);
+        throw new Error(`Failed to get complete user details: ${error.message}`);
+      }
+    }),
+
+  /**
    * Get complete user context for calling
    * Returns user data, claims, requirements, and call score
    */

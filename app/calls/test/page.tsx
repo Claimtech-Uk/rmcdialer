@@ -344,6 +344,24 @@ export default function TestCallPage() {
               <div className="text-sm mt-1">
                 {selectedUser.user.firstName} {selectedUser.user.lastName} - {selectedUser.user.phoneNumber}
               </div>
+              <div className="mt-2 flex gap-2">
+                <a 
+                  href={`/api/test-user-details/${selectedUser.user.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
+                >
+                  📋 View Complete Details
+                </a>
+                <a 
+                  href={`/api/debug-mysql-connection`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                >
+                  🔧 Debug Connection
+                </a>
+              </div>
             </div>
           )}
         </div>

@@ -101,6 +101,7 @@ export interface UserDataFromReplica {
   last_name: string | null;
   email_address: string | null;
   phone_number: string | null;
+  date_of_birth: Date | null;
   status: string | null;
   is_enabled: boolean | null;
   introducer: string | null;
