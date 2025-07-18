@@ -28,6 +28,7 @@ export class TwilioVoiceService {
   private currentCall: Call | null = null;
   private config: TwilioVoiceConfig;
   private isInitialized = false;
+  private accessToken: string | null = null;
 
   constructor(config: TwilioVoiceConfig) {
     this.config = config;
@@ -36,6 +37,9 @@ export class TwilioVoiceService {
   async initialize(): Promise<void> {
     try {
       console.log('🔧 Initializing Twilio Device...');
+
+      // Request microphone permissions first
+      await this.requestMicrophonePermission();
 
       // Get access token from our API
       const tokenResponse = await fetch('/api/twilio/access-token', {
@@ -50,21 +54,25 @@ export class TwilioVoiceService {
       });
 
       if (!tokenResponse.ok) {
-        throw new Error('Failed to get access token');
+        const errorData = await tokenResponse.text();
+        throw new Error(`Failed to get access token: ${tokenResponse.status} ${errorData}`);
       }
 
       const { accessToken, development } = await tokenResponse.json();
+      this.accessToken = accessToken;
       console.log(`🔑 Access token received (${development ? 'development' : 'production'} mode)`);
 
       // Initialize Twilio Device using npm package
-      this.device = new Device(accessToken);
-      // Note: Removed edge configuration to use Twilio's default routing
-      // This should resolve 31005 connection errors
+      this.device = new Device(accessToken, {
+        // Enable debug logs for troubleshooting
+        logLevel: 'debug'
+      });
 
       // Set up device event handlers
       this.setupDeviceEventHandlers();
 
-      // Register device
+      // Register device - this might trigger the AccessTokenInvalid error
+      console.log('📱 Registering Twilio Device...');
       await this.device.register();
       this.isInitialized = true;
       console.log('✅ Twilio Device registered successfully');
@@ -74,10 +82,30 @@ export class TwilioVoiceService {
       this.config.onError?.(error as Error);
       this.config.onCallStatusChange?.({
         state: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: this.getErrorMessage(error)
       });
       throw error;
     }
+  }
+
+  private async requestMicrophonePermission(): Promise<void> {
+    try {
+      console.log('🎤 Requesting microphone permission...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Stop the stream immediately after getting permission
+      stream.getTracks().forEach(track => track.stop());
+      console.log('✅ Microphone permission granted');
+    } catch (error) {
+      console.warn('⚠️ Microphone permission denied or unavailable:', error);
+      // Don't throw here - let Twilio handle audio setup
+    }
+  }
+
+  private getErrorMessage(error: any): string {
+    if (typeof error === 'string') return error;
+    if (error && typeof error.message === 'string') return error.message;
+    if (error && typeof error.toString === 'function') return error.toString();
+    return 'Unknown error occurred';
   }
 
   private setupDeviceEventHandlers(): void {
@@ -89,13 +117,21 @@ export class TwilioVoiceService {
       this.config.onCallStatusChange?.({ state: 'ready' });
     });
 
-    // Device error event
+    // Device error event - improved error handling
     this.device.on('error', (error: any) => {
       console.error('📱 Twilio Device error:', error);
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        type: typeof error,
+        description: error.description,
+        explanation: error.explanation
+      });
+      
       this.config.onError?.(error);
       this.config.onCallStatusChange?.({
         state: 'error',
-        error: error.message || 'Device error'
+        error: this.getErrorMessage(error)
       });
     });
 
@@ -109,6 +145,12 @@ export class TwilioVoiceService {
     // Device offline event
     this.device.on('unregistered', () => {
       console.log('📱 Twilio Device is offline');
+      this.config.onCallStatusChange?.({ state: 'offline' });
+    });
+
+    // Device destroyed event
+    this.device.on('destroyed', () => {
+      console.log('📱 Twilio Device destroyed');
       this.config.onCallStatusChange?.({ state: 'offline' });
     });
   }
