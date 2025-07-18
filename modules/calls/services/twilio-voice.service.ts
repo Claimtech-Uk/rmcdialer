@@ -57,10 +57,9 @@ export class TwilioVoiceService {
       console.log(`🔑 Access token received (${development ? 'development' : 'production'} mode)`);
 
       // Initialize Twilio Device using npm package
-      this.device = new Device(accessToken, {
-        // Edge locations for better connectivity  
-        edge: ['dublin', 'london']
-      });
+      this.device = new Device(accessToken);
+      // Note: Removed edge configuration to use Twilio's default routing
+      // This should resolve 31005 connection errors
 
       // Set up device event handlers
       this.setupDeviceEventHandlers();
