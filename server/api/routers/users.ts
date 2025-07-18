@@ -176,6 +176,34 @@ export const usersRouter = createTRPCRouter({
         console.error('Failed to get user stats:', error);
         throw new Error(`Failed to get user stats: ${error.message}`);
       }
+    }),
+
+  /**
+   * Get specific test user (James Campbell ID 5777) 
+   * For testing with real production data
+   */
+  getTestUser: protectedProcedure
+    .query(async ({ ctx }) => {
+      try {
+        const testUserId = 5777; // James Campbell from the main system
+        const context = await userService.getUserCallContext(testUserId);
+        
+        if (!context) {
+          throw new Error(`Test user ${testUserId} not found in replica database`);
+        }
+
+        console.log(`Agent ${ctx.agent.id} accessed test user ${testUserId} context`);
+
+        return {
+          success: true,
+          data: context,
+          message: `Test user context retrieved for ${context.user.firstName} ${context.user.lastName}`
+        };
+
+      } catch (error: any) {
+        console.error('Failed to get test user:', error);
+        throw new Error(`Failed to get test user: ${error.message}`);
+      }
     })
 });
 

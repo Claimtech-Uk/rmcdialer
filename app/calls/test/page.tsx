@@ -47,6 +47,9 @@ export default function TestCallPage() {
     limit: 10,
     filters: { hasRequirements: true }
   });
+
+  // Fetch the specific test user (James Campbell ID 5777) for testing
+  const { data: testUser, isLoading: isLoadingTestUser } = api.users.getTestUser.useQuery();
   
   // Handle making a call
   const handleMakeCall = async () => {
@@ -257,6 +260,50 @@ export default function TestCallPage() {
         {/* User Selection */}
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold mb-4">👥 Select User (Real Data)</h2>
+          
+          {/* Test User Button */}
+          {testUser?.data && (
+            <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-blue-900">🎯 Production Test User</div>
+                  <div className="text-sm text-blue-700 mt-1">
+                    {testUser.data.user.firstName} {testUser.data.user.lastName} - {testUser.data.user.phoneNumber}
+                  </div>
+                  <div className="text-xs text-blue-600 mt-1">
+                    {testUser.data.claims.length} claims, {testUser.data.claims.reduce((acc, c) => acc + c.requirements.length, 0)} requirements
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedUser(testUser.data);
+                    setPhoneNumber(testUser.data.user.phoneNumber || '');
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    selectedUser?.user.id === testUser.data.user.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  }`}
+                >
+                  {selectedUser?.user.id === testUser.data.user.id ? '✓ Selected' : 'Use Test User'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Database Status */}
+          <div className="mb-4 text-sm">
+            <div className="flex items-center gap-4">
+              <div className={`flex items-center gap-2 ${eligibleUsers ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`w-2 h-2 rounded-full ${eligibleUsers ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                Replica DB: {eligibleUsers ? 'Connected' : 'Disconnected'}
+              </div>
+              <div className={`flex items-center gap-2 ${testUser ? 'text-green-600' : 'text-yellow-600'}`}>
+                <div className={`w-2 h-2 rounded-full ${testUser ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+                Test User: {testUser ? 'Loaded' : isLoadingTestUser ? 'Loading...' : 'Failed'}
+              </div>
+            </div>
+          </div>
           
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">Loading users...</div>
