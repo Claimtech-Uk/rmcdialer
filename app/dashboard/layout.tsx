@@ -23,7 +23,8 @@ import {
   Settings,
   Users
 } from 'lucide-react';
-import { api } from '@/lib/trpc/client';
+import { api } from '@/lib/trpc/client'
+import { tokenUtils } from '@/modules/auth'
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -39,7 +40,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { data: session, isLoading } = api.auth.me.useQuery();
   const logoutMutation = api.auth.logout.useMutation({
     onSuccess: () => {
-      router.push('/login');
+      // Clear tokens from localStorage and cookies
+      tokenUtils.clear()
+      router.push('/login')
     }
   });
 
@@ -59,11 +62,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const handleLogout = async () => {
     try {
-      await logoutMutation.mutateAsync();
+      await logoutMutation.mutateAsync()
     } catch (error) {
-      console.error('Logout error:', error);
-      // Force navigation even if logout fails
-      router.push('/login');
+      console.error('Logout error:', error)
+      // Force navigation and clear tokens even if logout fails
+      tokenUtils.clear()
+      router.push('/login')
     }
   };
 
@@ -84,20 +88,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       description: 'Active and recent calls'
     },
     { 
-      name: 'SMS', 
-      href: '/sms', 
-      icon: MessageSquare, 
-      roles: ['agent', 'supervisor', 'admin'],
-      description: 'SMS conversations'
-    },
-    { 
-      name: 'Magic Links', 
-      href: '/magic-links', 
-      icon: LinkIcon, 
-      roles: ['agent', 'supervisor', 'admin'],
-      description: 'Secure links sent to users'
-    },
-    { 
       name: 'Call History', 
       href: '/calls/history', 
       icon: Phone, 
@@ -105,8 +95,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       description: 'Call records and analytics'
     },
     { 
+      name: 'SMS', 
+      href: '/sms', 
+      icon: MessageSquare, 
+      roles: ['agent', 'supervisor', 'admin'],
+      description: 'SMS conversations'
+    },
+    { 
       name: 'Dashboard', 
-      href: '/', 
+      href: '/dashboard', 
       icon: BarChart3, 
       roles: ['supervisor', 'admin'],
       description: 'Analytics and reports'

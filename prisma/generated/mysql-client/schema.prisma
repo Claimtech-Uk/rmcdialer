@@ -1,0 +1,137 @@
+// MySQL Replica Database Schema
+// This matches the actual structure of the main application database
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/mysql-client"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("REPLICA_DATABASE_URL")
+}
+
+model User {
+  id                                     BigInt    @id
+  email_address                          String?   @map("email_address")
+  password                               String?
+  is_enabled                             Boolean   @map("is_enabled")
+  status                                 String?
+  first_name                             String?   @map("first_name")
+  last_name                              String?   @map("last_name")
+  phone_number                           String?   @map("phone_number")
+  date_of_birth                          DateTime? @map("date_of_birth") @db.Date
+  previous_name                          String?   @map("previous_name")
+  current_user_address_id                String?   @map("current_user_address_id")
+  current_user_id_document_id            String?   @map("current_user_id_document_id")
+  current_signature_file_id              String?   @map("current_signature_file_id")
+  notification_channels                  Json?     @map("notification_channels")
+  third_party_claim_partner              String?   @map("third_party_claim_partner")
+  introducer                             String    @default("mcc")
+  solicitor                              String?
+  credit_response_selection_completed    Boolean   @map("credit_response_selection_completed")
+  justcall_id                            Int?      @map("justcall_id")
+  voluum_click_id                        String?   @map("voluum_click_id")
+  pipedrive_id                           String?   @map("pipedrive_id")
+  google_drive_link                      String?   @map("google_drive_link")
+  last_login                             DateTime? @map("last_login")
+  remember_token                         String?   @map("remember_token")
+  checkboard_address_links_api_request   Json?     @map("checkboard_address_links_api_request")
+  checkboard_address_links_api_response  Json?     @map("checkboard_address_links_api_response")
+  checkboard_user_invite_api_request     Json?     @map("checkboard_user_invite_api_request")
+  checkboard_user_batch_api_request      Json?     @map("checkboard_user_batch_api_request")
+  checkboard_user_verify_otp_api_request Json?     @map("checkboard_user_verify_otp_api_request")
+  created_at                             DateTime? @map("created_at")
+  updated_at                             DateTime? @map("updated_at")
+
+  // Relations
+  claims    Claim[]
+  address   UserAddress? @relation(fields: [current_user_address_id], references: [id])
+  user_logs UserLog[]
+
+  @@map("users")
+}
+
+model Claim {
+  id                     BigInt    @id
+  user_id                BigInt    @map("user_id")
+  type                   String?
+  status                 String?
+  lender                 String?
+  solicitor              String?
+  client_last_updated_at DateTime? @map("client_last_updated_at")
+  created_at             DateTime? @map("created_at")
+  updated_at             DateTime? @map("updated_at")
+
+  // Relations
+  user            User                  @relation(fields: [user_id], references: [id])
+  requirements    ClaimRequirement[]
+  vehiclePackages ClaimVehiclePackage[]
+
+  @@map("claims")
+}
+
+model UserAddress {
+  id           String    @id
+  user_id      Int       @map("user_id")
+  type         String?
+  full_address String?   @map("full_address")
+  post_code    String?   @map("post_code")
+  county       String?
+  created_at   DateTime? @map("created_at")
+  updated_at   DateTime? @map("updated_at")
+
+  // Relations
+  users User[]
+
+  @@map("user_addresses")
+}
+
+model ClaimRequirement {
+  id                                 String    @id
+  claim_id                           BigInt    @map("claim_id")
+  type                               String?
+  status                             String?
+  claim_requirement_reason           String?   @map("claim_requirement_reason")
+  claim_requirement_rejection_reason String?   @map("claim_requirement_rejection_reason")
+  created_at                         DateTime? @map("created_at")
+  updated_at                         DateTime? @map("updated_at")
+
+  // Relations
+  claim Claim @relation(fields: [claim_id], references: [id])
+
+  @@map("claim_requirements")
+}
+
+model ClaimVehiclePackage {
+  id                   String    @id
+  claim_id             BigInt    @map("claim_id")
+  vehicle_registration String?   @map("vehicle_registration")
+  vehicle_make         String?   @map("vehicle_make")
+  vehicle_model        String?   @map("vehicle_model")
+  dealership_name      String?   @map("dealership_name")
+  monthly_payment      Decimal?  @map("monthly_payment") @db.Decimal(10, 2)
+  contract_start_date  DateTime? @map("contract_start_date")
+  status               String?
+  created_at           DateTime? @map("created_at")
+  updated_at           DateTime? @map("updated_at")
+
+  // Relations
+  claim Claim @relation(fields: [claim_id], references: [id])
+
+  @@map("claim_vehicle_packages")
+}
+
+model UserLog {
+  id         String    @id
+  user_id    BigInt    @map("user_id")
+  action     String?
+  message    String?
+  created_at DateTime? @map("created_at")
+  updated_at DateTime? @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id])
+
+  @@map("user_logs")
+}

@@ -3,6 +3,7 @@
 
 // Services (main business logic)
 export { CallService } from './services/call.service'
+export { TwilioVoiceService } from './services/twilio-voice.service'
 
 // Types (for other modules and tRPC)
 export type {
@@ -32,6 +33,13 @@ export type {
   DailyCallMetrics
 } from './types/call.types'
 
+// Twilio Voice Service types
+export type {
+  TwilioVoiceConfig,
+  CallStatus,
+  OutgoingCallParams
+} from './services/twilio-voice.service'
+
 // Components (will be added later)
 // export { CallInterface } from './components/CallInterface'
 // export { CallControls } from './components/CallControls'
@@ -39,9 +47,10 @@ export type {
 // export { OutcomeForm } from './components/OutcomeForm'
 // export { CallHistory } from './components/CallHistory'
 
-// Hooks (will be added later)
+// Hooks
 // export { useCallSession } from './hooks/useCallSession'
-// export { useTwilio } from './hooks/useTwilio'
+export { useTwilioVoice } from './hooks/useTwilioVoice'
+export type { UseTwilioVoiceOptions, UseTwilioVoiceReturn } from './hooks/useTwilioVoice'
 // export { useCallTimer } from './hooks/useCallTimer'
 // export { useCallHistory } from './hooks/useCallHistory'
 

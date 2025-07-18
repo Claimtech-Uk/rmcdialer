@@ -11,6 +11,9 @@ export { AuthProvider, useAuthContext } from './components/AuthProvider'
 // Hooks (React hooks)
 export { useAuth } from './hooks/useAuth'
 
+// Utils (utility functions)
+export { tokenUtils } from './utils/token.utils'
+
 // Types (for other modules and tRPC)
 export type {
   LoginRequest,

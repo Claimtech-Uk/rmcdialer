@@ -35,18 +35,25 @@ export class AuthService {
     const { email, password } = credentials;
 
     try {
+      this.deps.logger.info('AuthService login attempt', { email });
+      
       // Find agent by email
       const agent = await this.deps.prisma.agent.findUnique({
         where: { email, isActive: true }
       });
 
       if (!agent) {
+        this.deps.logger.warn('Agent not found', { email });
         throw new Error('Invalid credentials');
       }
 
+      this.deps.logger.info('Agent found', { email, agentId: agent.id });
+
       // Verify password
       const isPasswordValid = await bcrypt.compare(password, agent.passwordHash);
+      this.deps.logger.info('Password verification', { email, isPasswordValid });
       if (!isPasswordValid) {
+        this.deps.logger.warn('Invalid password', { email });
         throw new Error('Invalid credentials');
       }
 

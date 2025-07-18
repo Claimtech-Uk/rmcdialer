@@ -9,14 +9,16 @@ async function main() {
   // Hash passwords
   const saltRounds = 12;
   
+  // Common password for all development accounts
+  const devPasswordHash = await bcryptjs.hash('password123', saltRounds);
+
   // Create admin account
-  const adminPasswordHash = await bcryptjs.hash('admin123', saltRounds);
   const admin = await prisma.agent.upsert({
-    where: { email: 'admin@dialler.com' },
+    where: { email: 'admin@test.com' },
     update: {},
     create: {
-      email: 'admin@dialler.com',
-      passwordHash: adminPasswordHash,
+      email: 'admin@test.com',
+      passwordHash: devPasswordHash,
       firstName: 'Admin',
       lastName: 'User',
       role: 'admin',
@@ -26,13 +28,12 @@ async function main() {
   });
 
   // Create supervisor account
-  const supervisorPasswordHash = await bcryptjs.hash('supervisor123', saltRounds);
   const supervisor = await prisma.agent.upsert({
-    where: { email: 'supervisor@dialler.com' },
+    where: { email: 'supervisor@test.com' },
     update: {},
     create: {
-      email: 'supervisor@dialler.com',
-      passwordHash: supervisorPasswordHash,
+      email: 'supervisor@test.com',
+      passwordHash: devPasswordHash,
       firstName: 'Supervisor',
       lastName: 'User',
       role: 'supervisor',
@@ -42,15 +43,29 @@ async function main() {
   });
 
   // Create agent account
-  const agentPasswordHash = await bcryptjs.hash('agent123', saltRounds);
   const agent = await prisma.agent.upsert({
-    where: { email: 'agent1@dialler.com' },
+    where: { email: 'agent@test.com' },
     update: {},
     create: {
-      email: 'agent1@dialler.com',
-      passwordHash: agentPasswordHash,
+      email: 'agent@test.com',
+      passwordHash: devPasswordHash,
       firstName: 'Agent',
-      lastName: 'One',
+      lastName: 'User',
+      role: 'agent',
+      isActive: true,
+      isAiAgent: false,
+    },
+  });
+
+  // Create additional agent accounts for testing
+  const agent2 = await prisma.agent.upsert({
+    where: { email: 'agent2@test.com' },
+    update: {},
+    create: {
+      email: 'agent2@test.com',
+      passwordHash: devPasswordHash,
+      firstName: 'Agent',
+      lastName: 'Two',
       role: 'agent',
       isActive: true,
       isAiAgent: false,
@@ -112,12 +127,15 @@ async function main() {
   });
 
   console.log('✅ Database seeded successfully!');
-  console.log('📋 Created accounts:');
-  console.log(`   Admin: ${admin.email} / admin123`);
-  console.log(`   Supervisor: ${supervisor.email} / supervisor123`);
-  console.log(`   Agent: ${agent.email} / agent123`);
+  console.log('📋 Created development accounts (all use password: password123):');
+  console.log(`   🔑 Admin: ${admin.email}`);
+  console.log(`   🔑 Supervisor: ${supervisor.email}`);
+  console.log(`   🔑 Agent: ${agent.email}`);
+  console.log(`   🔑 Agent 2: ${agent2.email}`);
   console.log('📞 Created sample call queue entries');
   console.log('📊 Created sample user call scores');
+  console.log('');
+  console.log('🚀 Quick Login: Use the development buttons on the login page!');
 }
 
 main()

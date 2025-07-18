@@ -3,23 +3,25 @@ import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
   // Protect dashboard routes
-  if (request.nextUrl.pathname.startsWith('/queue') ||
-      request.nextUrl.pathname.startsWith('/calls') ||
-      request.nextUrl.pathname.startsWith('/sms') ||
-      request.nextUrl.pathname.startsWith('/magic-links') ||
-      request.nextUrl.pathname.startsWith('/profile') ||
-      request.nextUrl.pathname === '/') {
-    
+  const protectedPaths = ['/queue', '/calls', '/sms', '/magic-links', '/profile', '/dashboard']
+  const isProtectedPath = protectedPaths.some(path => 
+    request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(path + '/')
+  ) || request.nextUrl.pathname === '/'
+  
+  if (isProtectedPath) {
     const token = request.cookies.get('auth-token')?.value ||
                   request.headers.get('authorization')?.replace('Bearer ', '')
 
-    if (!token) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
+    // Debug logging (will show in Vercel function logs)
+    console.log('Middleware check:', {
+      path: request.nextUrl.pathname,
+      hasToken: !!token,
+      tokenLength: token?.length || 0,
+      authTokenCookie: request.cookies.get('auth-token')?.value ? 'present' : 'missing'
+    })
 
-    // Note: JWT verification would be done here in production
-    // For now, just check if token exists
     if (!token || token === '') {
+      console.log('Redirecting to login - no valid token')
       return NextResponse.redirect(new URL('/login', request.url))
     }
   }
@@ -28,5 +30,15 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/queue/:path*', '/calls/:path*', '/sms/:path*', '/magic-links/:path*', '/profile/:path*']
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - login (login page)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|login).*)',
+  ],
 } 

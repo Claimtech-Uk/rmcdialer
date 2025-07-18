@@ -5,6 +5,8 @@ const nextConfig = {
     serverComponentsExternalPackages: ['@prisma/client'],
     esmExternals: true
   },
+  output: 'standalone',
+  trailingSlash: false,
   eslint: {
     dirs: ['app', 'lib', 'server', 'modules']
   },

@@ -4,17 +4,22 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --no-lint",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "postinstall": "prisma generate",
-    "vercel-build": "prisma generate && next build",
+    "postinstall": "npm run db:generate:all",
+    "vercel-build": "npm run db:generate:all && next build",
     "db:generate": "prisma generate",
+    "db:generate:replica": "prisma generate --schema=prisma/replica.prisma",
+    "db:generate:all": "npm run db:generate && npm run db:generate:replica",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:studio:replica": "prisma studio --schema=prisma/replica.prisma",
+    "mysql:test": "tsx -e \"import('./lib/mysql.js').then(m => m.testReplicaConnection())\"",
+    "mysql:stats": "tsx -e \"import('./lib/mysql.js').then(m => m.getReplicaStats().then(console.log))\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",
@@ -35,8 +40,10 @@
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.0.0",
+    "dotenv": "^17.2.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.294.0",
+    "mysql2": "^3.14.2",
     "next": "^14.0.4",
     "prisma": "^5.7.1",
     "react": "^18.2.0",
@@ -51,17 +58,21 @@
     "winston": "^3.11.0",
     "zod": "^3.22.4"
   },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.5",
-    "@types/node": "^20.10.5",
+    "@types/node": "^20.19.8",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.56.0",
     "eslint-config-next": "^14.0.4",
     "postcss": "^8.4.32",
+    "ts-node": "^10.9.2",
     "tsx": "^4.6.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.8.3"
   }
 }

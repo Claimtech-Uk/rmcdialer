@@ -36,9 +36,12 @@ export const authRouter = createTRPCRouter({
     .input(LoginSchema)
     .mutation(async ({ input, ctx }) => {
       try {
+        logger.info('Login attempt', { email: input.email })
         const result = await authService.login(input)
+        logger.info('Login successful', { email: input.email, hasData: !!result.data })
         return result.data
       } catch (error) {
+        logger.error('Login failed', { email: input.email, error: error instanceof Error ? error.message : String(error) })
         throw new TRPCError({
           code: 'UNAUTHORIZED',
           message: 'Invalid credentials'

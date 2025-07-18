@@ -3,6 +3,7 @@ import { authRouter } from './routers/auth'
 import { queueRouter } from './routers/queue'
 import { callsRouter } from './routers/calls'
 import { communicationsRouter } from './routers/communications'
+import { usersRouter } from './routers/users'
 
 /**
  * This is the primary router for your server.
@@ -14,6 +15,7 @@ export const appRouter = createTRPCRouter({
   queue: queueRouter,
   calls: callsRouter,
   communications: communicationsRouter,
+  users: usersRouter,
 })
 
 // export type definition of API
