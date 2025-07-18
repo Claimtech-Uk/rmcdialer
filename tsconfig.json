@@ -21,10 +21,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
-      "@/components/*": ["./components/*"],
       "@/lib/*": ["./lib/*"],
       "@/server/*": ["./server/*"],
-      "@/types/*": ["./types/*"],
       "@/app/*": ["./app/*"],
       "@/modules/*": ["./modules/*"],
       "@/modules/auth": ["./modules/auth"],

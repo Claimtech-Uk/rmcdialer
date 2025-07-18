@@ -5,6 +5,9 @@
 // =============================================================================
 // Protected layout with navigation for all dashboard pages
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';

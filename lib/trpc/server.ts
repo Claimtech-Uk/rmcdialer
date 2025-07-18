@@ -24,7 +24,8 @@ export const createTRPCContext = async (opts: CreateContextOptions) => {
     if (authHeader?.startsWith('Bearer ')) {
       try {
         const token = authHeader.replace('Bearer ', '')
-        const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET!) as any
+        const jwtSecret = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || 'fallback-secret-for-build'
+        const decoded = jwt.verify(token, jwtSecret) as any
         agent = decoded
       } catch (error) {
         // Invalid token, continue without agent
@@ -48,25 +49,42 @@ const t = initTRPC.context<Context>().create({
       ...shape,
       data: {
         ...shape.data,
-        zodError: error.cause instanceof z.ZodError ? error.cause.flatten() : null
-      }
+        code: error.code,
+        httpStatus: error.cause?.name === 'ZodError' ? 400 : 500,
+      },
     }
-  }
+  },
 })
 
-// Auth middleware
-const enforceUserIsAuthed = t.middleware(({ ctx, next }) => {
+// Auth helpers
+export const createTRPCRouter = t.router
+export const publicProcedure = t.procedure
+
+// Protected procedure that requires authentication
+export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
   if (!ctx.agent) {
-    throw new TRPCError({ code: 'UNAUTHORIZED' })
+    throw new TRPCError({
+      code: 'UNAUTHORIZED',
+      message: 'You must be logged in to access this resource',
+    })
   }
+
   return next({
     ctx: {
       ...ctx,
-      agent: ctx.agent
-    }
+      agent: ctx.agent,
+    },
   })
 })
 
-export const createTRPCRouter = t.router
-export const publicProcedure = t.procedure
-export const protectedProcedure = t.procedure.use(enforceUserIsAuthed) 
+// Admin procedure for admin-only actions
+export const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  if (ctx.agent.role !== 'admin') {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Admin access required',
+    })
+  }
+
+  return next({ ctx })
+}) 

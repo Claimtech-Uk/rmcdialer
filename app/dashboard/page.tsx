@@ -1,7 +1,12 @@
+'use client';
+
 // =============================================================================
-// Dashboard Page - Next.js App Router
+// Dashboard Page - Next.js App Router  
 // =============================================================================
 // Main analytics dashboard for supervisors and admins
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { 

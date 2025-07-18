@@ -1,5 +1,10 @@
 'use client';
 
+// =============================================================================
+// Dashboard Layout - Next.js App Router
+// =============================================================================
+// Protected layout with navigation for all dashboard pages
+
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -17,11 +22,11 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/trpc/client';
 
-interface DashboardClientLayoutProps {
+interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-export default function DashboardClientLayout({ children }: DashboardClientLayoutProps) {
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -314,4 +319,4 @@ export default function DashboardClientLayout({ children }: DashboardClientLayou
       </main>
     </div>
   );
-} 
+} export const dynamic = 'force-dynamic'

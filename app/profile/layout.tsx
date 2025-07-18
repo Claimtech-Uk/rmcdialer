@@ -319,4 +319,4 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </main>
     </div>
   );
-} 
+} export const dynamic = 'force-dynamic'

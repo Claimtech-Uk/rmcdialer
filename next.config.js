@@ -6,7 +6,7 @@ const nextConfig = {
     esmExternals: true
   },
   eslint: {
-    dirs: ['app', 'components', 'lib', 'server', 'types']
+    dirs: ['app', 'lib', 'server', 'modules']
   },
   typescript: {
     ignoreBuildErrors: false

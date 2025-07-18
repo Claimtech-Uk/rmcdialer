@@ -1,4 +1,5 @@
 'use client'
+export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
 import { Plus, Send, MessageSquare, Phone, Users, Clock, TrendingUp, Search, Filter } from 'lucide-react'
