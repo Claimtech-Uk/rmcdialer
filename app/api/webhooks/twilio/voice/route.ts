@@ -23,17 +23,33 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const webhookData = Object.fromEntries(formData.entries());
     
-    console.log('📋 Webhook data:', webhookData);
+    console.log('📋 ALL Webhook data:', JSON.stringify(webhookData, null, 2));
 
-    // For Voice SDK calls, the target number is in the 'To' parameter
-    const targetNumber = webhookData.To as string;
+    // For Voice SDK calls, check if this is coming from our TwiML App
+    const to = webhookData.To as string;
+    const from = webhookData.From as string;
     const direction = webhookData.Direction as string;
     const callSid = webhookData.CallSid as string;
 
-    console.log(`📞 Call ${callSid} - Direction: ${direction}, Target: ${targetNumber}`);
+    console.log(`📞 Call ${callSid}`);
+    console.log(`🎯 Direction: ${direction}`);
+    console.log(`📱 From: ${from}`);
+    console.log(`📱 To: ${to}`);
 
-    // Return TwiML response - either dial the number or handle status updates
-    const twimlResponse = generateTwiMLResponse(direction, webhookData);
+    // Check if this is a Voice SDK call (From starts with "client:")
+    const isVoiceSDKCall = from && from.startsWith('client:');
+    console.log(`🔍 Is Voice SDK call: ${isVoiceSDKCall}`);
+
+    // For Voice SDK calls, look for target number in call parameters
+    let targetPhoneNumber: string | null = null;
+    if (isVoiceSDKCall) {
+      // The target number should be in the call parameters
+      targetPhoneNumber = (webhookData.To || webhookData.Called || webhookData.targetNumber) as string;
+      console.log(`🎯 Target from parameters: ${targetPhoneNumber}`);
+    }
+
+    // Return TwiML response
+    const twimlResponse = generateTwiMLResponse(direction, webhookData, Boolean(isVoiceSDKCall), targetPhoneNumber);
     
     return new NextResponse(twimlResponse, {
       status: 200,
@@ -62,16 +78,40 @@ export async function POST(request: NextRequest) {
 }
 
 // Generate appropriate TwiML response
-function generateTwiMLResponse(direction: string | undefined, data: any): string {
-  const targetNumber = data.To;
+function generateTwiMLResponse(direction: string | undefined, data: any, isVoiceSDKCall: boolean, targetPhoneNumber: string | null): string {
   const userId = data.userId;
   const userName = data.userName;
   const callSid = data.CallSid;
+  const to = data.To;
 
-  console.log(`🎯 Generating TwiML for direction: ${direction}, target: ${targetNumber}`);
+  console.log(`🎯 Generating TwiML for direction: ${direction}, isVoiceSDK: ${isVoiceSDKCall}, target: ${targetPhoneNumber || to}`);
 
+  // For Voice SDK calls, always dial the target number
+  if (isVoiceSDKCall) {
+    const phoneNumber = targetPhoneNumber || to;
+    if (phoneNumber && phoneNumber.startsWith('+')) {
+      console.log(`📞 Voice SDK call: Dialing ${phoneNumber} for user ${userName || userId || 'unknown'}`);
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Dial callerId="+447738585850" timeout="30" record="record-from-answer" recordingStatusCallback="https://rmcdialer.vercel.app/api/webhooks/twilio/recording">
+        <Number>${phoneNumber}</Number>
+    </Dial>
+    <Say voice="alice">The call could not be completed. Please try again later. Goodbye.</Say>
+    <Hangup/>
+</Response>`;
+    } else {
+      console.log(`❌ Voice SDK call but no valid phone number found. To: ${to}`);
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">I'm sorry, no valid phone number was provided for this call. Please try again. Goodbye.</Say>
+    <Hangup/>
+</Response>`;
+    }
+  }
+
+  // Handle regular inbound calls (not from Voice SDK)
   if (direction === 'inbound') {
-    // Handle incoming calls (calls to our Twilio number)
+    console.log(`📞 Regular inbound call`);
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="alice">Hello, you've reached R M C Dialler. This is an automated system for financial claims support.</Say>
@@ -85,23 +125,11 @@ function generateTwiMLResponse(direction: string | undefined, data: any): string
 </Response>`;
   }
 
-  // For outbound calls from Voice SDK - dial the target number
-  if (targetNumber) {
-    console.log(`📞 Dialing ${targetNumber} for user ${userName || userId || 'unknown'}`);
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Dial callerId="+447738585850" timeout="30" record="record-from-answer" recordingStatusCallback="https://rmcdialer.vercel.app/api/webhooks/twilio/recording">
-        <Number>${targetNumber}</Number>
-    </Dial>
-    <Say voice="alice">The call could not be completed. Please try again later. Goodbye.</Say>
-    <Hangup/>
-</Response>`;
-  }
-
   // Fallback - no target number provided
+  console.log(`❌ Fallback: No clear call type identified`);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">I'm sorry, no phone number was provided for this call. Please try again. Goodbye.</Say>
+    <Say voice="alice">I'm sorry, this call type is not supported. Please try again. Goodbye.</Say>
     <Hangup/>
 </Response>`;
 }
