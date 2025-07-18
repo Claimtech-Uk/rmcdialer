@@ -2,7 +2,8 @@
 const nextConfig = {
   experimental: {
     typedRoutes: true,
-    serverComponentsExternalPackages: ['@prisma/client']
+    serverComponentsExternalPackages: ['@prisma/client'],
+    esmExternals: true
   },
   eslint: {
     dirs: ['app', 'components', 'lib', 'server', 'types']
