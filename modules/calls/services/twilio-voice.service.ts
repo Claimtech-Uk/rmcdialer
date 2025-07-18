@@ -1,29 +1,4 @@
-// Global Twilio SDK types (loaded via script tag)
-declare global {
-  interface Window {
-    Twilio: {
-      Device: new(accessToken: string, options?: any) => DeviceInstance;
-    };
-  }
-}
-
-interface DeviceInstance {
-  register(): void;
-  unregister(): void;
-  connect(options?: any): CallInstance;
-  on(event: string, handler: Function): void;
-  state: string;
-  isBusy: boolean;
-}
-
-interface CallInstance {
-  disconnect(): void;
-  mute(shouldMute?: boolean): void;
-  sendDigits(digits: string): void;
-  on(event: string, handler: Function): void;
-  status(): string;
-  parameters: any;
-}
+import { Device, Call } from '@twilio/voice-sdk';
 
 export interface TwilioVoiceConfig {
   agentId: string | number;
@@ -49,8 +24,8 @@ export interface OutgoingCallParams {
 }
 
 export class TwilioVoiceService {
-  private device: DeviceInstance | null = null;
-  private currentCall: CallInstance | null = null;
+  private device: Device | null = null;
+  private currentCall: Call | null = null;
   private config: TwilioVoiceConfig;
   private isInitialized = false;
 
@@ -61,11 +36,6 @@ export class TwilioVoiceService {
   async initialize(): Promise<void> {
     try {
       console.log('🔧 Initializing Twilio Device...');
-
-      // Check if Twilio SDK is loaded
-      if (typeof window === 'undefined' || !window.Twilio) {
-        throw new Error('Twilio Voice SDK not loaded. Make sure the script tag is included.');
-      }
 
       // Get access token from our API
       const tokenResponse = await fetch('/api/twilio/access-token', {
@@ -86,8 +56,8 @@ export class TwilioVoiceService {
       const { accessToken, development } = await tokenResponse.json();
       console.log(`🔑 Access token received (${development ? 'development' : 'production'} mode)`);
 
-      // Initialize Twilio Device using global SDK
-      this.device = new window.Twilio.Device(accessToken, {
+      // Initialize Twilio Device using npm package
+      this.device = new Device(accessToken, {
         // Edge locations for better connectivity  
         edge: ['dublin', 'london']
       });
@@ -96,7 +66,7 @@ export class TwilioVoiceService {
       this.setupDeviceEventHandlers();
 
       // Register device
-      this.device.register();
+      await this.device.register();
       this.isInitialized = true;
       console.log('✅ Twilio Device registered successfully');
 
@@ -115,7 +85,7 @@ export class TwilioVoiceService {
     if (!this.device) return;
 
     // Device ready event
-    this.device.on('ready', () => {
+    this.device.on('registered', () => {
       console.log('📱 Twilio Device is ready for calls');
       this.config.onCallStatusChange?.({ state: 'ready' });
     });
@@ -131,13 +101,14 @@ export class TwilioVoiceService {
     });
 
     // Incoming call event (for future use)
-    this.device.on('incoming', (call: CallInstance) => {
+    this.device.on('incoming', (call: Call) => {
       console.log('📞 Incoming call received');
-      // Handle incoming calls if needed
+      // Handle incoming calls if needed - for now, reject
+      call.reject();
     });
 
     // Device offline event
-    this.device.on('offline', () => {
+    this.device.on('unregistered', () => {
       console.log('📱 Twilio Device is offline');
       this.config.onCallStatusChange?.({ state: 'offline' });
     });
@@ -147,7 +118,7 @@ export class TwilioVoiceService {
    * Check if the device is ready to make calls
    */
   isReady(): boolean {
-    return this.isInitialized && this.device !== null && this.device.state === 'ready';
+    return this.isInitialized && this.device !== null && this.device.state === 'registered';
   }
 
   /**
@@ -173,7 +144,7 @@ export class TwilioVoiceService {
       };
 
       // Make the call
-      this.currentCall = this.device.connect(callParams);
+      this.currentCall = await this.device.connect({ params: callParams });
       this.setupCallEventHandlers(this.currentCall);
 
       this.config.onCallStatusChange?.({ state: 'connecting' });
@@ -188,7 +159,7 @@ export class TwilioVoiceService {
   /**
    * Set up event handlers for the current call
    */
-  private setupCallEventHandlers(call: CallInstance): void {
+  private setupCallEventHandlers(call: Call): void {
     // Call connected
     call.on('accept', () => {
       console.log('✅ Call connected successfully');
@@ -267,7 +238,7 @@ export class TwilioVoiceService {
     }
 
     if (this.device) {
-      this.device.unregister();
+      this.device.destroy();
       this.device = null;
     }
 

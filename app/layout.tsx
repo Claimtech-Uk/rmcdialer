@@ -26,10 +26,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        {/* Twilio Voice SDK for browser calling */}
-        <script src="https://sdk.twilio.com/js/voice/releases/2.15.0/twilio.min.js"></script>
-      </head>
       <body className={inter.className}>
         <TRPCProvider>
           {children}
