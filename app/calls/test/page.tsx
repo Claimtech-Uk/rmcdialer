@@ -99,11 +99,27 @@ export default function TestCallPage() {
         type: claim.type || 'Unknown',
         status: claim.status || 'Unknown',
         lender: claim.lender || 'Unknown',
-        value: claim.value || 0,
-        requirements: claim.requirements,
-        vehiclePackages: claim.vehiclePackages
+        value: 0, // Remove claim.value as it doesn't exist in ClaimContext
+        requirements: claim.requirements.map(req => ({
+          id: req.id,
+          type: req.type || 'Unknown',
+          status: req.status || 'Unknown',
+          reason: req.reason || 'No reason provided'
+        })),
+        vehiclePackages: claim.vehiclePackages?.map(vp => ({
+          registration: vp.registration || '',
+          make: vp.make || '',
+          model: vp.model || '',
+          dealershipName: vp.dealership || '',
+          monthlyPayment: vp.monthlyPayment || undefined
+        }))
       })),
-      callScore: user.callScore || {
+      callScore: user.callScore ? {
+        currentScore: user.callScore.currentScore || 50,
+        lastOutcome: user.callScore.lastOutcome || undefined,
+        totalAttempts: user.callScore.totalAttempts || 0,
+        lastCallAt: user.callScore.lastCallAt || undefined
+      } : {
         currentScore: 50,
         totalAttempts: 0
       }
