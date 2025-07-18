@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
+import twilio from 'twilio';
+
+const { jwt: { AccessToken } } = twilio;
+const { VoiceGrant } = AccessToken;
 
 // Twilio Access Token generation for Voice SDK
 export async function POST(request: NextRequest) {
@@ -88,21 +91,20 @@ function generateTwilioAccessToken(
     incoming_allow: false // We don't want agents to receive calls directly
   };
 
-  // JWT payload for Twilio access token
-  const payload = {
-    iss: apiKey,
-    sub: accountSid,
-    nbf: now,
-    exp: exp,
-    iat: now,
-    grants: {
-      identity: identity,
-      voice: voiceGrant
-    }
-  };
+  // Generate JWT token using Twilio's official AccessToken
+  const accessToken = new AccessToken(accountSid, apiKey, apiSecret, {
+    identity: identity,
+    ttl: 3600
+  });
 
-  // Generate JWT token
-  const token = jwt.sign(payload, apiSecret, { algorithm: 'HS256' });
+  // Add voice grant
+  const grant = new VoiceGrant({
+    outgoingApplicationSid: twimlAppSid,
+    incomingAllow: false
+  });
+  accessToken.addGrant(grant);
+
+  const token = accessToken.toJwt();
   
   console.log(`🔑 Generated token for ${identity} (${agentEmail})`);
   
@@ -111,26 +113,20 @@ function generateTwilioAccessToken(
 
 // Generate mock token for development (when Twilio credentials aren't available)
 function generateMockToken(agentId: string | number, agentEmail: string): string {
-  const payload = {
-    iss: 'MOCK_API_KEY',
-    sub: 'MOCK_ACCOUNT_SID',
-    nbf: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 3600,
-    grants: {
-      identity: `agent_${agentId}`,
-      voice: {
-        outgoing_application_sid: 'MOCK_TWIML_APP_SID',
-        incoming_allow: false
-      }
-    },
-    // Mock development flags
-    development: true,
-    agentId,
-    agentEmail
-  };
+  // Use mock Twilio credentials for development
+  const mockAccessToken = new AccessToken('MOCK_ACCOUNT_SID', 'MOCK_API_KEY', 'mock-development-secret', {
+    identity: `agent_${agentId}`,
+    ttl: 3600
+  });
 
-  // Use a mock secret for development
-  return jwt.sign(payload, 'mock-development-secret', { algorithm: 'HS256' });
+  // Add mock voice grant
+  const mockGrant = new VoiceGrant({
+    outgoingApplicationSid: 'MOCK_TWIML_APP_SID',
+    incomingAllow: false
+  });
+  mockAccessToken.addGrant(mockGrant);
+
+  return mockAccessToken.toJwt();
 }
 
 // Handle GET requests (for testing)
