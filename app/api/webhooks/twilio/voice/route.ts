@@ -25,37 +25,15 @@ export async function POST(request: NextRequest) {
     
     console.log('📋 Webhook data:', webhookData);
 
-    // Validate webhook data
-    const validatedData = TwilioVoiceWebhookSchema.parse(webhookData);
-    
-    const { CallSid, From, To, CallStatus, Direction } = validatedData;
+    // For Voice SDK calls, the target number is in the 'To' parameter
+    const targetNumber = webhookData.To as string;
+    const direction = webhookData.Direction as string;
+    const callSid = webhookData.CallSid as string;
 
-    // Handle different call statuses
-    switch (CallStatus) {
-      case 'ringing':
-        console.log(`📞 Call ${CallSid} ringing: ${From} → ${To}`);
-        break;
-        
-      case 'in-progress':
-        console.log(`📞 Call ${CallSid} in progress: ${From} → ${To}`);
-        break;
-        
-      case 'completed':
-        console.log(`✅ Call ${CallSid} completed: ${From} → ${To}`);
-        // Update call session in database
-        await updateCallSession(CallSid, 'completed', validatedData);
-        break;
-        
-      case 'failed':
-      case 'busy':
-      case 'no-answer':
-        console.log(`❌ Call ${CallSid} ${CallStatus}: ${From} → ${To}`);
-        await updateCallSession(CallSid, 'failed', validatedData);
-        break;
-    }
+    console.log(`📞 Call ${callSid} - Direction: ${direction}, Target: ${targetNumber}`);
 
-    // Return TwiML response for outbound calls
-    const twimlResponse = generateTwiMLResponse(Direction, validatedData);
+    // Return TwiML response - either dial the number or handle status updates
+    const twimlResponse = generateTwiMLResponse(direction, webhookData);
     
     return new NextResponse(twimlResponse, {
       status: 200,
@@ -85,7 +63,12 @@ export async function POST(request: NextRequest) {
 
 // Generate appropriate TwiML response
 function generateTwiMLResponse(direction: string | undefined, data: any): string {
-  const { From, To, CallSid } = data;
+  const targetNumber = data.To;
+  const userId = data.userId;
+  const userName = data.userName;
+  const callSid = data.CallSid;
+
+  console.log(`🎯 Generating TwiML for direction: ${direction}, target: ${targetNumber}`);
 
   if (direction === 'inbound') {
     // Handle incoming calls (calls to our Twilio number)
@@ -102,32 +85,36 @@ function generateTwiMLResponse(direction: string | undefined, data: any): string
 </Response>`;
   }
 
-  // For outbound calls, provide simple instructions
+  // For outbound calls from Voice SDK - dial the target number
+  if (targetNumber) {
+    console.log(`📞 Dialing ${targetNumber} for user ${userName || userId || 'unknown'}`);
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Dial callerId="+447738585850" timeout="30" record="record-from-answer" recordingStatusCallback="https://rmcdialer.vercel.app/api/webhooks/twilio/recording">
+        <Number>${targetNumber}</Number>
+    </Dial>
+    <Say voice="alice">The call could not be completed. Please try again later. Goodbye.</Say>
+    <Hangup/>
+</Response>`;
+  }
+
+  // Fallback - no target number provided
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Please wait while we connect your call.</Say>
-    <Pause length="2"/>
+    <Say voice="alice">I'm sorry, no phone number was provided for this call. Please try again. Goodbye.</Say>
+    <Hangup/>
 </Response>`;
 }
 
-// Update call session in database (integration with our call service)
-async function updateCallSession(twilioCallSid: string, status: string, webhookData: any) {
-  try {
-    // This would integrate with our Call Service
-    // For now, just log the update
-    console.log(`📊 Updating call session ${twilioCallSid} to ${status}`, {
-      duration: webhookData.Duration,
-      recordingUrl: webhookData.RecordingUrl,
-      from: webhookData.From,
-      to: webhookData.To
-    });
-
-    // TODO: Integrate with modules/calls/services/call.service.ts
-    // await callService.handleTwilioWebhook(webhookData);
-    
-  } catch (error) {
-    console.error('❌ Failed to update call session:', error);
-  }
+// Log call events for debugging
+function logCallEvent(event: string, data: any) {
+  console.log(`📊 Call Event: ${event}`, {
+    callSid: data.CallSid,
+    from: data.From,
+    to: data.To,
+    status: data.CallStatus,
+    duration: data.Duration
+  });
 }
 
 // Handle GET requests (for testing)
