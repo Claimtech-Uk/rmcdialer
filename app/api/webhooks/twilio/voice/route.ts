@@ -89,6 +89,13 @@ function generateTwiMLResponse(direction: string | undefined, data: any, isVoice
   // For Voice SDK calls, always dial the target number
   if (isVoiceSDKCall) {
     const phoneNumber = targetPhoneNumber || to;
+    console.log(`🔍 Voice SDK call debugging:`);
+    console.log(`  - targetPhoneNumber: "${targetPhoneNumber}"`);
+    console.log(`  - to: "${to}"`);
+    console.log(`  - final phoneNumber: "${phoneNumber}"`);
+    console.log(`  - phoneNumber type: ${typeof phoneNumber}`);
+    console.log(`  - phoneNumber starts with +: ${phoneNumber && phoneNumber.startsWith && phoneNumber.startsWith('+')}`);
+    
     if (phoneNumber && phoneNumber.startsWith('+')) {
       console.log(`📞 Voice SDK call: Dialing ${phoneNumber} for user ${userName || userId || 'unknown'}`);
       return `<?xml version="1.0" encoding="UTF-8"?>
@@ -100,7 +107,10 @@ function generateTwiMLResponse(direction: string | undefined, data: any, isVoice
     <Hangup/>
 </Response>`;
     } else {
-      console.log(`❌ Voice SDK call but no valid phone number found. To: ${to}`);
+      console.log(`❌ Voice SDK call but no valid phone number found.`);
+      console.log(`  - phoneNumber truthy: ${!!phoneNumber}`);
+      console.log(`  - has startsWith method: ${phoneNumber && typeof phoneNumber.startsWith === 'function'}`);
+      console.log(`  - Raw To value: ${JSON.stringify(to)}`);
       return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="alice">I'm sorry, no valid phone number was provided for this call. Please try again. Goodbye.</Say>
