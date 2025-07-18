@@ -1,12 +1,37 @@
 {
   "version": 2,
-  "buildCommand": "cd apps/web && npm ci && npm run build",
-  "outputDirectory": "apps/web/dist",
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
   "installCommand": "npm ci",
+  "functions": {
+    "app/api/**": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "source": "/api/webhooks/:path*",
+      "destination": "/api/webhooks/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
     }
   ]
 } 

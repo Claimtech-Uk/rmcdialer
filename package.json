@@ -1,48 +1,65 @@
 {
   "name": "dialler-system",
-  "version": "1.0.0",
-  "description": "RMC Dialler System - Standalone dialler for proactive claim completion",
+  "version": "0.1.0",
   "private": true,
-  "workspaces": [
-    "apps/*"
-  ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build --filter=@dialler/web",
-    "build:web": "turbo run build --filter=@dialler/web",
-    "start": "turbo run start",
-    "test": "turbo run test",
-    "test:integration": "turbo run test:integration",
-    "test:e2e": "turbo run test:e2e",
-    "lint": "turbo run lint",
-    "type-check": "turbo run type-check",
-    "clean": "turbo run clean",
-    "migrate": "cd apps/api && npx prisma migrate deploy",
-    "db:generate": "cd apps/api && npx prisma generate",
-    "db:seed": "cd apps/api && npx prisma db seed",
-    "deploy": "vercel --prod",
-    "deploy:staging": "vercel"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.3.2",
+    "@prisma/client": "^5.7.1",
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-dropdown-menu": "^2.0.6",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-select": "^2.0.0",
+    "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-toast": "^1.1.5",
+    "@tanstack/react-query": "^4.36.1",
+    "@tanstack/react-query-devtools": "^4.36.1",
+    "@trpc/client": "^10.45.0",
+    "@trpc/next": "^10.45.0",
+    "@trpc/react-query": "^10.45.0",
+    "@trpc/server": "^10.45.0",
+    "@twilio/voice-sdk": "^2.11.1",
+    "bcryptjs": "^2.4.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.294.0",
+    "next": "^14.0.4",
+    "prisma": "^5.7.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.48.2",
+    "redis": "^4.6.12",
+    "superjson": "^2.2.1",
+    "tailwind-merge": "^2.2.0",
+    "tailwindcss": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7",
+    "twilio": "^4.19.3",
+    "winston": "^3.11.0",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "turbo": "^1.10.16",
-    "typescript": "^5.3.2"
-  },
-  "engines": {
-    "node": ">=20.0.0",
-    "npm": ">=9.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/resolvemyclaim/dialler-system.git"
-  },
-  "keywords": [
-    "dialler",
-    "claims",
-    "twilio",
-    "contact-center",
-    "queue-management"
-  ],
-  "author": "Resolve My Claim",
-  "license": "UNLICENSED"
-} 
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.5",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^14.0.4",
+    "postcss": "^8.4.32",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.3"
+  }
+}

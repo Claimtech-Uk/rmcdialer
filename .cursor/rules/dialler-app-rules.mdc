@@ -7,7 +7,7 @@ alwaysApply: true
 ## 🎯 Project Overview
 
 ### What We're Building
-A standalone dialler system (dialler.resolvemyclaim.co.uk) that enables agents to efficiently contact users about their financial claims. The system reads user data from the main claims platform but operates completely independently with no write-backs.
+A standalone dialler system (dialler.resolvemyclaim.co.uk) built as a unified Next.js 14 application with tRPC that enables agents to efficiently contact users about their financial claims. The system reads user data from the main claims platform but operates completely independently with no write-backs.
 
 
 
@@ -34,7 +34,7 @@ A standalone dialler system (dialler.resolvemyclaim.co.uk) that enables agents t
          │                                    
          ▼ Cache (Redis)                     
 ┌─────────────────────┐         ┌──────────────────────┐
-│   PostgreSQL        │         │   Dialler React App  │
+│   PostgreSQL        │         │   Next.js Dialler   │
 │ (Dialler Features)  │ ◄────── │ dialler.resolvemy... │
 └─────────────────────┘         └──────────────────────┘
 ```
@@ -305,131 +305,515 @@ WHERE u.id = ?
 GROUP BY u.id, c.id;
 ```
 
-## 📁 Project Structure
+## 📁 Modulith Project Structure
+
+### Core Architecture Principle
+```
+📦 Single Next.js Application (Modulith)
+├── 🏠 Presentation Layer (Next.js App Router)
+├── 🔗 API Layer (tRPC Routers)
+├── 🏢 Business Modules (Domain-Driven)
+├── 🗄️ Data Layer (Prisma + Read Replica)
+└── 🛠️ Infrastructure (Shared Services)
+```
+
+### Directory Structure
 ```
 dialler-system/
-├── apps/
-│   ├── api/                    # Node.js/Express backend
-│   │   ├── src/
-│   │   │   ├── config/         # Database, Redis, Twilio configs
-│   │   │   ├── controllers/    # Route handlers
-│   │   │   ├── middleware/     # Auth, error handling, validation
-│   │   │   ├── models/         # TypeScript interfaces & schemas
-│   │   │   ├── services/       # Business logic layer
-│   │   │   ├── utils/          # Helpers and utilities
-│   │   │   ├── workers/        # Background jobs (sync, cleanup)
-│   │   │   └── app.ts          # Express app setup
-│   │   ├── prisma/             # Database schema & migrations
-│   │   └── package.json
+├── app/                        # 🏠 Next.js 14 App Router (Presentation)
+│   ├── (dashboard)/           # Protected dashboard routes
+│   │   ├── calls/             # Call management pages
+│   │   ├── queue/             # Call queue interface
+│   │   ├── sms/               # SMS conversations
+│   │   ├── analytics/         # Supervisor dashboard
+│   │   └── layout.tsx         # Dashboard layout
+│   ├── api/                   # 🔗 API routes & tRPC endpoints
+│   │   ├── trpc/[trpc]/       # tRPC handler
+│   │   └── webhooks/          # External webhooks
+│   ├── login/                 # Authentication pages
+│   └── (root files)           # layout.tsx, page.tsx, globals.css
+│
+├── modules/                    # 🏢 Business Modules (Domain-Driven)
+│   ├── auth/                  # 🔐 Authentication Module
+│   │   ├── services/          # Auth business logic
+│   │   │   ├── auth.service.ts
+│   │   │   └── session.service.ts
+│   │   ├── types/             # Auth domain types
+│   │   │   └── auth.types.ts
+│   │   ├── components/        # Auth UI components
+│   │   │   ├── LoginForm.tsx
+│   │   │   └── SessionStatus.tsx
+│   │   ├── hooks/             # Auth React hooks
+│   │   │   └── useAuth.ts
+│   │   ├── utils/             # Auth utilities
+│   │   │   └── jwt.utils.ts
+│   │   └── index.ts           # Module exports
 │   │
-│   └── web/                    # React frontend (Vite)
-│       ├── src/
-│       │   ├── components/     # UI components
-│       │   ├── features/       # Feature-based modules
-│       │   ├── hooks/          # Custom React hooks
-│       │   ├── lib/            # API client, utilities
-│       │   ├── pages/          # Route pages
-│       │   ├── store/          # Zustand state management
-│       │   └── types/          # Shared TypeScript types
-│       └── package.json
+│   ├── queue/                 # 📋 Queue Management Module
+│   │   ├── services/          # Queue business logic
+│   │   │   ├── queue.service.ts
+│   │   │   ├── scoring.service.ts
+│   │   │   └── assignment.service.ts
+│   │   ├── types/             # Queue domain types
+│   │   │   └── queue.types.ts
+│   │   ├── components/        # Queue UI components
+│   │   │   ├── QueueDashboard.tsx
+│   │   │   ├── QueueTable.tsx
+│   │   │   └── PriorityBadge.tsx
+│   │   ├── hooks/             # Queue React hooks
+│   │   │   ├── useQueue.ts
+│   │   │   └── useQueueStats.ts
+│   │   ├── utils/             # Queue utilities
+│   │   │   └── scoring.utils.ts
+│   │   └── index.ts           # Module exports
+│   │
+│   ├── calls/                 # 📞 Call Management Module
+│   │   ├── services/          # Call business logic
+│   │   │   ├── call.service.ts
+│   │   │   ├── outcome.service.ts
+│   │   │   └── twilio.service.ts
+│   │   ├── types/             # Call domain types
+│   │   │   └── call.types.ts
+│   │   ├── components/        # Call UI components
+│   │   │   ├── CallInterface.tsx
+│   │   │   ├── CallControls.tsx
+│   │   │   ├── CallTimer.tsx
+│   │   │   └── OutcomeForm.tsx
+│   │   ├── hooks/             # Call React hooks
+│   │   │   ├── useCallSession.ts
+│   │   │   └── useTwilio.ts
+│   │   ├── utils/             # Call utilities
+│   │   │   └── call.utils.ts
+│   │   └── index.ts           # Module exports
+│   │
+│   ├── communications/        # 💬 Communications Module
+│   │   ├── services/          # Communication business logic
+│   │   │   ├── sms.service.ts
+│   │   │   ├── magic-link.service.ts
+│   │   │   └── notification.service.ts
+│   │   ├── types/             # Communication domain types
+│   │   │   └── communications.types.ts
+│   │   ├── components/        # Communication UI components
+│   │   │   ├── SMSConversations.tsx
+│   │   │   ├── MagicLinkPanel.tsx
+│   │   │   └── MessageThread.tsx
+│   │   ├── hooks/             # Communication React hooks
+│   │   │   ├── useSMS.ts
+│   │   │   └── useMagicLinks.ts
+│   │   ├── utils/             # Communication utilities
+│   │   │   └── message.utils.ts
+│   │   └── index.ts           # Module exports
+│   │
+│   ├── users/                 # 👥 User Data Module
+│   │   ├── services/          # User business logic
+│   │   │   ├── user.service.ts
+│   │   │   ├── claims.service.ts
+│   │   │   └── requirements.service.ts
+│   │   ├── types/             # User domain types
+│   │   │   └── user.types.ts
+│   │   ├── components/        # User UI components
+│   │   │   ├── UserContext.tsx
+│   │   │   ├── ClaimsSummary.tsx
+│   │   │   └── RequirementsList.tsx
+│   │   ├── hooks/             # User React hooks
+│   │   │   ├── useUserContext.ts
+│   │   │   └── useClaims.ts
+│   │   ├── utils/             # User utilities
+│   │   │   └── user.utils.ts
+│   │   └── index.ts           # Module exports
+│   │
+│   ├── analytics/             # 📊 Analytics Module
+│   │   ├── services/          # Analytics business logic
+│   │   │   ├── metrics.service.ts
+│   │   │   └── reporting.service.ts
+│   │   ├── types/             # Analytics domain types
+│   │   │   └── analytics.types.ts
+│   │   ├── components/        # Analytics UI components
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── MetricCards.tsx
+│   │   │   └── PerformanceCharts.tsx
+│   │   ├── hooks/             # Analytics React hooks
+│   │   │   ├── useAnalytics.ts
+│   │   │   └── useMetrics.ts
+│   │   ├── utils/             # Analytics utilities
+│   │   │   └── metrics.utils.ts
+│   │   └── index.ts           # Module exports
+│   │
+│   └── core/                  # ⚙️ Core Module (Shared Infrastructure)
+│       ├── services/          # Core business logic
+│       │   ├── database.service.ts
+│       │   ├── cache.service.ts
+│       │   └── logger.service.ts
+│       ├── types/             # Core shared types
+│       │   ├── common.types.ts
+│       │   └── api.types.ts
+│       ├── components/        # Core UI components
+│       │   └── ui/            # shadcn/ui components
+│       │       ├── button.tsx
+│       │       ├── card.tsx
+│       │       └── dialog.tsx
+│       ├── hooks/             # Core React hooks
+│       │   └── useLocalStorage.ts
+│       ├── utils/             # Core utilities
+│       │   ├── api.utils.ts
+│       │   ├── date.utils.ts
+│       │   └── validation.utils.ts
+│       └── index.ts           # Core exports
 │
-├── packages/
-│   └── shared/                 # Shared types between api/web
-│       ├── src/
-│       │   └── types/
-│       └── package.json
+├── server/                    # 🔗 tRPC API Layer (Routes to Modules)
+│   ├── api/                   # tRPC routers (thin layer)
+│   │   ├── routers/           # Route to module services
+│   │   │   ├── auth.ts        # → modules/auth/services
+│   │   │   ├── queue.ts       # → modules/queue/services
+│   │   │   ├── calls.ts       # → modules/calls/services
+│   │   │   ├── communications.ts # → modules/communications/services
+│   │   │   ├── users.ts       # → modules/users/services
+│   │   │   └── analytics.ts   # → modules/analytics/services
+│   │   └── root.ts            # Main router composition
+│   └── middleware/            # Server middleware
 │
-└── infrastructure/
-    ├── docker/                 # Docker configs
-    ├── redis/                  # Redis configs
-    └── scripts/                # Deployment & maintenance scripts
+├── lib/                       # 🛠️ Infrastructure Layer
+│   ├── trpc/                  # tRPC client/server setup
+│   │   ├── client.ts          # tRPC React client
+│   │   ├── server.ts          # tRPC server config
+│   │   └── provider.tsx       # tRPC provider component
+│   ├── db.ts                  # Prisma database client
+│   └── config/                # Configuration
+│       ├── env.ts             # Environment validation
+│       └── constants.ts       # App constants
+│
+├── prisma/                    # 🗄️ Data Layer
+│   ├── schema.prisma          # Database schema
+│   ├── migrations/            # Database migrations
+│   └── seed.ts                # Database seeding
+│
+└── infrastructure/            # 🏗️ DevOps & Deployment
+    ├── docker/                # Docker configs
+    └── scripts/               # Deployment scripts
 ```
+
+## 🏗️ Modulith Architecture Principles
+
+### Core Modulith Guidelines
+
+#### 1. **Module Boundaries & Responsibilities**
+```typescript
+// Each module has a single responsibility and clear boundaries
+
+// ✅ Good: Clear module responsibility
+modules/
+├── auth/           # ONLY authentication & authorization
+├── queue/          # ONLY call queue management
+├── calls/          # ONLY call session handling
+├── communications/ # ONLY messaging & notifications
+├── users/          # ONLY user data & claims
+└── analytics/      # ONLY metrics & reporting
+```
+
+#### 2. **Dependency Rules**
+```typescript
+// Module dependency hierarchy (top can depend on bottom, never reverse)
+
+┌─────────────────────────────────────────────────┐
+│  Presentation Layer (app/ - Next.js App Router) │
+├─────────────────────────────────────────────────┤
+│     API Layer (server/ - tRPC Routers)          │
+├─────────────────────────────────────────────────┤
+│    Business Modules (modules/ - Domain Logic)   │
+│  auth → queue → calls → communications → users  │
+│              ↘ analytics ↗                     │
+├─────────────────────────────────────────────────┤
+│       Core Module (modules/core - Shared)       │
+├─────────────────────────────────────────────────┤
+│   Infrastructure (lib/, prisma/ - Foundation)   │
+└─────────────────────────────────────────────────┘
+
+// ✅ Allowed dependencies:
+// - auth can depend on core
+// - queue can depend on core + auth
+// - calls can depend on core + auth + queue
+// - communications can depend on core + auth + users
+// - analytics can depend on all other modules
+
+// ❌ Forbidden dependencies:
+// - core cannot depend on business modules
+// - auth cannot depend on queue/calls/etc
+// - users cannot depend on calls/queue/etc
+```
+
+#### 3. **Module Interface Pattern**
+```typescript
+// Every module exports a clean interface via index.ts
+
+// modules/auth/index.ts
+export { AuthService } from './services/auth.service'
+export { useAuth } from './hooks/useAuth'
+export { LoginForm } from './components/LoginForm'
+export type { Agent, AuthSession } from './types/auth.types'
+
+// Usage in other modules:
+import { AuthService, useAuth, type Agent } from '@/modules/auth'
+// ❌ Don't import directly: from '@/modules/auth/services/auth.service'
+```
+
+#### 4. **Service Layer Pattern**
+```typescript
+// Each module has services as the main business logic entry point
+
+// modules/queue/services/queue.service.ts
+export class QueueService {
+  constructor(
+    private authService: AuthService,    // ✅ Dependency injection
+    private userService: UserService    // ✅ From allowed dependencies
+  ) {}
+
+  async getQueue(filters: QueueFilters): Promise<QueueResult> {
+    // Business logic here
+    const agent = await this.authService.getCurrentAgent()
+    const eligibleUsers = await this.userService.getEligibleUsers(filters)
+    return this.buildQueue(eligibleUsers)
+  }
+}
+```
+
+#### 5. **Data Access Pattern**
+```typescript
+// Data access is centralized in the core module
+
+// modules/core/services/database.service.ts
+export class DatabaseService {
+  // Shared database operations
+  async getUserData(userId: number): Promise<UserData> {
+    return await prisma.user.findUnique({ where: { id: userId } })
+  }
+}
+
+// modules/users/services/user.service.ts
+export class UserService {
+  constructor(private dbService: DatabaseService) {}
+
+  async getUserContext(userId: number): Promise<UserCallContext> {
+    const userData = await this.dbService.getUserData(userId)
+    // Transform to domain model
+    return this.transformToCallContext(userData)
+  }
+}
+```
+
+#### 6. **tRPC Router Pattern**
+```typescript
+// tRPC routers are thin layers that delegate to module services
+
+// server/api/routers/queue.ts
+import { QueueService } from '@/modules/queue'
+import { createTRPCRouter, protectedProcedure } from '@/lib/trpc/server'
+
+const queueService = new QueueService() // Or use DI container
+
+export const queueRouter = createTRPCRouter({
+  getQueue: protectedProcedure
+    .input(QueueFiltersSchema)
+    .query(async ({ input, ctx }) => {
+      // Thin layer - delegate to service
+      return await queueService.getQueue(input, ctx.agent)
+    }),
+
+  assignCall: protectedProcedure
+    .input(AssignCallSchema)
+    .mutation(async ({ input, ctx }) => {
+      return await queueService.assignCall(input.queueId, ctx.agent.id)
+    })
+})
+```
+
+#### 7. **Component Organization**
+```typescript
+// Components are organized by module, not by technical concern
+
+// ✅ Good: Domain-organized components
+modules/calls/components/
+├── CallInterface.tsx      # Main call UI
+├── CallControls.tsx       # Call action buttons
+└── OutcomeForm.tsx        # Call disposition form
+
+// ❌ Bad: Technical-organized components
+components/
+├── forms/                 # Mixed domains
+├── buttons/               # Mixed domains
+└── modals/                # Mixed domains
+
+// Shared UI components go in core module
+modules/core/components/ui/
+├── button.tsx             # Base button component
+├── card.tsx               # Base card component
+└── dialog.tsx             # Base dialog component
+```
+
+#### 8. **Module Export Strategy**
+```typescript
+// Each module exports everything needed by other modules
+
+// modules/queue/index.ts
+// Services (main interface)
+export { QueueService } from './services/queue.service'
+export { ScoringService } from './services/scoring.service'
+
+// Types (for other modules)
+export type { 
+  Queue, 
+  QueueEntry, 
+  QueueFilters,
+  PriorityScore 
+} from './types/queue.types'
+
+// Components (for app pages)
+export { QueueDashboard } from './components/QueueDashboard'
+export { QueueTable } from './components/QueueTable'
+
+// Hooks (for other components)
+export { useQueue } from './hooks/useQueue'
+export { useQueueStats } from './hooks/useQueueStats'
+
+// Utils (if needed by other modules)
+export { calculatePriority } from './utils/scoring.utils'
+```
+
+### Modulith Benefits
+
+#### ✅ **Advantages**
+- **Single Deployment**: One Next.js app, easier ops
+- **Shared Infrastructure**: Database, auth, utilities
+- **Type Safety**: End-to-end TypeScript across modules
+- **Performance**: No network overhead between modules
+- **Development Speed**: Easier refactoring and testing
+- **Future-Proof**: Can extract modules to microservices later
+
+#### ⚠️ **Guidelines to Prevent "Big Ball of Mud"**
+- **Respect Module Boundaries**: Never import across module internals
+- **Use Dependency Injection**: Services should receive dependencies
+- **Keep Interfaces Clean**: Export only what other modules need
+- **Monitor Dependencies**: Use tools to track module coupling
+- **Regular Reviews**: Check for boundary violations in PRs
 
 ## 🔧 Technology Stack
 
-### Backend (API)
-- **Runtime**: Node.js 20+ with TypeScript
-- **Framework**: Express.js
-- **Database**: PostgreSQL (dialler features) + MySQL read replica (main data)
-- **ORM**: Prisma
-- **Cache**: Redis
-- **Queue**: Bull (Redis-based)
-- **Voice**: Twilio SDK
-- **Validation**: Zod
-- **Logging**: Winston
+### Unified Application
+- **Framework**: Next.js 14 (App Router) + TypeScript
+- **API Layer**: tRPC (type-safe RPC) + TanStack Query
+- **Database**: PostgreSQL + Prisma ORM + MySQL replica (main data)
+- **Authentication**: JWT + Next.js middleware
+- **UI Components**: Tailwind CSS + shadcn/ui + Radix UI primitives
+- **State Management**: tRPC + TanStack Query (server state) + localStorage (client state)
+- **Real-time**: Server-Sent Events (SSE) + WebSockets
+- **External Services**: Twilio (voice/SMS), Redis (cache), Winston (logging)
 
-### Frontend (Web)
-- **Framework**: React 18 with TypeScript
-- **Build Tool**: Vite
-- **Routing**: React Router v6
-- **State**: Zustand
-- **UI Library**: Tailwind CSS + Radix UI
-- **Forms**: React Hook Form + Zod
-- **Data Fetching**: TanStack Query
-- **Real-time**: Socket.io-client
+### Development Tools
+- **Runtime**: Node.js 20+ with TypeScript (strict mode)
+- **Build Tool**: Next.js built-in (Turbopack)
+- **Package Manager**: npm
+- **Forms**: React Hook Form + Zod validation
+- **Icons**: Lucide React
 - **Tables**: TanStack Table
+- **Charts**: Recharts (analytics)
+- **Validation**: Zod (runtime validation)
+- **Code Quality**: ESLint + TypeScript strict mode
 
 ## 📝 Coding Conventions
 
-### API Response Format
+### tRPC Procedure Patterns
 ```typescript
-// ALWAYS use this format for consistency
-interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: any;
-  };
-  meta?: {
-    page?: number;
-    limit?: number;
-    total?: number;
-    totalPages?: number;
-  };
-}
+// ALWAYS use this format for tRPC procedures
+export const exampleRouter = createTRPCRouter({
+  // Query procedure (GET-like)
+  getItems: protectedProcedure
+    .input(z.object({
+      page: z.number().default(1),
+      limit: z.number().default(20),
+      filters: z.object({
+        status: z.string().optional(),
+        search: z.string().optional()
+      }).optional()
+    }))
+    .query(async ({ input, ctx }) => {
+      const { page, limit, filters } = input;
+      
+      const [items, total] = await Promise.all([
+        ctx.prisma.item.findMany({
+          where: filters,
+          skip: (page - 1) * limit,
+          take: limit
+        }),
+        ctx.prisma.item.count({ where: filters })
+      ]);
+      
+      return {
+        items,
+        meta: { page, limit, total, totalPages: Math.ceil(total / limit) }
+      };
+    }),
+
+  // Mutation procedure (POST/PUT-like)
+  createItem: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1),
+      description: z.string().optional()
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const item = await ctx.prisma.item.create({
+        data: {
+          ...input,
+          createdBy: ctx.agent.id
+        }
+      });
+      
+      return item;
+    })
+});
 ```
 
 ### Error Handling Pattern
 ```typescript
-// Backend error handling
-export class AppError extends Error {
-  constructor(
-    public statusCode: number,
-    public code: string,
-    message: string,
-    public details?: any
-  ) {
-    super(message);
-  }
-}
+// tRPC error handling with typed errors
+import { TRPCError } from '@trpc/server';
 
-// Usage
-try {
-  const result = await someOperation();
-  return res.json({ success: true, data: result });
-} catch (error) {
-  logger.error('Operation failed:', error);
-  if (error instanceof AppError) {
-    return res.status(error.statusCode).json({
-      success: false,
-      error: {
-        code: error.code,
-        message: error.message,
-        details: error.details
+// Usage in procedures
+export const loginProcedure = publicProcedure
+  .input(z.object({
+    email: z.string().email(),
+    password: z.string().min(8)
+  }))
+  .mutation(async ({ input, ctx }) => {
+    try {
+      const { email, password } = input;
+      
+      const agent = await ctx.prisma.agent.findUnique({
+        where: { email, isActive: true }
+      });
+      
+      if (!agent || !bcrypt.compareSync(password, agent.passwordHash)) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'Invalid credentials'
+        });
       }
-    });
-  }
-  // Generic error
-  return res.status(500).json({
-    success: false,
-    error: {
-      code: 'INTERNAL_ERROR',
-      message: 'An unexpected error occurred'
+      
+      return { agent, token: generateToken(agent) };
+    } catch (error) {
+      // Log error for monitoring
+      logger.error('Login failed:', { email: input.email, error });
+      
+      // Re-throw tRPC errors
+      if (error instanceof TRPCError) {
+        throw error;
+      }
+      
+      // Convert other errors to tRPC errors
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'An unexpected error occurred'
+      });
     }
   });
-}
 ```
 
 ### Database Query Pattern
@@ -496,19 +880,78 @@ async function getUsersWithClaims(options: GetUsersOptions) {
 }
 ```
 
-### File Naming Conventions
+### File Naming Conventions (Modulith)
 ```
-- Components: PascalCase       (CallInterface.tsx, QueueDashboard.tsx)
-- Hooks: camelCase            (useCallSession.ts, useQueue.ts)
-- Utils: camelCase            (formatPhone.ts, calculateScore.ts)
-- Types: camelCase            (user.types.ts, call.types.ts)
-- API Routes: kebab-case      (call-sessions.ts, magic-links.ts)
-- Database: snake_case        (call_sessions, user_scores)
+📁 Module Structure:
+- Module Folders: camelCase   (auth/, queue/, calls/, communications/)
+- Module Index: index.ts      (exports interface for module)
+
+📄 Within Modules:
+- Services: camelCase         (auth.service.ts, queue.service.ts)
+- Types: camelCase            (auth.types.ts, queue.types.ts)
+- Components: PascalCase      (LoginForm.tsx, QueueDashboard.tsx)
+- Hooks: camelCase            (useAuth.ts, useQueue.ts)
+- Utils: camelCase            (jwt.utils.ts, scoring.utils.ts)
+
+🏠 App Router:
+- Pages: page.tsx, layout.tsx, loading.tsx, error.tsx
+- API Routes: route.ts        (in app/api folders)
+
+🔗 tRPC Layer:
+- Routers: camelCase          (auth.ts, queue.ts, calls.ts)
+- Root Router: root.ts        (composes all routers)
+
+🗄️ Database:
+- Schema: snake_case          (call_sessions, user_scores)
+- Migrations: auto-generated  (001_initial.sql)
+
+⚙️ Core/Shared:
+- UI Components: kebab-case   (button.tsx, card.tsx, dialog.tsx)
+- Config: camelCase           (env.ts, constants.ts)
+- Utils: camelCase            (api.utils.ts, date.utils.ts)
+
+📦 Import Conventions:
+- Module imports: '@/modules/auth'          (via index.ts)
+- Internal imports: './services/auth.service' (relative paths)
+- Core imports: '@/modules/core'            (shared utilities)
+- App imports: '@/app/(dashboard)/calls'    (page components)
 ```
 
 ## 🛠 Development Workflow
 
-### 1. Type-First Development
+### 1. Module-First Development
+Start with module boundaries and interfaces before implementation:
+```typescript
+// 1. Define module interface first
+// modules/calls/index.ts
+export interface CallService {
+  initiateCall(queueId: string, agentId: number): Promise<CallSession>
+  updateStatus(sessionId: string, status: CallStatus): Promise<void>
+  recordOutcome(sessionId: string, outcome: CallOutcome): Promise<void>
+}
+
+export type { CallSession, CallStatus, CallOutcome } from './types/call.types'
+
+// 2. Implement the service
+// modules/calls/services/call.service.ts
+export class CallServiceImpl implements CallService {
+  constructor(
+    private authService: AuthService,     // From modules/auth
+    private userService: UserService,     // From modules/users
+    private twilioService: TwilioService  // From modules/core
+  ) {}
+
+  async initiateCall(queueId: string, agentId: number): Promise<CallSession> {
+    // Implementation with proper dependency usage
+  }
+}
+
+// 3. Export from module
+// modules/calls/index.ts
+export { CallServiceImpl as CallService } from './services/call.service'
+```
+
+### 2. Type-First Development
 Always define types before implementation:
 ```typescript
 // 1. Define the complete type structure
@@ -556,73 +999,174 @@ const getUserCallContext = async (userId: number): Promise<UserCallContext> => {
 };
 ```
 
-### 2. API-First Approach
-Define endpoints before UI:
+### 3. tRPC-First with Module Services
+Define tRPC procedures that delegate to module services:
 ```typescript
-// Define API contract first
-POST   /api/auth/login
-GET    /api/auth/me
+// 1. Module services define business logic
+// modules/queue/services/queue.service.ts
+export class QueueService {
+  async getQueue(filters: QueueFilters, agent: Agent): Promise<QueueResult> {
+    // Business logic
+  }
+  
+  async assignCall(queueId: string, agentId: number): Promise<QueueEntry> {
+    // Business logic
+  }
+}
 
-GET    /api/queue                   # Get current queue
-POST   /api/queue/:id/assign        # Assign call to agent
+// 2. tRPC routers are thin delegation layers
+// server/api/routers/queue.ts
+import { QueueService } from '@/modules/queue'
 
-POST   /api/call-sessions           # Start new call
-GET    /api/call-sessions/:id       # Get call details
-PUT    /api/call-sessions/:id/status # Update call status
-POST   /api/call-sessions/:id/outcome # Record outcome
+const queueService = new QueueService()
 
-POST   /api/magic-links             # Generate and send
-GET    /api/magic-links/history     # View sent links
+export const queueRouter = createTRPCRouter({
+  getQueue: protectedProcedure
+    .input(QueueFiltersSchema)
+    .query(async ({ input, ctx }) => {
+      // Delegate to module service
+      return await queueService.getQueue(input, ctx.agent)
+    }),
 
-POST   /api/callbacks               # Schedule callback
-GET    /api/callbacks/upcoming      # View scheduled
+  assignCall: protectedProcedure
+    .input(AssignCallSchema)
+    .mutation(async ({ input, ctx }) => {
+      // Delegate to module service
+      return await queueService.assignCall(input.queueId, ctx.agent.id)
+    })
+})
 
-// Then build UI to consume
+// 3. Compose routers in root
+// server/api/root.ts
+export const appRouter = createTRPCRouter({
+  auth: authRouter,        // → modules/auth
+  queue: queueRouter,      // → modules/queue  
+  calls: callsRouter,      // → modules/calls
+  communications: commsRouter, // → modules/communications
+  users: usersRouter,      // → modules/users
+  analytics: analyticsRouter   // → modules/analytics
+})
+
+// 4. Type-safe client usage (unchanged)
+const { data: queue } = api.queue.getQueue.useQuery({ status: 'pending' })
+const assignMutation = api.queue.assignCall.useMutation()
 ```
 
-### 3. Component Structure
+### 4. Module-Based Component Structure
 ```typescript
-// Feature-based organization
-features/
-├── calls/
-│   ├── components/
-│   │   ├── CallInterface.tsx       # Main call UI
-│   │   ├── CallControls.tsx        # Buttons and actions
-│   │   ├── CallTimer.tsx           # Duration display
-│   │   └── UserContext.tsx         # User info panel
-│   ├── hooks/
-│   │   ├── useCallSession.ts       # Call state management
-│   │   └── useTwilio.ts            # Twilio integration
-│   ├── api/
-│   │   └── callsApi.ts             # API endpoints
-│   └── types/
-│       └── calls.types.ts          # Type definitions
+// Modulith organization - components live with their domain
+
+// 1. Next.js pages use module components
+app/(dashboard)/calls/page.tsx
+```tsx
+import { CallInterface } from '@/modules/calls'
+import { QueueDashboard } from '@/modules/queue'
+
+export default function CallsPage() {
+  return (
+    <div>
+      <QueueDashboard />
+      <CallInterface />
+    </div>
+  )
+}
+```
+
+// 2. Module components are domain-focused
+modules/calls/components/
+├── CallInterface.tsx      # Main call UI
+├── CallControls.tsx       # Call action buttons  
+├── CallTimer.tsx          # Duration display
+└── OutcomeForm.tsx        # Call disposition
+
+// 3. Shared UI in core module
+modules/core/components/ui/
+├── button.tsx             # Base button
+├── card.tsx               # Base card
+├── dialog.tsx             # Base dialog
+└── form.tsx               # Base form
+
+// 4. Module hooks for state
+modules/calls/hooks/
+├── useCallSession.ts      # Call state management
+├── useTwilio.ts           # Twilio integration
+└── useCallTimer.ts        # Timer logic
+
+// 5. Module services for business logic
+modules/calls/services/
+├── call.service.ts        # Core call logic
+├── outcome.service.ts     # Outcome handling
+└── twilio.service.ts      # Twilio integration
+
+// 6. tRPC routers delegate to services
+server/api/routers/calls.ts
+```typescript
+import { CallService } from '@/modules/calls'
+
+const callService = new CallService()
+
+export const callsRouter = createTRPCRouter({
+  initiate: protectedProcedure
+    .input(InitiateCallSchema)
+    .mutation(({ input, ctx }) => callService.initiate(input, ctx.agent))
+})
+```
 ```
 
 ## 🔐 Authentication & Security
 
-### JWT Token Structure
+### JWT Token Structure & Next.js Middleware
 ```typescript
 interface JwtPayload {
-  agentId: number;
+  id: number;
   email: string;
   role: 'agent' | 'supervisor' | 'admin';
   iat: number;
   exp: number;
 }
 
-// Token generation
+// Token generation in tRPC procedure
 const generateToken = (agent: Agent): string => {
   return jwt.sign(
     { 
-      agentId: agent.id, 
+      id: agent.id, 
       email: agent.email, 
       role: agent.role 
     },
-    process.env.JWT_SECRET!,
+    process.env.NEXTAUTH_SECRET!,
     { expiresIn: '8h' }
   );
 };
+
+// Next.js middleware for route protection
+// middleware.ts
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+import jwt from 'jsonwebtoken'
+
+export function middleware(request: NextRequest) {
+  // Protect dashboard routes
+  if (request.nextUrl.pathname.startsWith('/dashboard')) {
+    const token = request.cookies.get('auth-token')?.value ||
+                  request.headers.get('authorization')?.replace('Bearer ', '')
+
+    if (!token) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+
+    try {
+      jwt.verify(token, process.env.NEXTAUTH_SECRET!)
+    } catch (error) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+  }
+
+  return NextResponse.next()
+}
+
+export const config = {
+  matcher: ['/dashboard/:path*']
+}
 ```
 
 ### Magic Link Generation
@@ -775,6 +1319,121 @@ CREATE INDEX idx_claims_user_status ON claims(user_id, status);
 CREATE INDEX idx_requirements_claim_status ON claim_requirements(claim_id, status);
 ```
 
+## 🚀 Modulith Implementation Strategy
+
+### Phase 1: Module Foundation
+```bash
+# 1. Create module structure
+mkdir -p modules/{auth,queue,calls,communications,users,analytics,core}
+mkdir -p modules/{auth,queue,calls,communications,users,analytics}/{{services,types,components,hooks,utils}}
+mkdir -p modules/core/{services,types,components,hooks,utils}
+
+# 2. Create module index files
+touch modules/{auth,queue,calls,communications,users,analytics,core}/index.ts
+```
+
+### Phase 2: Service Migration
+```typescript
+// 1. Move services to modules with dependency injection
+// Before: server/services/queue.service.ts
+// After: modules/queue/services/queue.service.ts
+
+export class QueueService {
+  constructor(
+    private authService: AuthService,  // Inject from auth module
+    private userService: UserService   // Inject from users module
+  ) {}
+}
+
+// 2. Update tRPC routers to use module services
+// server/api/routers/queue.ts
+import { QueueService, type QueueFilters } from '@/modules/queue'
+```
+
+### Phase 3: Component Organization
+```typescript
+// 1. Move components to their domain modules
+// Before: components/CallInterface.tsx
+// After: modules/calls/components/CallInterface.tsx
+
+// 2. Update imports in Next.js pages
+// app/(dashboard)/calls/page.tsx
+import { CallInterface } from '@/modules/calls'
+import { QueueDashboard } from '@/modules/queue'
+```
+
+### Phase 4: Type Safety & Boundaries
+```typescript
+// 1. Enforce module boundaries with TypeScript
+// eslint-plugin-boundaries or similar
+
+// 2. Create clear module interfaces
+// modules/auth/index.ts
+export type { Agent, AuthSession } from './types/auth.types'
+export { AuthService } from './services/auth.service'
+export { useAuth } from './hooks/useAuth'
+
+// 3. Update path mapping
+// tsconfig.json
+{
+  "compilerOptions": {
+    "paths": {
+      "@/modules/*": ["./modules/*"],
+      "@/modules/core": ["./modules/core"],
+      "@/app/*": ["./app/*"]
+    }
+  }
+}
+```
+
+### Module Dependency Visualization
+```mermaid
+graph TD
+    A[Next.js App Router] --> B[tRPC API Layer]
+    B --> C[Business Modules]
+    
+    C --> D[auth]
+    C --> E[queue]
+    C --> F[calls]
+    C --> G[communications]
+    C --> H[users]
+    C --> I[analytics]
+    
+    D --> J[core]
+    E --> J
+    E --> D
+    F --> J
+    F --> D
+    F --> E
+    G --> J
+    G --> D
+    G --> H
+    H --> J
+    I --> J
+    I --> D
+    I --> E
+    I --> F
+    I --> G
+    I --> H
+    
+    J --> K[Infrastructure]
+    K --> L[Database]
+    K --> M[Cache]
+    K --> N[External APIs]
+```
+
+### Migration Checklist
+- [ ] **Create module directories** with standard structure
+- [ ] **Move services** to appropriate modules with dependency injection
+- [ ] **Update tRPC routers** to delegate to module services
+- [ ] **Relocate components** to domain modules
+- [ ] **Update imports** throughout application
+- [ ] **Configure TypeScript paths** for clean imports
+- [ ] **Add module boundaries** linting rules
+- [ ] **Test module isolation** - ensure no cross-module internals
+- [ ] **Document module APIs** in each index.ts
+- [ ] **Update development processes** for modulith patterns
+
 ## 🧪 Testing Requirements
 
 ### Test Structure
@@ -866,43 +1525,51 @@ REPLICA_DATABASE_URL=mysql://readonly:pass@replica:3306/main_db
 # Redis
 REDIS_URL=redis://host:6379
 
+# Authentication
+NEXTAUTH_SECRET=your-super-secret-nextauth-key-min-32-chars
+NEXTAUTH_URL=https://dialler.resolvemyclaim.co.uk
+
 # Twilio
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_PHONE_NUMBER=
 TWILIO_TWIML_APP_SID=
+TWILIO_API_KEY=
+TWILIO_API_SECRET=
+
+# External APIs
+SENDGRID_API_KEY=
+OPENAI_API_KEY=
 
 # Application URLs
 MAIN_APP_URL=https://claim.resolvemyclaim.co.uk
-DIALLER_APP_URL=https://dialler.resolvemyclaim.co.uk
-
-# Security
-JWT_SECRET=
-ENCRYPTION_KEY=
 
 # Feature Flags
 ENABLE_AI_AGENTS=false
 ENABLE_SMS_REPLIES=true
+
+# Monitoring
+SENTRY_DSN=
+VERCEL_ANALYTICS_ID=
 ```
 
 ### Vercel Configuration
 ```json
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "apps/api/src/app.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "apps/web/package.json",
-      "use": "@vercel/static-build"
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm ci",
+  "framework": "nextjs",
+  "functions": {
+    "app/api/**": {
+      "maxDuration": 30
     }
-  ],
+  },
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "/apps/api/src/app.ts"
+      "source": "/api/webhooks/:path*",
+      "destination": "/api/webhooks/:path*"
     }
   ]
 }

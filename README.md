@@ -1,6 +1,6 @@
 # 📞 RMC Dialler System
 
-A standalone dialler system for Resolve My Claim that enables agents to efficiently contact users about their financial claims. The system reads user data from the main claims platform but operates completely independently with no write-backs.
+A standalone dialler system for Resolve My Claim that enables agents to efficiently contact users about their financial claims. Built as a unified Next.js 14 application with type-safe tRPC APIs and modern React patterns.
 
 ## 🎯 Overview
 
@@ -22,10 +22,14 @@ A standalone dialler system for Resolve My Claim that enables agents to efficien
 ## 🏗️ Architecture
 
 ### Technology Stack
-- **Backend**: Node.js + Express + TypeScript + Prisma
-- **Frontend**: React + Vite + TypeScript + Tailwind CSS
-- **Databases**: PostgreSQL (dialler features) + MySQL replica (claims data)
-- **Services**: Twilio (voice/SMS), Redis (cache), Socket.io (real-time)
+- **Framework**: Next.js 14 (App Router) + TypeScript
+- **API Layer**: tRPC (type-safe RPC) + TanStack Query
+- **Database**: PostgreSQL + Prisma ORM + MySQL replica (claims data)
+- **Authentication**: JWT + Next.js middleware
+- **UI Components**: Tailwind CSS + shadcn/ui + Radix UI primitives
+- **State Management**: tRPC + TanStack Query (server state) + localStorage (client state)
+- **Real-time**: Server-Sent Events (SSE) + WebSockets
+- **External Services**: Twilio (voice/SMS), SendGrid (email), OpenAI (AI agents)
 
 ### Database Strategy
 ```
@@ -36,7 +40,7 @@ A standalone dialler system for Resolve My Claim that enables agents to efficien
          │                                    
          ▼ Cache (Redis)                     
 ┌─────────────────────┐         ┌──────────────────────┐
-│   PostgreSQL        │         │   Dialler React App  │
+│   PostgreSQL        │         │   Next.js Dialler   │
 │ (Dialler Features)  │ ◄────── │ dialler.resolvemy... │
 └─────────────────────┘         └──────────────────────┘
 ```
@@ -46,23 +50,24 @@ A standalone dialler system for Resolve My Claim that enables agents to efficien
 ### Prerequisites
 - Node.js 20+
 - PostgreSQL database
-- Redis instance
+- Redis instance  
 - Twilio account
 
 ### Environment Setup
 1. Copy environment template:
    ```bash
-   cp env.template .env
+   cp env.template .env.local
    ```
 
-2. Configure your environment variables in `.env`:
+2. Configure your environment variables in `.env.local`:
    ```env
    DATABASE_URL="postgresql://user:password@localhost:5432/dialler_features"
    REPLICA_DATABASE_URL="mysql://readonly:password@replica:3306/main_db"
    REDIS_URL="redis://localhost:6379"
    TWILIO_ACCOUNT_SID="your-twilio-account-sid"
    TWILIO_AUTH_TOKEN="your-twilio-auth-token"
-   JWT_SECRET="your-super-secret-jwt-key"
+   NEXTAUTH_SECRET="your-super-secret-nextauth-key"
+   NEXTAUTH_URL="http://localhost:3000"
    ```
 
 ### Installation & Development
@@ -74,20 +79,21 @@ npm install
 npm run db:generate
 
 # Run database migrations
-npm run migrate
+npm run db:migrate
 
-# Start development servers
+# Start development server
 npm run dev
 ```
 
-This will start:
-- **API Server**: http://localhost:3000
-- **Web App**: http://localhost:5173
+This will start the Next.js development server at: http://localhost:3000
 
 ### Build for Production
 ```bash
-# Build all packages
+# Build the application
 npm run build
+
+# Start production server
+npm start
 
 # Deploy to Vercel
 npm run deploy
@@ -97,32 +103,34 @@ npm run deploy
 
 ```
 dialler-system/
-├── apps/
-│   ├── api/                    # Node.js/Express backend
-│   │   ├── src/
-│   │   │   ├── config/         # Database, Redis, Twilio configs
-│   │   │   ├── controllers/    # Route handlers
-│   │   │   ├── middleware/     # Auth, error handling, validation
-│   │   │   ├── models/         # TypeScript interfaces & schemas
-│   │   │   ├── services/       # Business logic layer
-│   │   │   └── utils/          # Helpers and utilities
-│   │   └── prisma/             # Database schema & migrations
-│   │
-│   └── web/                    # React frontend (Vite)
-│       ├── src/
-│       │   ├── components/     # UI components
-│       │   ├── features/       # Feature-based modules
-│       │   ├── hooks/          # Custom React hooks
-│       │   ├── lib/            # API client, utilities
-│       │   ├── pages/          # Route pages
-│       │   └── store/          # Zustand state management
-│
-├── packages/
-│   └── shared/                 # Shared types between api/web
-│
-└── infrastructure/
-    ├── docker/                 # Docker configs
-    └── scripts/                # Deployment & maintenance scripts
+├── app/                        # Next.js App Router
+│   ├── (dashboard)/           # Protected dashboard routes
+│   │   ├── calls/             # Call management
+│   │   ├── queue/             # Call queue interface
+│   │   ├── sms/               # SMS conversations
+│   │   └── analytics/         # Supervisor dashboard
+│   ├── api/                   # API routes & tRPC endpoints
+│   │   ├── trpc/              # tRPC router setup
+│   │   ├── auth/              # Authentication endpoints
+│   │   └── webhooks/          # Twilio/external webhooks
+│   ├── login/                 # Authentication pages
+│   ├── layout.tsx             # Root layout
+│   └── page.tsx               # Homepage
+├── components/                 # Reusable UI components
+│   ├── ui/                    # shadcn/ui components
+│   ├── forms/                 # Form components
+│   └── layout/                # Layout components
+├── lib/                       # Utility libraries
+│   ├── db.ts                  # Database client
+│   ├── auth.ts                # Authentication utilities
+│   ├── trpc/                  # tRPC client setup
+│   └── utils.ts               # General utilities
+├── server/                    # Server-side code
+│   ├── api/                   # tRPC routers
+│   ├── services/              # Business logic services
+│   └── middleware/            # Server middleware
+├── prisma/                    # Database schema & migrations
+└── types/                     # Shared TypeScript types
 ```
 
 ## 🔧 Development
@@ -130,55 +138,51 @@ dialler-system/
 ### Core Commands
 ```bash
 # Development
-npm run dev              # Start all dev servers
+npm run dev              # Start Next.js dev server
 npm run test             # Run all tests
-npm run lint             # Lint all packages
+npm run lint             # Lint all code
 npm run type-check       # TypeScript validation
 
 # Database
 npm run db:generate      # Generate Prisma client
-npm run migrate          # Run database migrations
+npm run db:migrate       # Run database migrations
 npm run db:seed          # Seed development data
 
 # Build & Deploy
 npm run build            # Build for production
+npm run start            # Start production server
 npm run deploy           # Deploy to Vercel
 ```
 
-### API Endpoints
-- `GET /health` - Service health check
-- `POST /api/auth/login` - Agent authentication
-- `GET /api/queue` - Get call queue
-- `POST /api/call-sessions` - Start new call
-- `POST /api/magic-links` - Generate magic links
-- `GET /api/sms/conversations` - SMS management
+### tRPC API Structure
+- `api/trpc/[trpc].ts` - Main tRPC endpoint
+- `server/api/routers/` - Type-safe API routers
+- `lib/trpc/client.ts` - Client-side tRPC setup
 
 ### Key Features Status
-- ✅ **Project Foundation** - Monorepo, TypeScript, configurations
-- ✅ **Database Schema** - Complete Prisma schema with relationships
-- ✅ **API Foundation** - Express server with middleware
-- ✅ **React Foundation** - Component structure and routing
-- 🚧 **Authentication** - JWT-based agent login (planned)
-- 🚧 **Queue Management** - Priority-based call queue (planned)
-- 🚧 **Twilio Integration** - Voice calling and SMS (planned)
-- 🚧 **Magic Links** - Secure authentication links (planned)
+- ✅ **Project Foundation** - Next.js 14, TypeScript, tRPC setup
+- ✅ **Database Schema** - Complete Prisma schema with relationships  
+- ✅ **Authentication** - JWT-based agent login with Next.js middleware
+- 🚧 **Queue Management** - Priority-based call queue (migrating)
+- 🚧 **Twilio Integration** - Voice calling and SMS (migrating)
+- 🚧 **Magic Links** - Secure authentication links (migrating)
 
 ## 🔐 Security
 
-- **JWT Authentication** for agent sessions
+- **JWT Authentication** with Next.js middleware
+- **Type-safe APIs** with tRPC and Zod validation
 - **Rate limiting** on all API endpoints
-- **Input validation** with Zod schemas
-- **CORS protection** with origin restrictions
-- **Helmet security headers** 
+- **CORS protection** with Next.js built-in security
 - **Environment variable protection**
+- **Server-side validation** for all mutations
 
 ## 📊 Monitoring
 
-- **Health checks** at `/health` endpoint
+- **Health checks** at `/api/health` endpoint
 - **Structured logging** with Winston
-- **Error tracking** with stack traces
-- **Performance monitoring** ready for integration
-- **Real-time updates** via WebSocket
+- **Error tracking** with comprehensive error boundaries
+- **Performance monitoring** with Next.js analytics
+- **Real-time updates** via Server-Sent Events
 
 ## 🚢 Deployment
 
@@ -189,21 +193,23 @@ The application is configured for Vercel deployment:
 2. **Environment variables** configured in Vercel dashboard
 3. **API routes** served as serverless functions
 4. **Static assets** served from CDN
+5. **Edge functions** for performance optimization
 
 ### Environment Variables (Production)
 Configure these in your Vercel dashboard:
 - `DATABASE_URL` - PostgreSQL connection string
-- `REPLICA_DATABASE_URL` - MySQL replica connection
+- `REPLICA_DATABASE_URL` - MySQL replica connection  
 - `REDIS_URL` - Redis connection string
 - `TWILIO_ACCOUNT_SID` - Twilio account identifier
 - `TWILIO_AUTH_TOKEN` - Twilio authentication token
-- `JWT_SECRET` - Secret for JWT token signing
+- `NEXTAUTH_SECRET` - Secret for JWT token signing
+- `NEXTAUTH_URL` - Production URL
 
 ## 📋 Contributing
 
 1. **Create feature branch**: `git checkout -b feature/your-feature`
 2. **Follow naming conventions**: PascalCase components, camelCase functions
-3. **Add tests**: Unit tests for services, integration tests for APIs
+3. **Add tests**: Unit tests for utilities, integration tests for APIs
 4. **Update documentation**: Keep README and comments current
 5. **Submit PR**: With description of changes and testing notes
 
@@ -213,4 +219,4 @@ This project is proprietary to Resolve My Claim Ltd.
 
 ---
 
-**Questions?** Check the [build plan](./buildplan.md) for detailed implementation guidance. 
+**Questions?** Check the migration guide for detailed Next.js implementation patterns. 

@@ -1,260 +1,250 @@
-# 📊 RMC Dialler - Build Progress Tracker
+# 📊 RMC Dialler - Next.js 14 + tRPC Migration Progress
 
-> **Reference**: [buildplan.md](./buildplan.md) - Detailed 4-Week Implementation Plan
+> **Reference**: [buildplan.md](./buildplan.md) - Detailed Next.js 14 + tRPC Migration Plan
 
 ## 🎯 Project Overview
-Standalone dialler system enabling agents to contact users about financial claims with intelligent queue management, Twilio integration, and supervisor analytics.
+Migrating from separate Express API + React frontend to a unified Next.js 14 application with tRPC for type-safe APIs. The system enables agents to efficiently contact users about financial claims with intelligent queue management, Twilio integration, and supervisor analytics.
 
 ---
 
-## 📅 **Pre-Development Setup (Day 0)**
-- [x] Repository initialization & monorepo setup
-- [x] Workspace structure (`apps/api`, `apps/web`, `packages/shared`)
-- [x] TypeScript & Turbo configuration
-- [x] Database credentials (Neon PostgreSQL)
-- [x] Environment variables documented
-- [x] Auto-deployment pipeline (GitHub → Vercel)
+## 📅 **Pre-Migration Setup (Day 0)**
+- [x] Repository structure analysis completed
+- [x] Migration plan documented in buildplan.md
+- [x] New tech stack requirements identified
+- [ ] Next.js 14 app structure created
+- [ ] tRPC setup with type-safe client/server
+- [ ] Prisma schema migration to new structure
+- [ ] Environment variables migrated to .env.local
 
 ---
 
-## 🗓️ **Week 1: Foundation & Core Schema** ✅ **COMPLETE**
+## 🗓️ **Migration Phase 1: Architecture Foundation** 📋 **PLANNED**
 
-### **Day 1-2: Database Infrastructure** ✅
-- [x] PostgreSQL database setup (Neon)
-- [x] Core tables creation (9 tables via Prisma)
-- [x] Database relationships and indexes
-- [x] Test data seeding (5 test agents)
+### **Day 1-2: Next.js Foundation + tRPC Setup** 📋 **PLANNED**
+- [ ] Create Next.js 14 app with App Router
+- [ ] Set up tRPC server and client configuration
+- [ ] Configure type-safe API layer with Zod validation
+- [ ] Implement TRPCProvider for React Query integration
+- [ ] Set up shadcn/ui component library
+- [ ] Configure Tailwind CSS with design system
 
-### **Day 3-4: Node.js API Foundation** ✅
-- [x] Express server with production middleware
-- [x] Enhanced error handling and validation
-- [x] JWT authentication system
-- [x] Protected routes and role-based auth
-- [x] API response standardization
+### **Day 3-4: Authentication Migration** 📋 **PLANNED**
+- [ ] Convert Express auth middleware to Next.js middleware
+- [ ] Implement JWT authentication with tRPC procedures
+- [ ] Create auth router with login/logout/me endpoints
+- [ ] Set up protected routes with middleware
+- [ ] Migrate auth components to Next.js patterns
+- [ ] Test authentication flow end-to-end
 
-### **Day 5: React Foundation** ✅
-- [x] Vite React app with TypeScript
-- [x] Authentication system (login, logout, protected routes)
-- [x] Zustand state management
-- [x] Role-based UI and navigation
-- [x] Professional login form with validation
+### **Day 5: Database Migration** 📋 **PLANNED**
+- [ ] Move Prisma schema to new Next.js structure
+- [ ] Set up database client with Next.js patterns
+- [ ] Create database service layer for tRPC
+- [ ] Test database connections and migrations
+- [ ] Verify read-only replica access
+- [ ] Set up Redis caching integration
 
-**Week 1 Success Criteria**: ✅ All completed
-- ✅ Database schema implemented with all tables
-- ✅ API with enhanced authentication and error handling  
-- ✅ React app foundation with comprehensive auth system
-- ✅ Deployed to Vercel with auto-deployment
-
----
-
-## 🗓️ **Week 2: Core Dialler Features** 🚧 **IN PROGRESS**
-
-### **Day 6-7: Queue Management System** ✅ **COMPLETE**
-- [x] Queue service implementation
-- [x] Priority scoring algorithm
-- [x] User eligibility calculation
-- [x] Queue API endpoints (`GET /queue`, `POST /queue/:id/assign`)
-- [x] Queue UI components
-- [x] Real-time queue updates
-
-### **Day 8-9: Call Session Management** ✅ **COMPLETED**
-- [x] Call service with state management ✅
-- [x] Session tracking and status updates ✅
-- [x] Call duration and metrics ✅
-- [x] Call history and logging ✅
-- [x] Agent availability management ✅
-
-**Technical Implementation Completed**:
-- ✅ **Call Service**: Comprehensive service with initiate, update, and end call functionality
-- ✅ **Call Session API**: 8 REST endpoints with full CRUD operations and validation
-- ✅ **Agent Service**: Complete availability management with session tracking
-- ✅ **Call Outcomes**: Disposition recording with automatic score adjustments
-- ✅ **Performance Metrics**: Call statistics and agent performance analytics
-- ✅ **Error Handling**: Robust validation and error responses throughout
-
-### **Day 10: Enhanced SMS Integration** ✅ **COMPLETED**
-- [x] SMS service implementation ✅
-- [x] Two-way messaging system ✅
-- [x] Auto-response logic ✅
-- [x] SMS conversation API ✅
-- [x] Message threading and history ✅
-- [x] SMS conversation UI for agents ✅
-
-**Technical Implementation Completed**:
-- ✅ **SMS Service**: Comprehensive service with Twilio integration (685 lines)
-- ✅ **SMS API**: 10 REST endpoints for complete SMS conversation management
-- ✅ **Auto-Response System**: Intelligent keyword-based responses with 5 built-in rules
-- ✅ **Conversation Management**: Threading, assignment, and status tracking
-- ✅ **Magic Link Integration**: Send secure links via SMS with activity tracking
-- ✅ **Webhook Handling**: Twilio webhooks for incoming messages and delivery status
-- ✅ **SMS UI Interface**: Complete agent conversation interface with real-time updates
-- ✅ **Navigation Integration**: SMS page accessible from main navigation menu
-
-### **Day 11: Magic Link System** ✅ **COMPLETED**
-- [x] Magic link generation service ✅
-- [x] Link validation and expiry ✅
-- [x] Analytics and tracking ✅
-- [x] Integration with call outcomes ✅
-- [x] Security and compliance features ✅
-- [x] Cross-platform link support ✅
-- [x] Multiple link types implementation ✅
-
-**Technical Implementation Completed**:
-- ✅ **Magic Link Service**: Comprehensive service with 7 link types and cross-platform support (648 lines)
-- ✅ **Magic Link API**: 8 REST endpoints for generation, sending, tracking, and analytics
-- ✅ **Security Features**: HMAC token verification, expiration handling, and secure URL generation
-- ✅ **Cross-Platform Support**: Universal links targeting claim.resolvemyclaim.co.uk with UTM tracking
-- ✅ **Multiple Link Types**: firstLogin, claimPortal, documentUpload, claimCompletion, requirementReview, statusUpdate, profileUpdate
-- ✅ **Delivery Methods**: SMS, WhatsApp, and Email support with method-specific validation
-- ✅ **Analytics Dashboard**: Performance tracking, access rates, agent statistics, and recent activity
-- ✅ **Agent UI Components**: MagicLinkPanel for call interface and MagicLinksPage for analytics
-- ✅ **SMS Integration**: Updated SMS service to use new magic link system
-- ✅ **Database Compliance**: Full integration with existing Prisma schema and activity tracking
-
-**Week 2 Target Deliverables**:
-- [x] Queue management with smart prioritization ✅
-- [x] Call session handling with state management ✅
-- [x] SMS integration with two-way messaging ✅
-- [x] Magic link system with analytics ✅
+**Migration Phase 1 Target**:
+- [ ] Unified Next.js app with App Router
+- [ ] Type-safe tRPC API layer
+- [ ] Working authentication system
+- [ ] Database layer properly configured
 
 ---
 
-## 🗓️ **Week 3: Advanced Features** 📋 **PLANNED**
+## 🗓️ **Migration Phase 2: Core Services** 📋 **PLANNED**
 
-### **Day 12-13: Twilio SDK Integration** 📋 **PLANNED**
-- [ ] Twilio service setup
-- [ ] Browser-based calling (Twilio Device SDK)
-- [ ] Call recording and TwiML endpoints
-- [ ] Voice token generation
-- [ ] Call status webhooks
+### **Day 6-7: Queue Management Migration** 📋 **PLANNED**
+- [ ] Convert Express queue routes to tRPC procedures
+- [ ] Migrate QueueService to work with tRPC context
+- [ ] Create queue router with all CRUD operations
+- [ ] Build queue management UI with App Router
+- [ ] Implement real-time updates with Server-Sent Events
+- [ ] Test priority scoring and assignment logic
 
-### **Day 14: Supervisor Dashboard** 📋 **PLANNED**
-- [ ] Analytics service implementation
-- [ ] Real-time metrics dashboard
-- [ ] Agent performance tracking
-- [ ] Call outcome reporting
-- [ ] Queue depth monitoring
+### **Day 8-9: Call Session Management** 📋 **PLANNED**
+- [ ] Convert call service to tRPC procedures
+- [ ] Implement call session tracking with tRPC
+- [ ] Create calls router with outcome recording
+- [ ] Build call interface components
+- [ ] Set up agent status management
+- [ ] Test call lifecycle management
 
-### **Day 15: Performance Optimization** 📋 **PLANNED**
-- [ ] Redis caching layer
-- [ ] Database query optimization
-- [ ] Smart prioritization enhancements
-- [ ] Callback scheduling system
-- [ ] Circuit breaker patterns
+### **Day 10-11: SMS & Magic Links Migration** 📋 **PLANNED**
+- [ ] Convert SMS service to tRPC procedures
+- [ ] Implement SMS conversation management
+- [ ] Create magic link generation with tRPC
+- [ ] Build SMS conversation UI
+- [ ] Set up webhook handling for SMS
+- [ ] Test magic link generation and tracking
 
-**Week 3 Target Deliverables**:
-- [ ] Twilio voice integration with browser SDK
-- [ ] Supervisor dashboard with real-time analytics
-- [ ] Performance optimization with Redis caching
-- [ ] WebSocket real-time updates
-
----
-
-## 🗓️ **Week 4: Production Hardening** 📋 **PLANNED**
-
-### **Day 16-17: Real-time Features** 📋 **PLANNED**
-- [ ] WebSocket implementation
-- [ ] Real-time queue updates
-- [ ] Live agent status
-- [ ] Enhanced testing suite (unit, integration, E2E)
-
-### **Day 18-19: Security & Monitoring** 📋 **PLANNED**
-- [ ] Production error handling
-- [ ] Security hardening
-- [ ] GDPR compliance features
-- [ ] Health monitoring system
-- [ ] Performance metrics
-
-### **Day 20: Final Testing** 📋 **PLANNED**
-- [ ] Load testing with realistic scenarios
-- [ ] End-to-end workflow validation
-- [ ] Production deployment verification
-- [ ] Documentation finalization
-
-**Week 4 Target Deliverables**:
-- [ ] Production-grade error handling and monitoring
-- [ ] Comprehensive testing suite
-- [ ] Security hardening and GDPR compliance
-- [ ] Ready for production scaling
+**Migration Phase 2 Target**:
+- [ ] All core services converted to tRPC
+- [ ] Queue management fully operational
+- [ ] Call session tracking working
+- [ ] SMS and magic links integrated
 
 ---
 
-## 🗓️ **Week 5: Polish & Advanced Features** 📋 **PLANNED**
+## 🗓️ **Migration Phase 3: Advanced Features** 📋 **PLANNED**
 
-### **Buffer Week Activities** 📋 **PLANNED**
-- [ ] Advanced SMS features (templates, automation)
-- [ ] AI agent integration preparation
-- [ ] Performance optimization
-- [ ] User training materials
-- [ ] Documentation completion
+### **Day 12-13: Twilio Integration** 📋 **PLANNED**
+- [ ] Set up Twilio service for Next.js environment
+- [ ] Implement voice token generation API routes
+- [ ] Create TwiML endpoints for call handling
+- [ ] Build browser-based calling interface
+- [ ] Set up call recording and webhooks
+- [ ] Test end-to-end calling workflow
+
+### **Day 14: Production Setup** 📋 **PLANNED**
+- [ ] Configure Vercel deployment for single app
+- [ ] Set up environment variables for production
+- [ ] Implement health checks and monitoring
+- [ ] Test production deployment
+- [ ] Configure custom domain
+- [ ] Set up error tracking and logging
+
+**Migration Phase 3 Target**:
+- [ ] Twilio voice integration working
+- [ ] Production deployment configured
+- [ ] All webhooks and external integrations tested
+- [ ] Ready for production traffic
 
 ---
 
-## 🏆 **Overall Success Metrics**
+## 🗓️ **Migration Phase 4: Cleanup & Testing** 📋 **PLANNED**
+
+### **Day 15-16: Clean Up & Testing** 📋 **PLANNED**
+- [ ] Remove old apps/api and apps/web directories
+- [ ] Update all documentation and README files
+- [ ] Implement comprehensive testing suite
+- [ ] Perform load testing on new architecture
+- [ ] Verify all features work as expected
+- [ ] Create deployment runbook
+
+### **Day 17: Final Verification** 📋 **PLANNED**
+- [ ] End-to-end workflow testing
+- [ ] Performance verification and optimization
+- [ ] Security audit of new architecture
+- [ ] Final production deployment
+- [ ] Monitor for any issues
+- [ ] Document any remaining tasks
+
+**Migration Phase 4 Target**:
+- [ ] Complete migration from old to new architecture
+- [ ] All old code removed and cleaned up
+- [ ] Production system fully operational
+- [ ] Documentation updated and complete
+
+---
+
+## 🏆 **Migration Success Metrics**
 
 ### **Technical Milestones**
-- [x] **Foundation Complete**: Database, API, Authentication
-- [x] **Queue System**: Intelligent user prioritization and assignment ✅
-- [ ] **Call Management**: Session tracking and outcomes
-- [ ] **Communication**: SMS and magic links
-- [ ] **Advanced Features**: Twilio, Dashboard, Real-time
-- [ ] **Production Ready**: Security, Testing, Monitoring
+- [ ] **Foundation Complete**: Next.js 14, tRPC, Authentication working
+- [ ] **Core Services Migrated**: Queue, Calls, SMS, Magic Links all operational
+- [ ] **Advanced Features**: Twilio integration and real-time features
+- [ ] **Production Ready**: Deployed, monitored, and scaling properly
+
+### **Architecture Benefits Achieved**
+- [ ] **Type Safety**: End-to-end type safety with tRPC and TypeScript
+- [ ] **Performance**: Single unified app with better caching and optimization
+- [ ] **Developer Experience**: Modern development patterns with App Router
+- [ ] **Operational Simplicity**: Single deployment and monitoring surface
+- [ ] **Cost Efficiency**: Reduced hosting and maintenance complexity
 
 ### **Business Value Delivered**
-- [x] **Agent Login System**: Secure role-based authentication
-- [x] **Call Queue**: Intelligent user prioritization with scoring algorithm ✅
-- [x] **Queue Interface**: Professional agent dashboard with real-time updates ✅
-- [ ] **Contact Management**: Efficient calling workflow
-- [ ] **Progress Tracking**: Magic links and SMS integration
-- [ ] **Supervisor Tools**: Performance monitoring and analytics
+- [ ] **Agent Productivity**: Faster page loads and better UI responsiveness
+- [ ] **System Reliability**: Better error handling and monitoring
+- [ ] **Feature Velocity**: Faster development with type-safe APIs
+- [ ] **Operational Excellence**: Simpler deployment and scaling
 
 ### **Key Performance Indicators**
-- [ ] Queue refresh: < 5 seconds
-- [ ] Call initiation: < 2 seconds  
-- [ ] Page load: < 1 second
-- [ ] API response: < 200ms (cached), < 500ms (database)
+- [ ] Page load time: < 1 second (target: 0.5 seconds)
+- [ ] API response time: < 100ms (cached), < 300ms (database)
+- [ ] Build time: < 2 minutes
+- [ ] Bundle size: < 500KB (target: 300KB)
+- [ ] Type coverage: 100% strict TypeScript
 
 ---
 
-## 🚀 **Current Sprint Focus**
+## 🚀 **Current Migration Focus**
 
-**🎯 NEXT STEPS**: Start Day 8-9 - Call Session Management
-1. **Call Service**: Implement session state management and tracking
-2. **Session API**: Create endpoints for call management
-3. **Call Interface**: Build agent call handling UI
-4. **Agent Status**: Track availability and call states
+**🎯 NEXT STEPS**: Begin Migration Phase 1 - Architecture Foundation
+
+1. **Create Next.js Structure**: Set up new app with App Router and proper directory structure
+2. **tRPC Configuration**: Implement type-safe API layer with client and server setup
+3. **Authentication Migration**: Convert Express auth to Next.js middleware and tRPC procedures
+4. **Database Integration**: Move Prisma schema and set up database services
 
 **📝 Implementation Priority**:
-- Call session lifecycle management (backend service)
-- Agent status tracking and availability
-- Call interface with user context display
-- Call outcome recording and disposition
+- Next.js 14 app creation and basic structure
+- tRPC router and client configuration with React Query
+- Authentication system with JWT and Next.js middleware
+- Database layer with Prisma integration
 
 ---
 
-## 🎉 **Latest Achievement: Queue Management System Complete!**
+## 🎉 **Architecture Migration Benefits**
 
-**✅ Successfully Implemented:**
-- **Intelligent Priority Scoring**: Algorithm considers pending requirements, claim value, contact history, and business rules
-- **Smart Queue Population**: Automatic user eligibility calculation and queue refresh
-- **Professional Queue UI**: Real-time agent interface with statistics, filters, and one-click call assignment
-- **Role-Based Access**: Supervisors can refresh queue, agents can claim calls
-- **Mock Data Integration**: 5 realistic user profiles with claims and requirements
-- **Real-time Updates**: Auto-refresh every 10 seconds with manual refresh options
+### **From Current State**:
+- Separate Express API server (Node.js + TypeScript)
+- Separate React frontend (Vite + TypeScript)
+- Manual API client with fetch
+- Zustand for state management
+- Two separate deployments
 
-**🔧 Technical Features:**
-- Priority scoring with 7+ factors (requirements, value, outcome history, time preferences)
-- Queue API endpoints: GET, POST assign, POST refresh, GET stats
-- Responsive table interface with user details, claim info, and priority indicators
-- Error handling and loading states throughout
-- TypeScript safety with comprehensive interfaces
+### **To Target State**:
+- **Unified Next.js 14 Application** with App Router
+- **Type-Safe tRPC APIs** with automatic TypeScript inference
+- **TanStack Query** for server state management
+- **Built-in Optimizations** (caching, bundling, image optimization)
+- **Single Vercel Deployment** with serverless functions
+
+### **Key Improvements**:
+1. **Type Safety**: End-to-end TypeScript with tRPC procedure definitions
+2. **Performance**: Better caching, code splitting, and optimization
+3. **Developer Experience**: Automatic API client generation and IntelliSense
+4. **Deployment**: Single app deployment instead of coordinating two services
+5. **Maintenance**: One codebase, one deployment, unified monitoring
+
+---
+
+## 📋 **Migration Validation Checklist**
+
+### **Phase 1 Validation** (Foundation)
+- [ ] Next.js app builds and runs without errors
+- [ ] tRPC client can call server procedures
+- [ ] Authentication works with JWT and middleware
+- [ ] Database connections are established
+- [ ] All TypeScript types are working correctly
+
+### **Phase 2 Validation** (Core Services)
+- [ ] Queue management works identically to Express version
+- [ ] Call sessions can be created and managed
+- [ ] SMS conversations are properly handled
+- [ ] Magic links generate and track correctly
+- [ ] All API endpoints return expected data
+
+### **Phase 3 Validation** (Advanced Features)  
+- [ ] Twilio voice calls work in browser
+- [ ] Webhooks are properly received and processed
+- [ ] Real-time features work correctly
+- [ ] Production deployment is stable
+
+### **Final Validation** (Complete Migration)
+- [ ] All original features work in new architecture
+- [ ] Performance is equal or better than before
+- [ ] No data loss during migration
+- [ ] All tests pass
+- [ ] Production monitoring shows healthy metrics
 
 ---
 
 **Last Updated**: November 2024
-**Current Sprint**: Week 2, Day 8-9 (Call Session Management)
-**Next Milestone**: Complete call handling workflow with session tracking
+**Current Phase**: Pre-Migration Setup
+**Next Milestone**: Complete Phase 1 - Architecture Foundation
 
 ---
 
-> 💡 **Quick Reference**: See [buildplan.md](./buildplan.md) for detailed implementation guidance and code examples for each phase. 
+> 💡 **Migration Guide**: See [buildplan.md](./buildplan.md) for detailed Next.js + tRPC implementation patterns and step-by-step migration instructions. 
