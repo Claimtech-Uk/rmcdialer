@@ -89,7 +89,11 @@ export default function TestCallPage() {
       lastName: user.user.lastName || 'User',
       email: user.user.email || '',
       phoneNumber: user.user.phoneNumber || '',
-      address: user.user.address || undefined,
+      address: user.user.address ? {
+        fullAddress: user.user.address.fullAddress || '',
+        postCode: user.user.address.postCode || '',
+        county: user.user.address.county || ''
+      } : undefined,
       claims: user.claims.map(claim => ({
         id: claim.id,
         type: claim.type || 'Unknown',
