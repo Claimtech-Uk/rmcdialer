@@ -7,8 +7,17 @@
   "functions": {
     "app/api/**": {
       "maxDuration": 30
+    },
+    "app/api/cron/**": {
+      "maxDuration": 300
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/discover-new-leads",
+      "schedule": "0 * * * *"
+    }
+  ],
   "git": {
     "deploymentEnabled": {
       "main": true
