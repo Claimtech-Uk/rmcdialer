@@ -9,7 +9,8 @@ import {
   FileText, 
   RefreshCw,
   PenTool,
-  AlertTriangle
+  AlertTriangle,
+  Calendar
 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
@@ -17,6 +18,7 @@ import { Badge } from '@/modules/core/components/ui/badge';
 import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { useToast } from '@/modules/core/hooks/use-toast';
 import { QueueType } from '@/modules/queue/types/queue.types';
+import UserDetailsModal from './UserDetailsModal';
 
 interface QueueConfig {
   type: QueueType;
@@ -84,6 +86,20 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
     limit: 20,
     page: 1
   });
+
+  // Modal state for user details
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const openUserModal = (userId: number) => {
+    setSelectedUserId(userId);
+    setIsModalOpen(true);
+  };
+
+  const closeUserModal = () => {
+    setSelectedUserId(null);
+    setIsModalOpen(false);
+  };
 
   // Get current session for user info and role checks
   const { data: session } = api.auth.me.useQuery();
@@ -284,8 +300,8 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                   key={user.user.id} 
                   className={`flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 ${getColorClasses('hover')} transition-colors cursor-pointer`}
                   onClick={() => {
-                    // Navigate to user detail view when clicking anywhere on the tile
-                    window.location.href = `/users/${user.user.id}`;
+                    // Open user details modal instead of navigating
+                    openUserModal(user.user.id);
                   }}
                 >
                   <div className="flex-1">
@@ -299,6 +315,10 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         </div>
                         <div className="text-sm text-gray-500">
                           {user.user.phoneNumber} • {user.claims.length} claim(s)
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
+                          <Calendar className="w-3 h-3" />
+                          Created {user.user.createdAt ? new Date(user.user.createdAt).toLocaleDateString() : 'Unknown'}
                         </div>
                       </div>
                     </div>
@@ -350,8 +370,8 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         className={`w-full justify-start ${getSecondaryButtonClasses()}`}
                         onClick={(e) => {
                           e.stopPropagation(); // Prevent card click
-                          // Navigate to user detail view
-                          window.location.href = `/users/${user.user.id}`;
+                          // Open user details modal
+                          openUserModal(user.user.id);
                         }}
                       >
                         <User className="w-4 h-4 mr-2" />
@@ -363,8 +383,8 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         className={`w-full justify-start ${getButtonClasses()} text-white shadow-sm`}
                         onClick={(e) => {
                           e.stopPropagation(); // Prevent card click
-                          // Navigate to call interface
-                          window.location.href = `/calls/${user.user.id}`;
+                          // Open call interface in new tab to keep queue open
+                          window.open(`/calls/${user.user.id}`, '_blank');
                         }}
                       >
                         <Phone className="w-4 h-4 mr-2" />
@@ -401,6 +421,13 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
           </Button>
         </div>
       )}
+
+      {/* User Details Modal */}
+      <UserDetailsModal 
+        userId={selectedUserId}
+        isOpen={isModalOpen}
+        onClose={closeUserModal}
+      />
     </div>
   );
 } 
