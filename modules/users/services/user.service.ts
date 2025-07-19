@@ -586,8 +586,8 @@ export class UserService {
       
       activityLogs: (userData as any).user_logs?.map((log: any) => ({
         id: log.id,
-        action: log.action || 'Unknown',
-        message: log.message || '',
+        action: log.type || 'Unknown',
+        message: log.detail || '',
         createdAt: log.created_at
       })) || [],
       

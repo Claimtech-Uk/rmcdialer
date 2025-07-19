@@ -125,8 +125,9 @@ model ClaimVehiclePackage {
 model UserLog {
   id         String    @id
   user_id    BigInt    @map("user_id")
-  action     String?
-  message    String?
+  type       String
+  detail     String
+  ip_address String?   @map("ip_address")
   created_at DateTime? @map("created_at")
   updated_at DateTime? @map("updated_at")
 
