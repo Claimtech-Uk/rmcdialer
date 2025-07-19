@@ -350,5 +350,111 @@ export const callsRouter = createTRPCRouter({
           message: 'Failed to get today\'s summary'
         });
       }
+    }),
+
+  // Get call history formatted for table display
+  getCallHistoryTable: protectedProcedure
+    .input(CallHistoryFiltersSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        // If not admin/supervisor, limit to agent's own calls
+        const filters = { ...input };
+        if (ctx.agent.role === 'agent') {
+          filters.agentId = ctx.agent.id;
+        }
+
+        // Get call sessions with outcomes and user/agent details
+        const callSessions = await prisma.callSession.findMany({
+          where: {
+            ...(filters.agentId && { agentId: filters.agentId }),
+            ...(filters.userId && { userId: filters.userId }),
+            ...(filters.startDate && { startedAt: { gte: filters.startDate } }),
+            ...(filters.endDate && { startedAt: { lte: filters.endDate } }),
+            ...(filters.status && { status: filters.status })
+          },
+          include: {
+            agent: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            callOutcomes: {
+              orderBy: { createdAt: 'desc' },
+              take: 1
+            }
+          },
+          orderBy: { startedAt: 'desc' },
+          skip: (filters.page - 1) * filters.limit,
+          take: filters.limit
+        });
+
+        // Get user details from replica DB for each call
+        const userIds = [...new Set(callSessions.map((call: any) => call.userId))];
+        const users = userIds.length > 0 ? await prisma.$queryRaw`
+          SELECT id, first_name, last_name, phone_number 
+          FROM users 
+          WHERE id IN (${userIds.join(',')})
+        ` as Array<{
+          id: number;
+          first_name: string;
+          last_name: string;
+          phone_number: string;
+        }> : [];
+
+        const userMap = new Map(users.map(user => [user.id, user]));
+
+        // Format for table display
+        const formattedCalls = callSessions.map((session: any) => {
+          const user = userMap.get(Number(session.userId));
+          const outcome = session.callOutcomes[0];
+          
+          return {
+            id: session.id,
+            userId: Number(session.userId),
+            userName: user ? `${user.first_name} ${user.last_name}` : 'Unknown User',
+            userPhone: user?.phone_number || 'Unknown',
+            agentId: session.agentId,
+            agentName: `${session.agent.firstName} ${session.agent.lastName}`,
+            startedAt: session.startedAt,
+            endedAt: session.endedAt,
+            durationSeconds: session.durationSeconds,
+            talkTimeSeconds: session.talkTimeSeconds,
+            outcome: outcome?.outcomeType || 'no_outcome',
+            outcomeNotes: outcome?.outcomeNotes,
+            magicLinkSent: outcome?.magicLinkSent || false,
+            smsSent: outcome?.smsSent || false,
+            nextCallDelay: outcome?.nextCallDelayHours,
+            documentsRequested: outcome?.documentsRequested ? JSON.parse(outcome.documentsRequested) : [],
+            twilioCallSid: session.twilioCallSid
+          };
+        });
+
+        const total = await prisma.callSession.count({
+          where: {
+            ...(filters.agentId && { agentId: filters.agentId }),
+            ...(filters.userId && { userId: filters.userId }),
+            ...(filters.startDate && { startedAt: { gte: filters.startDate } }),
+            ...(filters.endDate && { startedAt: { lte: filters.endDate } }),
+            ...(filters.status && { status: filters.status })
+          }
+        });
+
+        return {
+          calls: formattedCalls,
+          meta: {
+            page: filters.page,
+            limit: filters.limit,
+            total,
+            totalPages: Math.ceil(total / filters.limit)
+          }
+        };
+      } catch (error) {
+        logger.error('Failed to get call history table', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get call history'
+        });
+      }
     })
 }); 

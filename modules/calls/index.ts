@@ -15,6 +15,7 @@ export type {
   CallSessionWithContext,
   GetCallHistoryOptions,
   CallHistoryResult,
+  CallHistoryEntry,
   CallAnalytics,
   CallAnalyticsFilters,
   Callback,
@@ -31,9 +32,11 @@ export type {
 // Components
 export { CallInterface } from './components/CallInterface';
 export { CallOutcomeModal } from './components/CallOutcomeModal';
+export { CallHistoryTable } from './components/CallHistoryTable';
 
 // Hooks
 export { useTwilioVoice } from './hooks/useTwilioVoice';
+export { useCallHistory } from './hooks/useCallHistory';
 
 // Utils
 // (Add utils exports here when created)

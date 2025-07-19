@@ -22,7 +22,7 @@
     "mysql:stats": "tsx -e \"import('./lib/mysql.js').then(m => m.getReplicaStats().then(console.log))\"",
     "deploy": "./scripts/deploy.sh",
     "deploy:force": "npx vercel --prod",
-    "check-deployments": "npx vercel ls --limit 10"
+    "check-deployments": "npx vercel ls"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",
@@ -43,6 +43,7 @@
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.0.0",
+    "date-fns": "^4.1.0",
     "dotenv": "^17.2.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.294.0",

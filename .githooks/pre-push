@@ -13,7 +13,7 @@ if ! command -v vercel &> /dev/null; then
 fi
 
 # Check for active deployments
-ACTIVE_DEPLOYMENTS=$(npx vercel ls --limit 5 2>/dev/null | grep -E "Building|Queued" || true)
+ACTIVE_DEPLOYMENTS=$(npx vercel ls 2>/dev/null | grep -E "Building|Queued" || true)
 
 if [ ! -z "$ACTIVE_DEPLOYMENTS" ]; then
     echo "⚠️  Active deployments detected:"

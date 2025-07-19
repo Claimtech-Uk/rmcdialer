@@ -168,6 +168,27 @@ export interface CallHistoryResult {
   };
 }
 
+// Call history entry for display tables
+export interface CallHistoryEntry {
+  id: string;
+  userId: number;
+  userName?: string;
+  userPhone?: string;
+  agentId: number;
+  agentName?: string;
+  startedAt: Date;
+  endedAt?: Date;
+  durationSeconds?: number;
+  talkTimeSeconds?: number;
+  outcome: string;
+  outcomeNotes?: string;
+  magicLinkSent?: boolean;
+  smsSent?: boolean;
+  nextCallDelay?: number;
+  documentsRequested?: string[];
+  twilioCallSid?: string;
+}
+
 export interface GetCallbacksOptions {
   page?: number;
   limit?: number;

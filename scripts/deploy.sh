@@ -33,7 +33,7 @@ fi
 
 # Check for existing Vercel deployments
 echo "🔍 Checking for existing deployments..."
-DEPLOYMENTS=$(npx vercel ls --limit 5 2>/dev/null || echo "")
+DEPLOYMENTS=$(npx vercel ls 2>/dev/null || echo "")
 
 if echo "$DEPLOYMENTS" | grep -q "Building\|Queued"; then
     echo "⚠️  There are active deployments running:"
