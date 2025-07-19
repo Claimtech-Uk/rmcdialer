@@ -187,7 +187,14 @@ export default function UnsignedQueuePage() {
           ) : (
             <div className="space-y-4">
               {users.map((user: any) => (
-                <div key={user.user.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                <div 
+                  key={user.user.id} 
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 hover:border-orange-200 transition-colors cursor-pointer"
+                  onClick={() => {
+                    // Navigate to user detail view when clicking anywhere on the tile
+                    window.location.href = `/users/${user.user.id}`;
+                  }}
+                >
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
@@ -217,32 +224,34 @@ export default function UnsignedQueuePage() {
                     </div>
                   </div>
                   
-                  <div className="flex flex-col gap-2 min-w-[140px]">
-                    <Button 
-                      size="sm"
-                      variant="outline"
-                      className="w-full justify-start hover:bg-blue-50 border-blue-200 text-blue-700 hover:text-blue-800"
-                      onClick={() => {
-                        // Navigate to user detail view
-                        window.location.href = `/users/${user.user.id}`;
-                      }}
-                    >
-                      <User className="w-4 h-4 mr-2" />
-                      View Details
-                    </Button>
-                    
-                    <Button 
-                      size="sm"
-                      className="w-full justify-start bg-orange-600 hover:bg-orange-700 text-white shadow-sm"
-                      onClick={() => {
-                        // Navigate to call interface
-                        window.location.href = `/calls/${user.user.id}`;
-                      }}
-                    >
-                      <Phone className="w-4 h-4 mr-2" />
-                      Call Now
-                    </Button>
-                  </div>
+                                      <div className="flex flex-col gap-2 min-w-[140px]">
+                      <Button 
+                        size="sm"
+                        variant="outline"
+                        className="w-full justify-start hover:bg-blue-50 border-blue-200 text-blue-700 hover:text-blue-800"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent card click
+                          // Navigate to user detail view
+                          window.location.href = `/users/${user.user.id}`;
+                        }}
+                      >
+                        <User className="w-4 h-4 mr-2" />
+                        View Details
+                      </Button>
+                      
+                      <Button 
+                        size="sm"
+                        className="w-full justify-start bg-orange-600 hover:bg-orange-700 text-white shadow-sm"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent card click
+                          // Navigate to call interface
+                          window.location.href = `/calls/${user.user.id}`;
+                        }}
+                      >
+                        <Phone className="w-4 h-4 mr-2" />
+                        Call Now
+                      </Button>
+                    </div>
                 </div>
               ))}
             </div>

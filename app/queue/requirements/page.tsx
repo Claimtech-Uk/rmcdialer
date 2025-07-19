@@ -188,7 +188,14 @@ export default function RequirementsQueuePage() {
           ) : (
             <div className="space-y-4">
               {users.map((user: any) => (
-                <div key={user.user.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                <div 
+                  key={user.user.id} 
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 hover:border-blue-200 transition-colors cursor-pointer"
+                  onClick={() => {
+                    // Navigate to user detail view when clicking anywhere on the tile
+                    window.location.href = `/users/${user.user.id}`;
+                  }}
+                >
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -226,7 +233,10 @@ export default function RequirementsQueuePage() {
                   </div>
                   
                   <div className="flex items-center gap-4">
-                    <div className="text-center text-sm bg-blue-50 px-3 py-2 rounded-md border border-blue-200">
+                    <div 
+                      className="text-center text-sm bg-blue-50 px-3 py-2 rounded-md border border-blue-200"
+                      onClick={(e) => e.stopPropagation()} // Prevent card click when clicking the badge
+                    >
                       <div className="text-blue-600 font-medium">
                         {user.claims.reduce((acc: number, claim: any) => 
                           acc + claim.requirements.length, 0)}
@@ -239,7 +249,8 @@ export default function RequirementsQueuePage() {
                         size="sm"
                         variant="outline"
                         className="w-full justify-start hover:bg-orange-50 border-orange-200 text-orange-700 hover:text-orange-800"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent card click
                           // Navigate to user detail view
                           window.location.href = `/users/${user.user.id}`;
                         }}
@@ -251,7 +262,8 @@ export default function RequirementsQueuePage() {
                       <Button 
                         size="sm"
                         className="w-full justify-start bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent card click
                           // Navigate to call interface
                           window.location.href = `/calls/${user.user.id}`;
                         }}
