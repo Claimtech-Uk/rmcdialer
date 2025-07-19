@@ -13,6 +13,7 @@ import type {
   CacheError
 } from '../types/user.types';
 import { DatabaseConnectionError } from '../types/user.types';
+import type { QueueType } from '@/modules/queue/types/queue.types';
 
 // Enhanced user details interface with all connected data
 export interface CompleteUserDetails {
@@ -399,6 +400,131 @@ export class UserService {
     }
   }
 
+  /**
+   * Determine which queue type a user belongs to based on their current state
+   */
+  async determineUserQueueType(userId: number): Promise<QueueType | null> {
+    try {
+      // First check if there's a scheduled callback
+      const scheduledCallback = await prisma.callback.findFirst({
+        where: {
+          userId: BigInt(userId),
+          status: 'pending',
+          scheduledFor: {
+            lte: new Date()
+          }
+        }
+      });
+
+      if (scheduledCallback) {
+        return 'callback';
+      }
+
+      // Get user data from replica to check signature and requirements
+      const userData = await replicaDb.user.findUnique({
+        where: { id: BigInt(userId) },
+        include: {
+          claims: {
+            include: {
+              requirements: {
+                where: { status: 'PENDING' }
+              }
+            }
+          }
+        }
+      });
+
+      if (!userData || !userData.is_enabled) {
+        return null; // User not eligible for any queue
+      }
+
+      // Check if user has signature
+      const hasSignature = userData.current_signature_file_id !== null;
+
+      if (!hasSignature) {
+        // User missing signature - highest priority queue
+        return 'unsigned_users';
+      }
+
+      // User has signature, check for pending requirements
+      const hasPendingRequirements = userData.claims.some(claim =>
+        claim.requirements.some(req => req.status === 'PENDING')
+      );
+
+      if (hasPendingRequirements) {
+        // User has signature but missing documents
+        return 'outstanding_requests';
+      }
+
+      // User has signature and no pending requirements - not eligible for queue
+      return null;
+
+    } catch (error) {
+      this.logger.error(`Failed to determine queue type for user ${userId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get eligible users for a specific queue type
+   */
+  async getEligibleUsersByQueueType(queueType: QueueType, options: GetEligibleUsersRequest = {}): Promise<GetEligibleUsersResponse> {
+    const { limit = 50, offset = 0 } = options;
+    
+    try {
+      // Create cache key specific to queue type
+      const cacheKey = `eligible_users:${queueType}:${limit}:${offset}`;
+      const cached = await cacheService.get(cacheKey);
+      
+      if (cached) {
+        this.logger.debug(`Cache hit for ${queueType} queue`);
+        return cached as GetEligibleUsersResponse;
+      }
+
+      let users: any[] = [];
+      let totalCount = 0;
+
+      switch (queueType) {
+        case 'unsigned_users':
+          [users, totalCount] = await this.getUnsignedUsers(limit, offset);
+          break;
+        
+        case 'outstanding_requests':
+          [users, totalCount] = await this.getOutstandingRequestUsers(limit, offset);
+          break;
+        
+        case 'callback':
+          [users, totalCount] = await this.getCallbackUsers(limit, offset);
+          break;
+        
+        default:
+          throw new Error(`Unknown queue type: ${queueType}`);
+      }
+
+      // Build user contexts
+      const userContexts: UserCallContext[] = users.map(userData => {
+        return this.mergeUserContext(userData as UserDataFromReplica, null);
+      });
+
+      const response: GetEligibleUsersResponse = {
+        users: userContexts,
+        total: totalCount,
+        page: Math.floor(offset / limit) + 1,
+        limit
+      };
+
+      // Cache the result for 5 minutes
+      await cacheService.set(cacheKey, response, CACHE_TTL.ELIGIBLE_USERS);
+
+      this.logger.info(`Found ${totalCount} eligible users for ${queueType} queue`);
+      return response;
+
+    } catch (error) {
+      this.logger.error(`Failed to get eligible users for ${queueType}:`, error);
+      throw new DatabaseConnectionError('mysql', error as Error);
+    }
+  }
+
   // Private helper methods
 
   private async getCompleteUserDataFromReplica(userId: number): Promise<UserDataFromReplica | null> {
@@ -714,4 +840,134 @@ export class UserService {
     };
   }
 
+  /**
+   * Get users missing signatures (unsigned_users queue)
+   */
+  private async getUnsignedUsers(limit: number, offset: number): Promise<[any[], number]> {
+    const whereConditions = {
+      is_enabled: true,
+      status: { not: 'inactive' },
+      current_signature_file_id: null, // Missing signature
+      claims: {
+        some: {
+          status: { not: 'complete' }
+        }
+      }
+    };
+
+    const [totalCount, users] = await Promise.all([
+      replicaDb.user.count({ where: whereConditions }),
+      replicaDb.user.findMany({
+        where: whereConditions,
+        include: {
+          claims: {
+            include: {
+              requirements: true,
+              vehiclePackages: true
+            }
+          },
+          address: true
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: offset
+      })
+    ]);
+
+    return [users, totalCount];
+  }
+
+  /**
+   * Get users with outstanding document requests (but have signatures)
+   */
+  private async getOutstandingRequestUsers(limit: number, offset: number): Promise<[any[], number]> {
+    const whereConditions = {
+      is_enabled: true,
+      status: { not: 'inactive' },
+      current_signature_file_id: { not: null }, // Has signature
+      claims: {
+        some: {
+          requirements: {
+            some: { status: 'PENDING' }
+          }
+        }
+      }
+    };
+
+    const [totalCount, users] = await Promise.all([
+      replicaDb.user.count({ where: whereConditions }),
+      replicaDb.user.findMany({
+        where: whereConditions,
+        include: {
+          claims: {
+            include: {
+              requirements: {
+                where: { status: 'PENDING' }
+              },
+              vehiclePackages: true
+            }
+          },
+          address: true
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: offset
+      })
+    ]);
+
+    return [users, totalCount];
+  }
+
+  /**
+   * Get users with scheduled callbacks (from PostgreSQL)
+   */
+  private async getCallbackUsers(limit: number, offset: number): Promise<[any[], number]> {
+    // Get callback user IDs from PostgreSQL
+    const callbacks = await prisma.callback.findMany({
+      where: {
+        status: 'pending',
+        scheduledFor: {
+          lte: new Date()
+        }
+      },
+      orderBy: { scheduledFor: 'asc' },
+      take: limit,
+      skip: offset
+    });
+
+    const callbackUserIds = callbacks.map((cb: any) => Number(cb.userId));
+    
+    if (callbackUserIds.length === 0) {
+      return [[], 0];
+    }
+
+    // Get user data from MySQL replica
+    const whereConditions = {
+      id: { in: callbackUserIds.map((id: number) => BigInt(id)) },
+      is_enabled: true
+    };
+
+    const [users, totalCallbacks] = await Promise.all([
+      replicaDb.user.findMany({
+        where: whereConditions,
+        include: {
+          claims: {
+            include: {
+              requirements: true,
+              vehiclePackages: true
+            }
+          },
+          address: true
+        }
+      }),
+      prisma.callback.count({
+        where: {
+          status: 'pending',
+          scheduledFor: { lte: new Date() }
+        }
+      })
+    ]);
+
+    return [users, totalCallbacks];
+  }
 } 

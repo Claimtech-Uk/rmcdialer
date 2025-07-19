@@ -1,6 +1,3 @@
----
-alwaysApply: true
----
 
 # Dialler System Cursor Rules & Project Guidelines
 
@@ -208,12 +205,12 @@ user_call_scores (
 
 #### CALL_QUEUE Table
 ```sql
--- Active queue management
+-- Active queue management with three specialized queue types
 call_queue (
   id UUID PRIMARY KEY,
   user_id BIGINT,                   -- FK → users.id (replica)
   claim_id BIGINT,                  -- FK → claims.id (replica)
-  queue_type VARCHAR(50),           -- priority_call, callback, follow_up
+  queue_type VARCHAR(50),           -- unsigned_users, outstanding_requests, callback
   priority_score INT,               -- From user_call_scores
   queue_position INT,
   status VARCHAR(20),               -- pending, assigned, completed
@@ -374,7 +371,6 @@ dialler-system/
 │   ├── queue/                 # 📋 Queue Management Module
 │   │   ├── services/          # Queue business logic
 │   │   │   ├── queue.service.ts
-│   │   │   ├── scoring.service.ts
 │   │   │   └── assignment.service.ts
 │   │   ├── types/             # Queue domain types
 │   │   │   └── queue.types.ts
@@ -386,7 +382,27 @@ dialler-system/
 │   │   │   ├── useQueue.ts
 │   │   │   └── useQueueStats.ts
 │   │   ├── utils/             # Queue utilities
-│   │   │   └── scoring.utils.ts
+│   │   │   └── queue.utils.ts
+│   │   └── index.ts           # Module exports
+│   │
+│   ├── scoring/               # 🎯 Priority Scoring Module
+│   │   ├── services/          # Scoring business logic
+│   │   │   ├── priority-scoring.service.ts
+│   │   │   ├── scoring-rules.service.ts
+│   │   │   └── lender-rules.service.ts
+│   │   ├── types/             # Scoring domain types
+│   │   │   └── scoring.types.ts
+│   │   ├── components/        # Scoring UI components
+│   │   │   ├── ScoreDebugger.tsx
+│   │   │   ├── ScoringRulesConfig.tsx
+│   │   │   └── ScoreExplanation.tsx
+│   │   ├── hooks/             # Scoring React hooks
+│   │   │   ├── useScoring.ts
+│   │   │   └── useScoringRules.ts
+│   │   ├── utils/             # Scoring utilities
+│   │   │   ├── scoring-factors.utils.ts
+│   │   │   ├── lender-matrix.utils.ts
+│   │   │   └── demographics.utils.ts
 │   │   └── index.ts           # Module exports
 │   │
 │   ├── calls/                 # 📞 Call Management Module
@@ -525,7 +541,8 @@ dialler-system/
 // ✅ Good: Clear module responsibility
 modules/
 ├── auth/           # ONLY authentication & authorization
-├── queue/          # ONLY call queue management
+├── queue/          # ONLY call queue management & assignment
+├── scoring/        # ONLY priority calculation & business rules
 ├── calls/          # ONLY call session handling
 ├── communications/ # ONLY messaging & notifications
 ├── users/          # ONLY user data & claims
@@ -542,8 +559,8 @@ modules/
 │     API Layer (server/ - tRPC Routers)          │
 ├─────────────────────────────────────────────────┤
 │    Business Modules (modules/ - Domain Logic)   │
-│  auth → queue → calls → communications → users  │
-│              ↘ analytics ↗                     │
+│  auth → queue → scoring → calls → communications → users  │
+│              ↘    ↓      ↘ analytics ↗                   │
 ├─────────────────────────────────────────────────┤
 │       Core Module (modules/core - Shared)       │
 ├─────────────────────────────────────────────────┤
@@ -1063,6 +1080,7 @@ export const queueRouter = createTRPCRouter({
 export const appRouter = createTRPCRouter({
   auth: authRouter,        // → modules/auth
   queue: queueRouter,      // → modules/queue  
+  scoring: scoringRouter,  // → modules/scoring
   calls: callsRouter,      // → modules/calls
   communications: commsRouter, // → modules/communications
   users: usersRouter,      // → modules/users
@@ -1297,6 +1315,60 @@ ORDER BY ucs.current_score ASC
 LIMIT 100;
 ```
 
+### Queue Management Strategy
+
+#### Three Specialized Queue Types
+
+**🖊️ Unsigned Users Queue** (Priority 1 - Highest)
+- **Purpose**: Obtain missing signatures to unblock claim progress
+- **Criteria**: `current_signature_file_id IS NULL`
+- **Business Impact**: Blocks all claim progress until resolved
+- **Agent Focus**: Get users to provide digital signatures
+
+**📋 Outstanding Requests Queue** (Priority 2 - Medium)
+- **Purpose**: Follow up on pending document requirements  
+- **Criteria**: `requirements.status = 'PENDING' AND current_signature_file_id IS NOT NULL`
+- **Business Impact**: Claim can progress but needs supporting documents
+- **Agent Focus**: Chase specific documents (bank statements, ID, proof of address)
+
+**📞 Callbacks Queue** (Priority 1 - High)
+- **Purpose**: Honor callback requests from previous call attempts
+- **Criteria**: `scheduled_callback_date <= NOW()`
+- **Business Impact**: User expectation already set, high priority
+- **Agent Focus**: Complete previous conversation or address specific requests
+
+#### Agent Specialization Model
+- Each agent operates on ONE queue type for specialization
+- Queue-specific training and expertise development
+- Agents know exactly why they're calling before dialing
+- Better outcomes through targeted conversations
+
+#### Queue Population Logic
+```sql
+-- Unsigned Users Detection
+SELECT users.* FROM users 
+WHERE current_signature_file_id IS NULL 
+  AND is_enabled = true 
+  AND EXISTS (SELECT 1 FROM claims WHERE user_id = users.id AND status != 'complete')
+
+-- Outstanding Requests Detection  
+SELECT users.* FROM users 
+WHERE current_signature_file_id IS NOT NULL 
+  AND is_enabled = true
+  AND EXISTS (
+    SELECT 1 FROM claims c
+    JOIN claim_requirements cr ON c.id = cr.claim_id
+    WHERE c.user_id = users.id AND cr.status = 'PENDING'
+  )
+
+-- Callback Queue Detection
+SELECT users.* FROM callbacks cb
+JOIN users ON cb.user_id = users.id
+WHERE cb.status = 'pending' 
+  AND cb.scheduled_for <= NOW()
+  AND users.is_enabled = true
+```
+
 ## 🚀 Performance Guidelines
 
 ### Caching Strategy
@@ -1346,12 +1418,12 @@ CREATE INDEX idx_requirements_claim_status ON claim_requirements(claim_id, statu
 ### Phase 1: Module Foundation
 ```bash
 # 1. Create module structure
-mkdir -p modules/{auth,queue,calls,communications,users,analytics,core}
-mkdir -p modules/{auth,queue,calls,communications,users,analytics}/{{services,types,components,hooks,utils}}
+mkdir -p modules/{auth,queue,calls,communications,users,analytics,scoring,core}
+mkdir -p modules/{auth,queue,calls,communications,users,analytics,scoring}/{{services,types,components,hooks,utils}}
 mkdir -p modules/core/{services,types,components,hooks,utils}
 
 # 2. Create module index files
-touch modules/{auth,queue,calls,communications,users,analytics,core}/index.ts
+touch modules/{auth,queue,calls,communications,users,analytics,scoring,core}/index.ts
 ```
 
 ### Phase 2: Service Migration
@@ -1647,4 +1719,5 @@ test: add scoring service edge cases
 - No calls before 9 AM or after 8 PM local time
 - Maximum 3 attempts per user per week
 - 48-hour cooldown after "not interested"
-- Callbacks take priority
+- Callbacks take priority over new queue entries
+- Agent specialization: one queue type per agent

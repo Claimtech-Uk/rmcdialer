@@ -383,43 +383,51 @@ export const authRouter = createTRPCRouter({
 
 ### Day 3-4: Core Services Migration
 
-#### Queue Service as tRPC Router
+#### Queue Service as tRPC Router (Updated for Dual Queue System)
 ```typescript
 // server/api/routers/queue.ts
 import { z } from 'zod'
 import { createTRPCRouter, protectedProcedure } from '@/lib/trpc/server'
-import { QueueService } from '@/server/services/queue.service'
+import { QueueService } from '@/modules/queue/services/queue.service'
 
 const queueService = new QueueService()
 
 export const queueRouter = createTRPCRouter({
   getQueue: protectedProcedure
     .input(z.object({
+      queueType: z.enum(['unsigned_users', 'outstanding_requests', 'callback']),
       page: z.number().default(1),
       limit: z.number().default(20),
       status: z.string().default('pending')
     }))
     .query(async ({ input, ctx }) => {
-      const { page, limit, status } = input
+      const { queueType, page, limit, status } = input
   
+      // Get queue entries for specific queue type
       const queue = await ctx.prisma.callQueue.findMany({
-        where: { status },
-    include: {
-      user: true,
-      assignedAgent: true
-    },
-    orderBy: [
-      { priorityScore: 'asc' },
-      { createdAt: 'asc' }
-    ],
+        where: { 
+          status,
+          queueType 
+        },
+        include: {
+          user: true,
+          assignedAgent: true
+        },
+        orderBy: [
+          { priorityScore: 'asc' },
+          { createdAt: 'asc' }
+        ],
         skip: (page - 1) * limit,
         take: limit
       })
   
-      const total = await ctx.prisma.callQueue.count({ where: { status } })
+      const total = await ctx.prisma.callQueue.count({ 
+        where: { status, queueType } 
+      })
 
       return {
         queue,
+        queueType,
         meta: { page, limit, total, totalPages: Math.ceil(total / limit) }
       }
     }),
@@ -431,33 +439,36 @@ export const queueRouter = createTRPCRouter({
     .mutation(async ({ input, ctx }) => {
       const { queueId } = input
   
-  // Check if agent is available
+      // Check if agent is available
       const agentSession = await ctx.prisma.agentSession.findFirst({
         where: { agentId: ctx.agent.id, status: 'available' }
       })
   
-  if (!agentSession) {
+      if (!agentSession) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Agent not available'
         })
-  }
+      }
   
-  // Assign the call
+      // Assign the call
       const queueEntry = await ctx.prisma.callQueue.update({
-    where: { id: queueId },
-    data: {
-      status: 'assigned',
+        where: { id: queueId },
+        data: {
+          status: 'assigned',
           assignedToAgentId: ctx.agent.id,
-      assignedAt: new Date()
-    }
+          assignedAt: new Date()
+        }
       })
 
       return queueEntry
     }),
 
   refreshQueue: protectedProcedure
-    .mutation(async ({ ctx }) => {
+    .input(z.object({
+      queueType: z.enum(['unsigned_users', 'outstanding_requests', 'callback']).optional()
+    }))
+    .mutation(async ({ input, ctx }) => {
       // Only supervisors can refresh queue
       if (ctx.agent.role !== 'supervisor' && ctx.agent.role !== 'admin') {
         throw new TRPCError({
@@ -466,24 +477,60 @@ export const queueRouter = createTRPCRouter({
         })
       }
 
-      await queueService.refreshQueue()
+      // Refresh specific queue type or all queues
+      if (input.queueType) {
+        await queueService.refreshQueueByType(input.queueType)
+      } else {
+        await queueService.refreshAllQueues()
+      }
+      
       return { success: true }
     }),
 
   getStats: protectedProcedure
     .query(async ({ ctx }) => {
-      const [totalPending, totalAssigned, totalCompleted] = await Promise.all([
-        ctx.prisma.callQueue.count({ where: { status: 'pending' } }),
-        ctx.prisma.callQueue.count({ where: { status: 'assigned' } }),
-        ctx.prisma.callQueue.count({ where: { status: 'completed' } })
+      // Get stats for all three queue types
+      const [
+        unsignedPending, unsignedAssigned, unsignedCompleted,
+        outstandingPending, outstandingAssigned, outstandingCompleted,
+        callbacksPending, callbacksAssigned, callbacksCompleted
+      ] = await Promise.all([
+        // Unsigned users queue stats
+        ctx.prisma.callQueue.count({ where: { status: 'pending', queueType: 'unsigned_users' } }),
+        ctx.prisma.callQueue.count({ where: { status: 'assigned', queueType: 'unsigned_users' } }),
+        ctx.prisma.callQueue.count({ where: { status: 'completed', queueType: 'unsigned_users' } }),
+        
+        // Outstanding requests queue stats  
+        ctx.prisma.callQueue.count({ where: { status: 'pending', queueType: 'outstanding_requests' } }),
+        ctx.prisma.callQueue.count({ where: { status: 'assigned', queueType: 'outstanding_requests' } }),
+        ctx.prisma.callQueue.count({ where: { status: 'completed', queueType: 'outstanding_requests' } }),
+        
+        // Callbacks queue stats
+        ctx.prisma.callQueue.count({ where: { status: 'pending', queueType: 'callback' } }),
+        ctx.prisma.callQueue.count({ where: { status: 'assigned', queueType: 'callback' } }),
+        ctx.prisma.callQueue.count({ where: { status: 'completed', queueType: 'callback' } })
       ])
 
       return {
-        totalPending,
-        totalAssigned,
-        totalCompleted,
-        totalInQueue: totalPending + totalAssigned
-  }
+        unsignedUsers: {
+          pending: unsignedPending,
+          assigned: unsignedAssigned, 
+          completedToday: unsignedCompleted
+        },
+        outstandingRequests: {
+          pending: outstandingPending,
+          assigned: outstandingAssigned,
+          completedToday: outstandingCompleted
+        },
+        callbacks: {
+          pending: callbacksPending,
+          assigned: callbacksAssigned,
+          completedToday: callbacksCompleted
+        },
+        lastRefresh: new Date().toISOString(),
+        totalAgents: 5,
+        activeAgents: 3
+      }
     })
 })
 ```

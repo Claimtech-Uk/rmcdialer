@@ -7,8 +7,11 @@ import {
   QueueRefreshResult,
   QueueFilters,
   QueueEntry,
-  QueueAssignment 
+  QueueAssignment,
+  QueueType,
+  QUEUE_CONFIGS
 } from '../types/queue.types';
+import { UserService } from '@/modules/users/services/user.service';
 
 // Dependencies that will be injected
 interface QueueServiceDependencies {
@@ -21,67 +24,127 @@ interface QueueServiceDependencies {
 }
 
 export class QueueService {
-  constructor(private deps: QueueServiceDependencies) {}
+  private userService: UserService;
+
+  constructor(private deps: QueueServiceDependencies) {
+    this.userService = new UserService();
+  }
 
   /**
-   * Refresh the entire queue by calculating scores and populating with eligible users
+   * Refresh all three queue types
    */
-  async refreshQueue(): Promise<QueueRefreshResult> {
-    // Use database transaction for atomicity
+  async refreshAllQueues(): Promise<QueueRefreshResult[]> {
+    const queueTypes: QueueType[] = ['unsigned_users', 'outstanding_requests', 'callback'];
+    
+    this.deps.logger.info('Starting refresh of all queue types');
+    
+    const results = await Promise.all(
+      queueTypes.map(queueType => this.refreshQueueByType(queueType))
+    );
+    
+    const totalAdded = results.reduce((sum, result) => sum + result.usersAdded, 0);
+    this.deps.logger.info(`All queues refreshed: ${totalAdded} total users added across ${queueTypes.length} queues`);
+    
+    return results;
+  }
+
+  /**
+   * Refresh a specific queue type using the new dual queue system
+   */
+  async refreshQueueByType(queueType: QueueType): Promise<QueueRefreshResult> {
     return await this.deps.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       try {
-        this.deps.logger.info('Starting queue refresh');
+        const config = QUEUE_CONFIGS[queueType];
+        this.deps.logger.info(`Starting refresh for ${config.displayName} queue`);
         
-        // Get eligible users for calling
-        const eligibleUsers = await this.getEligibleUsers();
-        this.deps.logger.info(`Found ${eligibleUsers.length} eligible users`);
+        // Get eligible users for this specific queue type
+        const eligibleUsersResponse = await this.userService.getEligibleUsersByQueueType(queueType, {
+          limit: 1000, // Get more users for queue population
+          offset: 0
+        });
+        
+        const eligibleUsers = eligibleUsersResponse.users;
+        this.deps.logger.info(`Found ${eligibleUsers.length} eligible users for ${queueType} queue`);
+        
+        if (eligibleUsers.length === 0) {
+          this.deps.logger.info(`No eligible users found for ${queueType} queue`);
+          return {
+            usersAdded: 0,
+            queueSize: 0,
+            queueType
+          };
+        }
         
         // Calculate priority scores for each user
         const scoredUsers = await Promise.all(
-          eligibleUsers.map(user => this.calculatePriority(user))
+          eligibleUsers.map(user => this.calculatePriorityForUser(user, queueType))
         );
         
-        // Filter out users who shouldn't be called yet
+        // Filter out users who shouldn't be called yet (cooldown periods)
         const readyUsers = scoredUsers.filter(user => user.nextCallAfter <= new Date());
         
         // Sort by priority score (lower score = higher priority)
         readyUsers.sort((a, b) => a.score - b.score);
         
-        // Clear existing pending queue entries to avoid duplicates
+        // Clear existing pending queue entries for this queue type to avoid duplicates
         await tx.callQueue.deleteMany({
-          where: { status: 'pending' }
+          where: { 
+            status: 'pending',
+            queueType 
+          }
         });
         
-        // Add users to queue
+        // Add users to queue with proper queue type
         const queueEntries = readyUsers.map((user, index) => ({
-          userId: user.userId,
-          claimId: user.claimId,
+          userId: BigInt(user.userId),
+          claimId: user.claimId ? BigInt(user.claimId) : null,
           priorityScore: Math.max(0, Math.min(user.score, 9999)), // Clamp score between 0-9999
           queuePosition: index + 1,
           queueReason: user.reason,
           status: 'pending' as const,
-          queueType: 'priority_call' as const,
-          availableFrom: new Date()
+          queueType, // Use the specific queue type
+          availableFrom: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date()
         }));
         
         if (queueEntries.length > 0) {
           await tx.callQueue.createMany({ data: queueEntries });
         }
         
-        // Update user call scores with bulk operations
+        // Update user call scores for tracking
         await this.updateUserCallScoresBulk(tx, scoredUsers);
         
-        this.deps.logger.info(`Queue refresh complete: ${queueEntries.length} users added to queue`);
+        this.deps.logger.info(`${config.displayName} queue refresh complete: ${queueEntries.length} users added`);
         
         return {
           usersAdded: queueEntries.length,
-          queueSize: queueEntries.length
+          queueSize: queueEntries.length,
+          queueType
         };
       } catch (error) {
-        this.deps.logger.error('Queue refresh failed:', error);
+        this.deps.logger.error(`Queue refresh failed for ${queueType}:`, error);
         throw error;
       }
     });
+  }
+
+  /**
+   * Legacy method - now delegates to refreshAllQueues for backwards compatibility
+   */
+  async refreshQueue(): Promise<QueueRefreshResult> {
+    this.deps.logger.info('Legacy refreshQueue called - refreshing all queue types');
+    const results = await this.refreshAllQueues();
+    
+    // Return combined results for backwards compatibility
+    const totalAdded = results.reduce((sum, result) => sum + result.usersAdded, 0);
+    const totalSize = results.reduce((sum, result) => sum + result.queueSize, 0);
+    
+    return {
+      usersAdded: totalAdded,
+      queueSize: totalSize,
+      queueType: 'unsigned_users' // Default for backwards compatibility
+    };
   }
 
   /**
@@ -99,7 +162,7 @@ export class QueueService {
         where,
         orderBy: [
           { priorityScore: 'asc' },
-          { createdAt: 'asc' }
+          { queuePosition: 'asc' }
         ],
         skip: (page - 1) * limit,
         take: limit
@@ -108,10 +171,11 @@ export class QueueService {
     ]);
     
     return {
-      entries: entries.map(this.mapToQueueEntry),
+      entries,
+      queueType: queueType || 'unsigned_users', // Default queue type for backwards compatibility
       meta: {
         page,
-        limit,
+        limit, 
         total,
         totalPages: Math.ceil(total / limit)
       }
@@ -119,80 +183,105 @@ export class QueueService {
   }
 
   /**
-   * Assign a queue entry to an agent
+   * Assign a call to an agent
    */
   async assignCall(queueId: string, agentId: number): Promise<QueueEntry> {
-    const updated = await this.deps.prisma.callQueue.update({
+    const entry = await this.deps.prisma.callQueue.update({
       where: { id: queueId },
       data: {
+        status: 'assigned',
         assignedToAgentId: agentId,
-        assignedAt: new Date(),
-        status: 'assigned'
+        assignedAt: new Date()
       }
     });
     
-    this.deps.logger.info('Queue entry assigned', { queueId, agentId });
-    return this.mapToQueueEntry(updated);
+    this.deps.logger.info(`Call ${queueId} assigned to agent ${agentId}`);
+    return entry as QueueEntry;
   }
 
   /**
-   * Calculate priority score for a user based on business rules
+   * Calculate priority score for a user based on their queue type and context
    */
-  private async calculatePriority(user: UserEligibilityFactors): Promise<ScoredUser> {
-    let score = 0;
-    const reasons: string[] = [];
+  private async calculatePriorityForUser(userContext: any, queueType: QueueType): Promise<ScoredUser> {
+    const config = QUEUE_CONFIGS[queueType];
+    let baseScore = config.priority * 1000; // Base score by queue priority
     
-    // Base scoring factors
-    // Time since last contact (priority increases over time)
-    score += Math.min(user.daysSinceLastContact * 2, 60); // Max 60 points
+    // Adjust score based on user factors
+    const daysSinceLastContact = userContext.callScore?.lastCallAt 
+      ? Math.floor((Date.now() - new Date(userContext.callScore.lastCallAt).getTime()) / (1000 * 60 * 60 * 24))
+      : 30; // Default if never called
     
-    // Pending requirements (more requirements = higher priority)
-    score -= user.pendingRequirements * 15; // Negative = higher priority
+    const totalAttempts = userContext.callScore?.totalAttempts || 0;
+    const lastOutcome = userContext.callScore?.lastOutcome;
     
-    // Claim value (higher value = higher priority)
-    if (user.claimValue > 10000) {
-      score -= 20;
-      reasons.push('high_value_claim');
+    // Time factor - longer since last contact = higher priority (lower score)
+    const timeFactor = Math.max(0, 30 - daysSinceLastContact) * 10;
+    
+    // Attempt penalty - more attempts = lower priority (higher score)  
+    const attemptPenalty = totalAttempts * 50;
+    
+    // Outcome penalty based on last call result
+    let outcomePenalty = 0;
+    switch (lastOutcome) {
+      case 'not_interested':
+        outcomePenalty = 500; // Significant penalty
+        break;
+      case 'no_answer':
+      case 'busy':
+        outcomePenalty = 100; // Medium penalty
+        break;
+      case 'contacted':
+        outcomePenalty = 0; // No penalty for successful contact
+        break;
+      default:
+        outcomePenalty = 0;
     }
     
-    // Previous outcome penalties
-    const outcomeScores: Record<string, number> = {
-      'not_interested': 50,
-      'no_answer': 10,
-      'wrong_number': 100,
-      'callback_requested': -20, // Negative = higher priority
-      'contacted': 5
-    };
+    const finalScore = baseScore + timeFactor + attemptPenalty + outcomePenalty;
     
-    if (user.lastOutcome && outcomeScores[user.lastOutcome]) {
-      score += outcomeScores[user.lastOutcome];
-      reasons.push(`outcome_${user.lastOutcome}`);
-    }
-    
-    // Multiple attempts penalty
-    if (user.totalAttempts > 2) {
-      score += user.totalAttempts * 5;
-      reasons.push('multiple_attempts');
-    }
-    
-    // Time of day preference
-    const currentHour = new Date().getHours();
-    if (user.preferredCallTime) {
-      const [start, end] = user.preferredCallTime;
-      if (currentHour >= start && currentHour <= end) {
-        score -= 5;
-        reasons.push('preferred_time');
+    // Determine next call time based on cooldown rules
+    let nextCallAfter = new Date();
+    if (config.cooldownHours && userContext.callScore?.lastCallAt) {
+      const cooldownMs = config.cooldownHours * 60 * 60 * 1000;
+      const lastCallTime = new Date(userContext.callScore.lastCallAt).getTime();
+      const earliestNextCall = lastCallTime + cooldownMs;
+      
+      if (earliestNextCall > Date.now()) {
+        nextCallAfter = new Date(earliestNextCall);
       }
     }
     
-    // Calculate next call time based on business rules
-    const nextCallAfter = this.calculateNextCallTime(user);
+    // Build reason text based on queue type
+    let reason = `${config.displayName}: `;
+    switch (queueType) {
+      case 'unsigned_users':
+        reason += 'Missing signature to proceed with claim';
+        break;
+      case 'outstanding_requests':
+        const pendingReqs = userContext.claims.reduce((acc: any, claim: any) => 
+          acc + claim.requirements.filter((req: any) => req.status === 'PENDING').length, 0);
+        reason += `${pendingReqs} pending requirement(s)`;
+        break;
+      case 'callback':
+        reason += 'Scheduled callback requested';
+        break;
+    }
     
     return {
-      ...user,
-      score: Math.max(score, 0), // Ensure score is never negative
-      reason: reasons.join(',') || 'standard_priority',
-      nextCallAfter
+      userId: userContext.user.id,
+      claimId: userContext.claims[0]?.id || null,
+      daysSinceLastContact,
+      pendingRequirements: userContext.claims.reduce((acc: any, claim: any) => 
+        acc + claim.requirements.filter((req: any) => req.status === 'PENDING').length, 0),
+      claimValue: 0, // TODO: Calculate from claim data if available
+      lastOutcome,
+      totalAttempts,
+      lastCallAt: userContext.callScore?.lastCallAt ? new Date(userContext.callScore.lastCallAt) : undefined,
+      hasSignature: queueType !== 'unsigned_users', // Inferred from queue type
+      score: finalScore,
+      reason,
+      nextCallAfter,
+      queueType
     };
   }
 
@@ -248,7 +337,8 @@ export class QueueService {
         lastOutcome: 'no_answer',
         totalAttempts: 1,
         preferredCallTime: [9, 17],
-        lastCallAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+        lastCallAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+        hasSignature: true // Mock data - has signature but needs documents
       },
       {
         userId: 12346,
@@ -258,7 +348,8 @@ export class QueueService {
         claimValue: 8000,
         lastOutcome: 'callback_requested',
         totalAttempts: 2,
-        scheduledCallback: new Date(Date.now() + 2 * 60 * 60 * 1000)
+        scheduledCallback: new Date(Date.now() + 2 * 60 * 60 * 1000),
+        hasSignature: false // Mock data - missing signature
       }
     ];
     

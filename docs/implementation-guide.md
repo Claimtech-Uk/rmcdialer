@@ -17,7 +17,7 @@ This guide provides step-by-step instructions to implement the CDC + Batch hybri
 
 ---
 
-## 📅 **Implementation Timeline: 3 Weeks**
+## 📅 **Implementation Timeline: 4 Weeks**
 
 ### **Week 1: Foundation (Days 1-7)**
 - **Days 1-2**: MySQL connection and User Service
@@ -29,10 +29,15 @@ This guide provides step-by-step instructions to implement the CDC + Batch hybri
 - **Days 10-11**: SQS message queue and event processing
 - **Days 12-14**: Real-time sync and error handling
 
-### **Week 3: Production Ready (Days 15-21)**
-- **Days 15-16**: Batch processing and housekeeping
-- **Days 17-18**: Monitoring and alerting
-- **Days 19-21**: Load testing and production deployment
+### **Week 3: Scoring System (Days 15-21)**
+- **Days 15-16**: Scoring module architecture and setup
+- **Days 17-18**: Priority scoring rules and lender logic
+- **Days 19-21**: User demographics and historical data integration
+
+### **Week 4: Production Ready (Days 22-28)**
+- **Days 22-23**: Batch processing and housekeeping
+- **Days 24-25**: Monitoring and alerting
+- **Days 26-28**: Load testing and production deployment
 
 ---
 
@@ -465,9 +470,194 @@ export class CDCProcessor {
 
 ---
 
-## 📋 **Phase 3: Production Ready (Week 3)**
+## 📋 **Phase 3: Scoring System Implementation (Week 3)**
 
-### **Step 6: Monitoring & Alerting**
+### **Step 8: Scoring Module Architecture**
+**Complexity**: 🟡 Medium | **Location**: Dialler App | **Time**: 2 days
+
+#### **What to Build**
+```typescript
+// modules/scoring/services/priority-scoring.service.ts - NEW FILE
+import { CallService } from '@/modules/calls'
+import { UserService } from '@/modules/users'
+import type { ScoringContext, PriorityScore, ScoreExplanation } from '../types/scoring.types'
+
+export class PriorityScoringService {
+  constructor(
+    private dependencies: {
+      callService: CallService
+      userService: UserService
+      redis: any
+      logger: any
+    }
+  ) {}
+
+  async calculatePriority(context: ScoringContext): Promise<PriorityScore> {
+    // 1. Apply lender scoring rules
+    let score = await this.applyLenderRules(context)
+
+    // 2. Factor in user age demographics  
+    score += await this.applyAgeRules(context)
+
+    // 3. Apply time-based scoring
+    score += await this.applyTimeRules(context)
+
+    // 4. Apply disposition history
+    score += await this.applyDispositionRules(context)
+
+    return {
+      finalScore: Math.max(0, score),
+      factors: this.getScoreFactors(context),
+      nextCallAfter: this.calculateNextCallTime(context),
+      queueType: this.determineQueueType(context)
+    }
+  }
+
+  async explainScore(userId: number): Promise<ScoreExplanation> {
+    // Provides detailed breakdown of score calculation for debugging
+  }
+
+  private async applyLenderRules(context: ScoringContext): Promise<number> {
+    // High-value lenders get priority boost
+    const lenderPriorities = {
+      'santander': -20,     // Higher priority
+      'lloyds': -15,
+      'barclays': -15,
+      'hsbc': -10,
+      'nationwide': -10,
+      'default': 0
+    }
+    
+    return lenderPriorities[context.claim.lender.toLowerCase()] || 0
+  }
+
+  private async applyAgeRules(context: ScoringContext): Promise<number> {
+    // Older users typically get higher priority
+    const userAge = this.calculateAge(context.user.dateOfBirth)
+    
+    if (userAge >= 65) return -15      // Elderly - highest priority
+    if (userAge >= 45) return -10      // Middle age - medium priority  
+    if (userAge >= 25) return -5       // Adult - slight priority
+    return 0                           // Young adult - standard
+  }
+
+  private async applyTimeRules(context: ScoringContext): Promise<number> {
+    let timeScore = 0
+    
+    // Age since claim created
+    const daysSinceCreated = this.daysBetween(context.claim.createdAt, new Date())
+    timeScore += Math.min(daysSinceCreated * 1.5, 30) // Max 30 points
+    
+    // Age since last contact
+    const daysSinceContact = context.lastContact 
+      ? this.daysBetween(context.lastContact.date, new Date())
+      : 30 // No contact = 30 days
+    timeScore += Math.min(daysSinceContact * 2, 60) // Max 60 points
+    
+    return timeScore
+  }
+
+  private async applyDispositionRules(context: ScoringContext): Promise<number> {
+    if (!context.callHistory?.length) return 0
+    
+    const lastOutcome = context.callHistory[0].outcome
+    const outcomeScores = {
+      'not_interested': 100,     // Very low priority
+      'wrong_number': 80,        // Low priority  
+      'no_answer': 10,           // Slight penalty
+      'busy': 5,                 // Minimal penalty
+      'callback_requested': -25,  // High priority
+      'contacted': -5,           // Slight boost for follow-up
+      'left_voicemail': 15       // Medium penalty
+    }
+    
+    let dispositionScore = outcomeScores[lastOutcome] || 0
+    
+    // Multiple failed attempts penalty
+    const failedAttempts = context.callHistory.filter(
+      call => ['no_answer', 'busy', 'failed'].includes(call.outcome)
+    ).length
+    
+    dispositionScore += failedAttempts * 8
+    
+    return dispositionScore
+  }
+}
+```
+
+#### **Tasks**
+1. **Create Scoring Module Structure**
+   ```bash
+   mkdir -p modules/scoring/{services,types,utils}
+   ```
+
+2. **Define Scoring Types**
+   ```typescript
+   // modules/scoring/types/scoring.types.ts
+   export interface ScoringContext {
+     user: {
+       id: number
+       dateOfBirth: Date
+       demographics: UserDemographics
+     }
+     claim: {
+       id: number
+       lender: string
+       value: number
+       createdAt: Date
+       type: string
+     }
+     callHistory: CallHistoryItem[]
+     lastContact?: ContactEvent
+     currentTime: Date
+   }
+
+   export interface PriorityScore {
+     finalScore: number
+     factors: ScoreFactor[]
+     nextCallAfter: Date
+     queueType: QueueType
+   }
+
+   export interface ScoreExplanation {
+     userId: number
+     totalScore: number
+     breakdown: {
+       lenderScore: number
+       ageScore: number  
+       timeScore: number
+       dispositionScore: number
+     }
+     factors: string[]
+     recommendations: string[]
+   }
+   ```
+
+3. **Integrate with Queue Service**
+4. **Add Comprehensive Testing**
+
+---
+
+### **Step 9: Advanced Scoring Rules**
+**Complexity**: 🟡 Medium | **Location**: Dialler App | **Time**: 2 days
+
+#### **What to Build**
+- **Lender Priority Matrix**: Configurable scoring rules per lender
+- **Demographic Factors**: Age, location, claim type interactions
+- **Seasonal Adjustments**: Holiday periods, month-end priorities
+- **Machine Learning Hooks**: Preparation for AI-driven scoring
+
+#### **Tasks**
+1. **Create Scoring Rules Engine**
+2. **Add Configuration Management**
+3. **Implement A/B Testing Framework** 
+4. **Add Performance Monitoring**
+
+---
+
+## 📋 **Phase 4: Production Ready (Week 4)**
+
+### **Step 10: Monitoring & Alerting**
 **Complexity**: 🟡 Medium | **Location**: AWS + Dialler App | **Time**: 2 days
 
 #### **What to Build**
@@ -476,7 +666,7 @@ export class CDCProcessor {
 3. **Sync Performance Monitoring**
 4. **Error Rate Alerts**
 
-### **Step 7: Load Testing**
+### **Step 11: Load Testing**
 **Complexity**: 🟡 Medium | **Location**: Test Environment | **Time**: 1 day
 
 #### **What to Test**
@@ -498,6 +688,8 @@ export class CDCProcessor {
 | Cache Layer | 🟢 Low | 1 day | Dialler App |
 | AWS DMS Setup | 🔴 High | 2 days | AWS Console |
 | SQS Processing | 🟡 Medium | 2 days | Dialler App |
+| **Scoring Module** | 🟡 **Medium** | **2 days** | **Dialler App** |
+| **Advanced Scoring** | 🟡 **Medium** | **2 days** | **Dialler App** |
 | Batch Jobs | 🟢 Low | 1 day | Dialler App |
 | Monitoring | 🟡 Medium | 2 days | AWS + App |
 | Testing | 🟡 Medium | 1 day | Test Env |
@@ -507,7 +699,7 @@ export class CDCProcessor {
 | Platform | Work Required | Complexity |
 |----------|---------------|------------|
 | **Main Laravel App** | ❌ **NONE** | No changes |
-| **Dialler App** | ✅ **Medium** | 8 days work |
+| **Dialler App** | ✅ **Medium** | **12 days work** |
 | **AWS Services** | ✅ **High** | 4 days setup |
 | **Testing/Ops** | ✅ **Medium** | 2 days |
 
@@ -516,9 +708,9 @@ export class CDCProcessor {
 ## 💰 **Cost Analysis**
 
 ### **Implementation Costs**
-- **Development Time**: 3 weeks (1 developer)
+- **Development Time**: 4 weeks (1 developer)
 - **AWS Setup**: 4 days (DevOps/Senior)
-- **Testing**: 3 days (QA + Developer)
+- **Testing**: 4 days (QA + Developer)
 
 ### **Ongoing Monthly Costs**
 - **AWS DMS**: £75/month
@@ -558,29 +750,60 @@ export class CDCProcessor {
 
 ## ✅ **Success Criteria**
 
-### **Phase 1 (Week 1)**
-- [ ] Connect to MySQL replica successfully
-- [ ] User service returns real user data
-- [ ] Cache layer operational with proper TTLs
-- [ ] Basic queue population works with real data
+### **Phase 1 (Week 1) - Foundation + Dual Queue System**
+- [x] Connect to MySQL replica successfully
+- [x] User service returns real user data
+- [x] Cache layer operational with proper TTLs
+- [x] **NEW**: Dual queue system implemented with three queue types
+- [x] **NEW**: Queue type determination logic for unsigned users vs outstanding requests
+- [x] **NEW**: Separate API endpoints for each queue type
+- [ ] Queue population works with real production data
+- [ ] Queue UI updated to support multiple queue types
 
-### **Phase 2 (Week 2)**  
+### **Phase 2 (Week 2) - Real-time Integration**  
 - [ ] AWS DMS captures database changes
 - [ ] SQS processes messages reliably
 - [ ] Real-time updates appear within 3 seconds
 - [ ] Error handling and retry mechanisms work
+- [ ] **NEW**: Real-time queue updates when users move between queues
+- [ ] **NEW**: Signature status changes trigger queue reassignment
 
-### **Phase 3 (Week 3)**
-- [ ] System handles 50k+ users efficiently  
-- [ ] Queue refresh completes under 5 seconds
+### **Phase 3 (Week 3) - Scoring System**
+- [ ] Scoring module architecture implemented and tested
+- [ ] Lender-based priority scoring operational (Santander, Lloyds, etc.)
+- [ ] User age demographics factored into scoring
+- [ ] Historical disposition data influences priority
+- [ ] Time-based scoring (claim age, contact frequency) working
+- [ ] Queue service integration with scoring complete
+- [ ] Score explanation and debugging tools functional
+- [ ] A/B testing framework for scoring rules ready
+
+### **Phase 4 (Week 4) - Production Scale**
+- [ ] System handles 50k+ users efficiently across all queue types
+- [ ] Each queue type refreshes under 5 seconds
+- [ ] **NEW**: Agent specialization workflow operational
+- [ ] **NEW**: Cross-queue analytics and reporting
 - [ ] Monitoring and alerts operational
 - [ ] Load testing passes with production data
 
-### **Production Ready**
-- [ ] All services deployed and monitored
-- [ ] Documentation complete
-- [ ] Team trained on operational procedures
+### **Production Ready - Dual Queue System + Scoring**
+- [ ] All three queues (unsigned, outstanding requests, callbacks) operational
+- [ ] **NEW**: Advanced priority scoring system deployed in production
+- [ ] **NEW**: Lender-specific rules validated with business stakeholders
+- [ ] **NEW**: Scoring performance metrics monitored and optimized
+- [ ] Agent training completed for queue specialization
+- [ ] Queue-specific performance metrics tracked
+- [ ] Cross-queue movement logic verified
+- [ ] Documentation updated for operational procedures
 - [ ] Rollback procedures tested and documented
+
+### **Queue System Verification Checklist**
+- [ ] **Unsigned Users Queue**: Shows only users with `current_signature_file_id IS NULL`
+- [ ] **Outstanding Requests Queue**: Shows only users with pending requirements AND signatures
+- [ ] **Callbacks Queue**: Shows users with scheduled callbacks due now
+- [ ] **No Queue Overlap**: Users appear in only one queue at a time
+- [ ] **Real-time Movement**: Users move between queues when status changes
+- [ ] **Agent Experience**: Agents can select and work from one queue type
 
 ---
 

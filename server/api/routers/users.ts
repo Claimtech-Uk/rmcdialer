@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '@/lib/trpc/server';
 import { UserService } from '@/modules/users/services/user.service';
+import type { QueueType } from '@/modules/queue/types/queue.types';
 
 // Initialize UserService
 const userService = new UserService();
@@ -20,6 +21,16 @@ const GetEligibleUsersSchema = z.object({
     maxScore: z.number().int().optional(),
     excludeRecentCalls: z.boolean().optional()
   }).optional().default({})
+});
+
+const GetEligibleUsersByQueueTypeSchema = z.object({
+  queueType: z.enum(['unsigned_users', 'outstanding_requests', 'callback']),
+  limit: z.number().int().positive().max(100).optional().default(20),
+  offset: z.number().int().min(0).optional().default(0)
+});
+
+const DetermineQueueTypeSchema = z.object({
+  userId: z.number().int().positive()
 });
 
 const InvalidateUserCacheSchema = z.object({
@@ -119,6 +130,74 @@ export const usersRouter = createTRPCRouter({
       } catch (error: any) {
         console.error('Failed to get eligible users:', error);
         throw new Error(`Failed to get eligible users: ${error.message}`);
+      }
+    }),
+
+  /**
+   * Get eligible users for a specific queue type
+   * NEW: Supports the dual queue system
+   */
+  getEligibleUsersByQueueType: protectedProcedure
+    .input(GetEligibleUsersByQueueTypeSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        const result = await userService.getEligibleUsersByQueueType(input.queueType, {
+          limit: input.limit,
+          offset: input.offset
+        });
+
+        // Log queue access
+        console.log(`Agent ${ctx.agent.id} retrieved ${result.users.length} eligible users from ${input.queueType} queue (page ${result.page})`);
+
+        return {
+          success: true,
+          data: result.users,
+          queueType: input.queueType,
+          meta: {
+            total: result.total,
+            page: result.page,
+            limit: result.limit,
+            totalPages: Math.ceil(result.total / result.limit)
+          },
+          message: `Found ${result.total} eligible users in ${input.queueType} queue`
+        };
+
+      } catch (error: any) {
+        console.error(`Failed to get eligible users for ${input.queueType}:`, error);
+        throw new Error(`Failed to get eligible users for ${input.queueType}: ${error.message}`);
+      }
+    }),
+
+  /**
+   * Determine which queue type a user belongs to
+   * NEW: Queue type classification logic
+   */
+  determineUserQueueType: protectedProcedure
+    .input(DetermineQueueTypeSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        const queueType = await userService.determineUserQueueType(input.userId);
+
+        // Log queue type determination
+        console.log(`Agent ${ctx.agent.id} determined user ${input.userId} belongs to queue: ${queueType || 'none'}`);
+
+        return {
+          success: true,
+          data: {
+            userId: input.userId,
+            queueType,
+            eligible: queueType !== null,
+            determinedAt: new Date(),
+            determinedBy: ctx.agent.id
+          },
+          message: queueType 
+            ? `User ${input.userId} belongs to ${queueType} queue`
+            : `User ${input.userId} is not eligible for any queue`
+        };
+
+      } catch (error: any) {
+        console.error(`Failed to determine queue type for user ${input.userId}:`, error);
+        throw new Error(`Failed to determine queue type: ${error.message}`);
       }
     }),
 

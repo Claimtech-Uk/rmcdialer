@@ -18,7 +18,9 @@ import {
   Phone,
   Calendar,
   Settings,
-  Users
+  Users,
+  PenTool,
+  FileText
 } from 'lucide-react';
 import { api } from '@/lib/trpc/client';
 
@@ -67,11 +69,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   // Define navigation items with role-based access
   const navigation = [
     { 
-      name: 'Queue', 
-      href: '/queue', 
-      icon: Calendar, 
+      name: 'Unsigned', 
+      href: '/queue/unsigned', 
+      icon: PenTool, 
       roles: ['agent', 'supervisor', 'admin'],
-      description: 'Manage call queue'
+      description: 'Users needing signatures'
+    },
+    { 
+      name: 'Requirements', 
+      href: '/queue/requirements', 
+      icon: FileText, 
+      roles: ['agent', 'supervisor', 'admin'],
+      description: 'Users with pending documents'
     },
     { 
       name: 'Calls', 

@@ -20,6 +20,108 @@ A standalone dialler system for Resolve My Claim that enables agents to efficien
 - **Agent Management** - Session tracking and performance metrics
 - **Real-time Data Sync** - CDC + Batch hybrid for instant updates
 
+## 📋 Queue Management Strategy
+
+### Three Specialized Queue Types
+
+The system operates three distinct call queues, each serving specific business purposes:
+
+#### 🖊️ **Queue 1: Unsigned Users** (Priority 1 - Highest)
+- **Purpose**: Obtain missing signatures to unblock claim progress
+- **Criteria**: `current_signature_file_id IS NULL`
+- **Business Impact**: Highest priority - signature missing blocks all claim progress
+- **Agent Focus**: Get users to provide digital signatures
+- **Typical Volume**: ~15-20% of active claims
+
+#### 📋 **Queue 2: Outstanding Requests** (Priority 2 - Medium)  
+- **Purpose**: Follow up on pending document requirements
+- **Criteria**: `requirements.status = 'PENDING' AND current_signature_file_id IS NOT NULL`
+- **Business Impact**: Medium priority - claim can progress but needs supporting documents
+- **Agent Focus**: Chase specific documents (bank statements, ID, proof of address)
+- **Typical Volume**: ~60-70% of active claims
+
+#### 📞 **Queue 3: Callbacks** (Priority 1 - High)
+- **Purpose**: Honor callback requests from previous call attempts
+- **Criteria**: `scheduled_callback_date <= NOW()`
+- **Business Impact**: High priority - user expectation already set
+- **Agent Focus**: Complete previous conversation or address specific user requests
+- **Typical Volume**: ~10-15% of daily calls
+
+### Agent Specialization Model
+
+- **Each agent operates on one queue type** - allows specialization and focused mindset
+- **Queue-specific training** - agents become experts in their queue's typical scenarios
+- **Improved efficiency** - agents know exactly why they're calling before dialing
+- **Better outcomes** - targeted conversations vs generic "checking in" calls
+
+### Queue Population Logic
+
+#### Unsigned Users Detection
+```sql
+-- Users missing signatures
+SELECT users.* FROM users 
+WHERE current_signature_file_id IS NULL 
+  AND is_enabled = true 
+  AND status != 'inactive'
+  AND EXISTS (SELECT 1 FROM claims WHERE user_id = users.id AND status != 'complete')
+```
+
+#### Outstanding Requests Detection
+```sql
+-- Users with pending requirements (but have signatures)
+SELECT users.* FROM users 
+WHERE current_signature_file_id IS NOT NULL 
+  AND is_enabled = true
+  AND EXISTS (
+    SELECT 1 FROM claims c
+    JOIN claim_requirements cr ON c.id = cr.claim_id
+    WHERE c.user_id = users.id AND cr.status = 'PENDING'
+  )
+```
+
+#### Callback Queue Detection
+```sql
+-- Users with scheduled callbacks due now
+SELECT users.* FROM callbacks cb
+JOIN users ON cb.user_id = users.id
+WHERE cb.status = 'pending' 
+  AND cb.scheduled_for <= NOW()
+  AND users.is_enabled = true
+```
+
+### Advanced Priority Scoring System
+
+Each queue maintains sophisticated priority scoring via a dedicated **Scoring Module**:
+
+#### **Lender-Based Scoring**
+- **High-value lenders** (Santander, Lloyds, Barclays) get priority boosts
+- **Configurable lender matrix** for business rule adjustments
+- **Regional lender preferences** for specialized teams
+
+#### **User Demographics**  
+- **Age-based prioritization** - elderly users receive higher priority
+- **Location factors** - regional optimization
+- **Historical conversion rates** by demographic segments
+
+#### **Time-Based Factors**
+- **Days since claim created** - older claims get priority
+- **Days since last contact** - longer gaps = higher priority
+- **Optimal calling windows** - respect user preferences
+- **Callback timing** - honor specific callback requests
+
+#### **Disposition History**
+- **Previous call outcomes** - failed attempts get cooldown periods
+- **Communication preferences** - SMS vs call response rates  
+- **Agent interaction history** - successful agent matching
+- **Seasonal patterns** - holiday and month-end adjustments
+
+### Queue Refresh Strategy
+
+- **Real-time updates** via CDC for critical changes (new requirements, signatures added)
+- **5-minute batch refresh** for queue population
+- **Intelligent caching** to prevent duplicate processing
+- **Cross-queue movement** - users automatically move between queues as status changes
+
 ## 🏗️ Architecture
 
 ### Technology Stack
@@ -58,8 +160,10 @@ A standalone dialler system for Resolve My Claim that enables agents to efficien
 1. **Real-time Changes (CDC)**: AWS DMS captures database changes instantly
 2. **Event Processing**: SQS delivers change notifications to dialler
 3. **Cache Layer**: Redis stores frequently accessed data for performance
-4. **Batch Processing**: Periodic housekeeping and missed change recovery
-5. **User Context**: Combined data from MySQL replica + PostgreSQL dialler data
+4. **Scoring Engine**: Dedicated module calculates priority scores using lender rules, demographics, and history
+5. **Queue Prioritization**: Scoring system feeds intelligent queue ordering
+6. **Batch Processing**: Periodic housekeeping and missed change recovery
+7. **User Context**: Combined data from MySQL replica + PostgreSQL dialler data
 
 ## 🚀 Quick Start
 
@@ -155,6 +259,7 @@ dialler-system/
 │   ├── calls/                 # Call management
 │   ├── communications/        # SMS & magic links
 │   ├── queue/                 # Queue management
+│   ├── **scoring/**           # **Priority scoring & business rules**
 │   ├── users/                 # User data & sync
 │   ├── analytics/             # Metrics & reporting
 │   └── core/                  # Shared utilities
@@ -197,6 +302,8 @@ npm run db:seed          # Seed development data
 npm run sync:start       # Start sync services
 npm run sync:test        # Test sync functionality
 npm run queue:refresh    # Manual queue refresh
+npm run scoring:test     # Test scoring algorithms
+npm run scoring:explain  # Debug scoring for specific users
 
 # Build & Deploy
 npm run build            # Build for production

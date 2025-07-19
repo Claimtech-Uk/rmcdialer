@@ -23,14 +23,15 @@ export default function HomePage() {
     const { role } = session.agent;
     
     if (role === 'agent') {
-      // Agents go straight to the queue to start working
-      router.push('/queue');
+      // Agents now have two queue options - redirect to unsigned queue by default
+      // (Most urgent - signatures block claim progress)
+      router.push('/queue/unsigned');
     } else if (role === 'supervisor' || role === 'admin') {
       // Supervisors and admins go to the analytics dashboard
       router.push('/dashboard');
     } else {
-      // Fallback for unknown roles - go to queue
-      router.push('/queue');
+      // Fallback for unknown roles - go to unsigned queue
+      router.push('/queue/unsigned');
     }
   }, [session, isLoading, error, router]);
 

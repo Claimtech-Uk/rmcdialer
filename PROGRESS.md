@@ -29,11 +29,17 @@ Migrating from separate Express API + React frontend to a unified Next.js 14 app
 
 ### 🔄 **IN PROGRESS - Phase 3: Real-time Data Integration (New Focus)**
 - [x] **Dual Database Analysis**: Identified scalability challenges with 50k+ users
-- [x] **CDC Strategy**: Designed AWS DMS + SQS + Redis hybrid approach  
-- [ ] **MySQL Replica Integration**: Connect to existing AWS RDS read replica
-- [ ] **Change Data Capture**: Implement AWS DMS for real-time sync
-- [ ] **User Service**: Bridge PostgreSQL dialler data with MySQL user data
-- [ ] **Queue Population**: Real-time queue building with cached user contexts
+- [x] **CDC Strategy**: Designed AWS DMS + SQS + Redis hybrid approach
+- [x] **MySQL Integration**: Complete replica database schema and connection
+- [x] **Queue Architecture**: ✅ **NEW COMPLETED** - Implemented three specialized queue types:
+  - **🖊️ Unsigned Users**: Users missing signatures (`current_signature_file_id IS NULL`)
+  - **📋 Outstanding Requests**: Users with pending requirements but have signatures  
+  - **📞 Callbacks**: Users with scheduled callback requests
+- [x] **Queue Logic**: ✅ **NEW COMPLETED** - Smart queue determination and user routing
+- [x] **API Endpoints**: ✅ **NEW COMPLETED** - tRPC endpoints for each queue type
+- [ ] **Real Data Integration**: Connect queues to production MySQL replica data
+- [ ] **Queue UI**: Update interface to support agent queue specialization
+- [ ] **Cache Integration**: Complete Redis integration for queue performance
 
 ---
 
