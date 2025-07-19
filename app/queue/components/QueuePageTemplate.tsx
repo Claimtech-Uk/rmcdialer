@@ -19,6 +19,7 @@ import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { useToast } from '@/modules/core/hooks/use-toast';
 import { QueueType } from '@/modules/queue/types/queue.types';
 import UserDetailsModal from './UserDetailsModal';
+import InPageCallInterface from './InPageCallInterface';
 
 interface QueueConfig {
   type: QueueType;
@@ -27,10 +28,9 @@ interface QueueConfig {
   icon: React.ComponentType<{ className?: string }>;
   primaryColor: string;
   hoverColor: string;
+  lightColor: string;
   missingText: string;
-  emptyStateText: string;
-  completedText: string;
-  showRequirementsCount?: boolean;
+  showRequirementsCount: boolean;
 }
 
 const queueConfigs: Record<QueueType, QueueConfig> = {
@@ -39,35 +39,32 @@ const queueConfigs: Record<QueueType, QueueConfig> = {
     title: 'Unsigned Users',
     description: 'Users who need to provide their signature to proceed with their claim',
     icon: PenTool,
-    primaryColor: 'orange',
-    hoverColor: 'orange',
+    primaryColor: 'text-orange-600',
+    hoverColor: 'hover:bg-orange-50',
+    lightColor: 'bg-orange-50',
     missingText: 'Digital signature required to proceed',
-    emptyStateText: 'All users in the system have provided their signatures!',
-    completedText: 'Signatures obtained',
     showRequirementsCount: false
   },
   outstanding_requests: {
     type: 'outstanding_requests',
     title: 'Requirements',
-    description: 'Users with pending document requirements (signatures already provided)',
+    description: 'Users with pending document requirements but who have signatures',
     icon: FileText,
-    primaryColor: 'blue',
-    hoverColor: 'blue',
-    missingText: 'Pending document requirements',
-    emptyStateText: 'All users have provided their required documents!',
-    completedText: 'Documents received',
+    primaryColor: 'text-blue-600',
+    hoverColor: 'hover:bg-blue-50',
+    lightColor: 'bg-blue-50',
+    missingText: 'Outstanding document requirements',
     showRequirementsCount: true
   },
   callback: {
     type: 'callback',
     title: 'Callbacks',
-    description: 'Users who requested to be called back',
+    description: 'Users requesting callback appointments',
     icon: Phone,
-    primaryColor: 'purple',
-    hoverColor: 'purple',
+    primaryColor: 'text-purple-600',
+    hoverColor: 'hover:bg-purple-50',
+    lightColor: 'bg-purple-50',
     missingText: 'Callback requested',
-    emptyStateText: 'No pending callbacks!',
-    completedText: 'Callbacks completed',
     showRequirementsCount: false
   }
 };
@@ -91,6 +88,15 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Call state for in-page calling
+  const [activeCall, setActiveCall] = useState<{
+    userId: number;
+    name: string;
+    phoneNumber: string;
+    status: 'connecting' | 'connected' | 'ended' | 'failed';
+    startTime?: Date;
+  } | null>(null);
+
   const openUserModal = (userId: number) => {
     setSelectedUserId(userId);
     setIsModalOpen(true);
@@ -101,207 +107,254 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
     setIsModalOpen(false);
   };
 
+  const startCall = (userId: number, firstName: string, lastName: string, phoneNumber: string) => {
+    // Set up active call state
+    setActiveCall({
+      userId,
+      name: `${firstName} ${lastName}`,
+      phoneNumber,
+      status: 'connecting',
+      startTime: new Date()
+    });
+    
+    toast({
+      title: "Starting call...",
+      description: `Connecting to ${firstName} ${lastName} (${phoneNumber})`,
+    });
+
+    // Simulate call connection after 2 seconds
+    setTimeout(() => {
+      setActiveCall(prev => prev ? { ...prev, status: 'connected' } : null);
+      toast({
+        title: "Call connected",
+        description: "You are now connected to the user",
+      });
+    }, 2000);
+  };
+
+  const endCall = () => {
+    if (activeCall) {
+      setActiveCall(prev => prev ? { ...prev, status: 'ended' } : null);
+      toast({
+        title: "Call ended",
+        description: "Call has been disconnected",
+      });
+      
+      // Clear call state after a short delay
+      setTimeout(() => {
+        setActiveCall(null);
+      }, 2000);
+    }
+  };
+
+  const openFullInterface = () => {
+    if (activeCall) {
+      // Open full call interface in new tab while keeping the in-page call active
+      window.open(`/calls/${activeCall.userId}`, '_blank');
+    }
+  };
+
   // Get current session for user info and role checks
   const { data: session } = api.auth.me.useQuery();
-  
-  // Fetch users for this specific queue type
+
+  // Fetch queue data based on queue type
   const { 
     data: usersResult, 
     isLoading, 
-    error, 
+    error,
     refetch 
-  } = api.users.getEligibleUsersByQueueType.useQuery({
-    queueType: queueType,
-    limit: filters.limit,
-    offset: (filters.page - 1) * filters.limit
-  }, {
-    refetchInterval: 10000, // Refresh every 10 seconds
-  });
+  } = api.users.getEligibleUsersByQueueType.useQuery(
+    { 
+      queueType,
+      limit: filters.limit,
+      offset: (filters.page - 1) * filters.limit
+    },
+    {
+      refetchInterval: 30000, // Auto-refresh every 30 seconds
+      refetchOnWindowFocus: true
+    }
+  );
 
   // Fetch queue statistics
-  const { data: stats } = api.queue.getStats.useQuery(undefined, {
+  const { data: statsData } = api.queue.getStats.useQuery(undefined, {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Refresh queue mutation
-  const refreshQueueMutation = api.queue.refreshQueue.useMutation({
-    onSuccess: () => {
+  const users = usersResult?.data || [];
+  const stats = statsData?.queue || { pending: 0, assigned: 0, completedToday: 0 };
+
+  const handleRefresh = async () => {
+    try {
+      await refetch();
       toast({
-        title: "Queue Refreshed",
-        description: `${config.title} queue has been updated`,
+        title: "Queue refreshed",
+        description: "Latest queue data has been loaded",
       });
-      refetch();
-    },
-    onError: (error) => {
+    } catch (error) {
       toast({
-        title: "Error",
-        description: error.message,
+        title: "Refresh failed",
+        description: "Unable to refresh queue data",
         variant: "destructive",
       });
     }
-  });
-
-  const handleRefreshQueue = () => {
-    refreshQueueMutation.mutate();
   };
 
-  if (isLoading) {
-    return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-            <p className="text-gray-600">Loading {config.title.toLowerCase()} queue...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            Failed to load queue: {error.message}
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
-  const users = usersResult?.data || [];
-  const queueStats = stats?.queue; // Use queue stats for now
-
-  // Dynamic styling based on queue type
-  const getColorClasses = (type: 'primary' | 'light' | 'border' | 'hover') => {
-    const color = config.primaryColor;
+  // Dynamic styling helpers
+  const getColorClasses = (type: 'primary' | 'hover' | 'light') => {
     switch (type) {
-      case 'primary':
-        return color === 'orange' ? 'text-orange-600' : 
-               color === 'blue' ? 'text-blue-600' : 'text-purple-600';
-      case 'light':
-        return color === 'orange' ? 'bg-orange-100' : 
-               color === 'blue' ? 'bg-blue-100' : 'bg-purple-100';
-      case 'border':
-        return color === 'orange' ? 'border-orange-200' : 
-               color === 'blue' ? 'border-blue-200' : 'border-purple-200';
-      case 'hover':
-        return color === 'orange' ? 'hover:border-orange-200' : 
-               color === 'blue' ? 'hover:border-blue-200' : 'hover:border-purple-200';
+      case 'primary': return config.primaryColor;
+      case 'hover': return config.hoverColor;
+      case 'light': return config.lightColor;
+      default: return '';
     }
   };
 
   const getButtonClasses = () => {
-    const color = config.primaryColor;
-    return color === 'orange' ? 'bg-orange-600 hover:bg-orange-700' : 
-           color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' : 
-           'bg-purple-600 hover:bg-purple-700';
+    switch (queueType) {
+      case 'unsigned_users': 
+        return 'bg-orange-600 hover:bg-orange-700 focus:ring-orange-500';
+      case 'outstanding_requests': 
+        return 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500';
+      case 'callback': 
+        return 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500';
+      default: 
+        return 'bg-gray-600 hover:bg-gray-700 focus:ring-gray-500';
+    }
   };
 
   const getSecondaryButtonClasses = () => {
-    const color = config.hoverColor;
-    return color === 'orange' ? 'hover:bg-orange-50 border-orange-200 text-orange-700 hover:text-orange-800' : 
-           color === 'blue' ? 'hover:bg-blue-50 border-blue-200 text-blue-700 hover:text-blue-800' : 
-           'hover:bg-purple-50 border-purple-200 text-purple-700 hover:text-purple-800';
+    switch (queueType) {
+      case 'unsigned_users': 
+        return 'border-orange-200 text-orange-700 hover:bg-orange-50 hover:border-orange-300';
+      case 'outstanding_requests': 
+        return 'border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-300';
+      case 'callback': 
+        return 'border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300';
+      default: 
+        return 'border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300';
+    }
   };
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className={`text-3xl font-bold tracking-tight flex items-center gap-3 ${getColorClasses('primary')}`}>
-            <IconComponent className="w-8 h-8" />
-            {config.title}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {config.description}
-          </p>
+  if (!session) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading session...</p>
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Queue Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`w-12 h-12 ${getColorClasses('light')} rounded-lg flex items-center justify-center`}>
+            <IconComponent className={`w-6 h-6 ${getColorClasses('primary')}`} />
+          </div>
+          <div>
+            <h1 className={`text-2xl font-bold ${getColorClasses('primary')}`}>
+              {config.title}
+            </h1>
+            <p className="text-gray-600 text-sm">{config.description}</p>
+          </div>
+        </div>
+        
         <Button 
-          onClick={handleRefreshQueue}
-          disabled={refreshQueueMutation.isPending}
+          onClick={handleRefresh} 
           variant="outline"
+          disabled={isLoading}
+          className="flex items-center gap-2"
         >
-          <RefreshCw className={`w-4 h-4 mr-2 ${refreshQueueMutation.isPending ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           Refresh Queue
         </Button>
       </div>
 
       {/* Queue Stats */}
-      {queueStats && (
-        <div className="grid grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className={`text-sm font-medium flex items-center gap-2 ${getColorClasses('primary')}`}>
-                <Clock className="w-4 h-4" />
-                Pending
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${getColorClasses('primary')}`}>{queueStats.pending}</div>
-              <p className="text-xs text-muted-foreground">Awaiting contact</p>
-            </CardContent>
-          </Card>
+      <div className="grid grid-cols-3 gap-4">
+        <Card className={`${getColorClasses('hover')} transition-colors`}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <Clock className={`w-8 h-8 ${getColorClasses('primary')}`} />
+              <div>
+                <div className="text-sm text-gray-500">Pending</div>
+                <div className={`text-2xl font-bold ${getColorClasses('primary')}`}>
+                  {stats.pending}
+                </div>
+                <div className="text-xs text-gray-500">Awaiting contact</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-500">
-                <Phone className="w-4 h-4" />
-                In Progress
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{queueStats.assigned}</div>
-              <p className="text-xs text-muted-foreground">Currently calling</p>
-            </CardContent>
-          </Card>
+        <Card className="hover:bg-blue-50 transition-colors">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <Phone className="w-8 h-8 text-blue-600" />
+              <div>
+                <div className="text-sm text-gray-500">In Progress</div>
+                <div className="text-2xl font-bold text-blue-600">{stats.assigned}</div>
+                <div className="text-xs text-gray-500">Currently calling</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2 text-green-500">
-                <IconComponent className="w-4 h-4" />
-                Completed Today
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{queueStats.completedToday}</div>
-              <p className="text-xs text-muted-foreground">{config.completedText}</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+        <Card className="hover:bg-green-50 transition-colors">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <User className="w-8 h-8 text-green-600" />
+              <div>
+                <div className="text-sm text-gray-500">Completed Today</div>
+                <div className="text-2xl font-bold text-green-600">{stats.completedToday}</div>
+                <div className="text-xs text-gray-500">Signatures obtained</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Users List */}
+      {/* Queue List */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <User className="w-5 h-5" />
+            <IconComponent className={`w-5 h-5 ${getColorClasses('primary')}`} />
             {config.title} ({users.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {users.length === 0 ? (
-            <div className="text-center py-12">
-              <IconComponent className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                No {config.title.toLowerCase()} found
-              </h3>
-              <p className="text-gray-500">
-                {config.emptyStateText}
-              </p>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading queue...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                Failed to load queue data. Please try refreshing the page.
+              </AlertDescription>
+            </Alert>
+          ) : users.length === 0 ? (
+            <div className="text-center py-8">
+              <IconComponent className={`w-12 h-12 ${getColorClasses('primary')} mx-auto mb-4 opacity-50`} />
+              <p className="text-gray-500">No users in the queue</p>
+              <p className="text-sm text-gray-400 mt-1">All users have been processed</p>
             </div>
           ) : (
             <div className="space-y-4">
               {users.map((user: any) => (
                 <div 
-                  key={user.user.id} 
+                  key={user.id} 
                   className={`flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 ${getColorClasses('hover')} transition-colors cursor-pointer`}
                   onClick={() => {
                     // Open user details modal instead of navigating
-                    openUserModal(user.user.id);
+                    openUserModal(user.id);
                   }}
                 >
                   <div className="flex-1">
@@ -311,14 +364,14 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                       </div>
                       <div>
                         <div className="font-medium text-lg">
-                          {user.user.firstName} {user.user.lastName}
+                          {user.firstName} {user.lastName}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {user.user.phoneNumber} • {user.claims.length} claim(s)
+                          {user.phoneNumber} • {user.claims.length} claim(s)
                         </div>
                         <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
                           <Calendar className="w-3 h-3" />
-                          Created {user.user.createdAt ? new Date(user.user.createdAt).toLocaleDateString() : 'Unknown'}
+                          Created {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}
                         </div>
                       </div>
                     </div>
@@ -363,31 +416,31 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                       </div>
                     )}
                     
-                    <div className="flex flex-col gap-2 min-w-[140px]">
+                    <div className="flex flex-col gap-3 min-w-[160px]">
                       <Button 
-                        size="sm"
+                        size="default"
                         variant="outline"
-                        className={`w-full justify-start ${getSecondaryButtonClasses()}`}
+                        className={`w-full justify-start ${getSecondaryButtonClasses()} h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-md border-2`}
                         onClick={(e) => {
                           e.stopPropagation(); // Prevent card click
                           // Open user details modal
-                          openUserModal(user.user.id);
+                          openUserModal(user.id);
                         }}
                       >
-                        <User className="w-4 h-4 mr-2" />
+                        <User className="w-4 h-4 mr-3" />
                         View Details
                       </Button>
                       
                       <Button 
-                        size="sm"
-                        className={`w-full justify-start ${getButtonClasses()} text-white shadow-sm`}
+                        size="default"
+                        className={`w-full justify-start ${getButtonClasses()} text-white shadow-lg h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0`}
                         onClick={(e) => {
                           e.stopPropagation(); // Prevent card click
-                          // Open call interface in new tab to keep queue open
-                          window.open(`/calls/${user.user.id}`, '_blank');
+                          // Start in-page call
+                          startCall(user.id, user.firstName, user.lastName, user.phoneNumber);
                         }}
                       >
-                        <Phone className="w-4 h-4 mr-2" />
+                        <Phone className="w-4 h-4 mr-3" />
                         Call Now
                       </Button>
                     </div>
@@ -399,35 +452,21 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
         </CardContent>
       </Card>
 
-      {/* Pagination */}
-      {usersResult?.meta && usersResult.meta.totalPages > 1 && (
-        <div className="flex justify-center gap-2">
-          <Button
-            variant="outline"
-            disabled={filters.page === 1}
-            onClick={() => setFilters(prev => ({ ...prev, page: prev.page - 1 }))}
-          >
-            Previous
-          </Button>
-          <span className="flex items-center px-4 text-sm text-gray-600">
-            Page {filters.page} of {usersResult.meta.totalPages}
-          </span>
-          <Button
-            variant="outline"
-            disabled={filters.page === usersResult.meta.totalPages}
-            onClick={() => setFilters(prev => ({ ...prev, page: prev.page + 1 }))}
-          >
-            Next
-          </Button>
-        </div>
-      )}
-
       {/* User Details Modal */}
       <UserDetailsModal 
         userId={selectedUserId}
         isOpen={isModalOpen}
         onClose={closeUserModal}
       />
+
+      {/* In-Page Call Interface */}
+      {activeCall && (
+        <InPageCallInterface 
+          callData={activeCall}
+          onEndCall={endCall}
+          onOpenFullInterface={openFullInterface}
+        />
+      )}
     </div>
   );
 } 
