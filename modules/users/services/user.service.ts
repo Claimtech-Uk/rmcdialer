@@ -33,14 +33,15 @@ export interface CompleteUserDetails {
     createdAt: Date | null;
   };
   
-  // Address information
-  address: {
+  // Address information (can have multiple: current, previous, etc.)
+  addresses: Array<{
     id: string;
     type: string;
     fullAddress: string;
     postCode: string;
     county: string;
-  } | null;
+    createdAt: Date | null;
+  }>;
   
   // Claims with all related data
   claims: Array<{
@@ -529,6 +530,7 @@ export class UserService {
 
   private async getCompleteUserDataFromReplica(userId: number): Promise<UserDataFromReplica | null> {
     try {
+      // Fetch user data with claims and activity logs
       const userData = await replicaDb.user.findUnique({
         where: { id: BigInt(userId) },
         include: {
@@ -538,7 +540,7 @@ export class UserService {
               vehiclePackages: true
             }
           },
-          address: true,
+          address: true, // Keep current address relation
           user_logs: {
             orderBy: { created_at: 'desc' },
             take: 50 // Last 50 activity logs
@@ -546,7 +548,19 @@ export class UserService {
         }
       });
 
-      return userData as UserDataFromReplica | null;
+      if (!userData) return null;
+
+      // Separately fetch ALL addresses for this user
+      const allAddresses = await replicaDb.userAddress.findMany({
+        where: { user_id: Number(userId) },
+        orderBy: { created_at: 'desc' } // Most recent first
+      });
+
+      // Add all addresses to the user data
+      return {
+        ...userData,
+        allAddresses
+      } as UserDataFromReplica & { allAddresses: any[] };
 
     } catch (error) {
       this.logger.error(`Failed to fetch complete user ${userId} from replica:`, error);
@@ -571,7 +585,18 @@ export class UserService {
         }
       });
 
-      return userData as UserDataFromReplica | null;
+      if (!userData) return null;
+
+      // Also fetch all addresses for this user 
+      const allAddresses = await replicaDb.userAddress.findMany({
+        where: { user_id: Number(userId) },
+        orderBy: { created_at: 'desc' }
+      });
+
+      return {
+        ...userData,
+        allAddresses
+      } as UserDataFromReplica & { allAddresses: any[] };
 
     } catch (error) {
       this.logger.error(`Failed to fetch user ${userId} from replica:`, error);
@@ -672,13 +697,14 @@ export class UserService {
         createdAt: userData.created_at
       },
       
-      address: userData.address ? {
-        id: userData.address.id,
-        type: userData.address.type || 'Unknown',
-        fullAddress: userData.address.full_address || '',
-        postCode: userData.address.post_code || '',
-        county: userData.address.county || ''
-      } : null,
+      addresses: (userData as any).allAddresses?.map((addr: any) => ({
+        id: addr.id,
+        type: addr.type || 'Unknown',
+        fullAddress: addr.full_address || '',
+        postCode: addr.post_code || '',
+        county: addr.county || '',
+        createdAt: addr.created_at
+      })) || [],
       
       claims: userData.claims.map(claim => ({
         id: Number(claim.id),

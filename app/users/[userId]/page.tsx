@@ -186,25 +186,39 @@ export default function UserDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Address Information */}
-          {userDetails.address && (
+          {/* Addresses Information */}
+          {userDetails.addresses && userDetails.addresses.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <MapPin className="w-5 h-5" />
-                  Address
+                  Addresses ({userDetails.addresses.length})
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="font-medium">{userDetails.address.fullAddress}</div>
-                  <div className="text-sm text-gray-600">
-                    {userDetails.address.postCode} • {userDetails.address.county}
+              <CardContent className="space-y-4">
+                {userDetails.addresses.map((address, index) => (
+                  <div key={address.id} className="border-b last:border-b-0 pb-4 last:pb-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <Badge 
+                        variant={address.type?.toLowerCase().includes('current') ? 'default' : 'outline'} 
+                        className="text-xs"
+                      >
+                        {address.type || 'Unknown Type'}
+                      </Badge>
+                      {address.createdAt && (
+                        <div className="text-xs text-gray-500">
+                          Added {new Date(address.createdAt).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="font-medium">{address.fullAddress}</div>
+                      <div className="text-sm text-gray-600">
+                        {address.postCode} • {address.county}
+                      </div>
+                    </div>
                   </div>
-                  <Badge variant="outline" className="text-xs">
-                    {userDetails.address.type}
-                  </Badge>
-                </div>
+                ))}
               </CardContent>
             </Card>
           )}
