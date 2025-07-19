@@ -144,7 +144,7 @@ export default function CallsPage() {
               Go to the queue to start making calls and manage your call list.
             </p>
             <Button 
-              onClick={() => router.push('/queue')}
+              onClick={() => router.push('/queue/unsigned')}
               variant="outline"
               className="w-full"
             >

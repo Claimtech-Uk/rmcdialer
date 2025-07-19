@@ -68,7 +68,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const navigation = [
     { 
       name: 'Queue', 
-      href: '/queue', 
+              href: '/queue/unsigned', 
       icon: Calendar, 
       roles: ['agent', 'supervisor', 'admin'],
       description: 'Manage call queue'

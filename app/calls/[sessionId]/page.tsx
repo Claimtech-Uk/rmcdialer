@@ -465,7 +465,7 @@ export default function CallSessionPage() {
         title: "Outcome Recorded",
         description: "Call outcome has been recorded successfully",
       });
-      router.push('/queue');
+      router.push('/queue/unsigned');
     },
     onError: (error) => {
       toast({
@@ -526,7 +526,7 @@ export default function CallSessionPage() {
           </AlertDescription>
         </Alert>
         <div className="mt-6">
-          <Button onClick={() => router.push('/queue')}>
+          <Button onClick={() => router.push('/queue/unsigned')}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Return to Queue
           </Button>
@@ -548,7 +548,7 @@ export default function CallSessionPage() {
           </h1>
           <p className="text-muted-foreground">Session ID: {sessionId}</p>
         </div>
-        <Button variant="ghost" onClick={() => router.push('/queue')}>
+        <Button variant="ghost" onClick={() => router.push('/queue/unsigned')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Queue
         </Button>
