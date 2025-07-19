@@ -236,6 +236,18 @@ export default function RequirementsQueuePage() {
                     
                     <Button 
                       size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        // Navigate to user detail view
+                        window.location.href = `/users/${user.user.id}`;
+                      }}
+                    >
+                      <User className="w-4 h-4 mr-2" />
+                      View Details
+                    </Button>
+                    
+                    <Button 
+                      size="sm"
                       className="bg-blue-600 hover:bg-blue-700"
                       onClick={() => {
                         // Navigate to call interface

@@ -218,10 +218,17 @@ export default function UnsignedQueuePage() {
                   </div>
                   
                   <div className="flex items-center gap-3">
-                    <div className="text-right text-sm">
-                      <div className="text-gray-500">Claim Value</div>
-                      <div className="font-medium">£{(Math.random() * 50000 + 5000).toFixed(0)}</div>
-                    </div>
+                    <Button 
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        // Navigate to user detail view
+                        window.location.href = `/users/${user.user.id}`;
+                      }}
+                    >
+                      <User className="w-4 h-4 mr-2" />
+                      View Details
+                    </Button>
                     
                     <Button 
                       size="sm"
