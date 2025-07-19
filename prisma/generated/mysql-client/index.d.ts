@@ -3638,9 +3638,20 @@ export namespace Prisma {
     id: string | null
     user_id: number | null
     type: string | null
+    is_linked_address: boolean | null
     full_address: string | null
-    post_code: string | null
+    address_line_1: string | null
+    address_line_2: string | null
+    house_number: string | null
+    street: string | null
+    building_name: string | null
     county: string | null
+    district: string | null
+    post_code: string | null
+    post_town: string | null
+    country: string | null
+    checkboard_address_id: string | null
+    is_parsed_address: boolean | null
     created_at: Date | null
     updated_at: Date | null
   }
@@ -3649,9 +3660,20 @@ export namespace Prisma {
     id: string | null
     user_id: number | null
     type: string | null
+    is_linked_address: boolean | null
     full_address: string | null
-    post_code: string | null
+    address_line_1: string | null
+    address_line_2: string | null
+    house_number: string | null
+    street: string | null
+    building_name: string | null
     county: string | null
+    district: string | null
+    post_code: string | null
+    post_town: string | null
+    country: string | null
+    checkboard_address_id: string | null
+    is_parsed_address: boolean | null
     created_at: Date | null
     updated_at: Date | null
   }
@@ -3660,9 +3682,23 @@ export namespace Prisma {
     id: number
     user_id: number
     type: number
+    is_linked_address: number
     full_address: number
-    post_code: number
+    address_line_1: number
+    address_line_2: number
+    house_number: number
+    street: number
+    building_name: number
     county: number
+    district: number
+    post_code: number
+    post_town: number
+    country: number
+    checkboard_address_id: number
+    checkboard_raw_address: number
+    is_parsed_address: number
+    openai_matching_result: number
+    openai_matching_api_details: number
     created_at: number
     updated_at: number
     _all: number
@@ -3681,9 +3717,20 @@ export namespace Prisma {
     id?: true
     user_id?: true
     type?: true
+    is_linked_address?: true
     full_address?: true
-    post_code?: true
+    address_line_1?: true
+    address_line_2?: true
+    house_number?: true
+    street?: true
+    building_name?: true
     county?: true
+    district?: true
+    post_code?: true
+    post_town?: true
+    country?: true
+    checkboard_address_id?: true
+    is_parsed_address?: true
     created_at?: true
     updated_at?: true
   }
@@ -3692,9 +3739,20 @@ export namespace Prisma {
     id?: true
     user_id?: true
     type?: true
+    is_linked_address?: true
     full_address?: true
-    post_code?: true
+    address_line_1?: true
+    address_line_2?: true
+    house_number?: true
+    street?: true
+    building_name?: true
     county?: true
+    district?: true
+    post_code?: true
+    post_town?: true
+    country?: true
+    checkboard_address_id?: true
+    is_parsed_address?: true
     created_at?: true
     updated_at?: true
   }
@@ -3703,9 +3761,23 @@ export namespace Prisma {
     id?: true
     user_id?: true
     type?: true
+    is_linked_address?: true
     full_address?: true
-    post_code?: true
+    address_line_1?: true
+    address_line_2?: true
+    house_number?: true
+    street?: true
+    building_name?: true
     county?: true
+    district?: true
+    post_code?: true
+    post_town?: true
+    country?: true
+    checkboard_address_id?: true
+    checkboard_raw_address?: true
+    is_parsed_address?: true
+    openai_matching_result?: true
+    openai_matching_api_details?: true
     created_at?: true
     updated_at?: true
     _all?: true
@@ -3801,9 +3873,23 @@ export namespace Prisma {
     id: string
     user_id: number
     type: string | null
+    is_linked_address: boolean
     full_address: string | null
-    post_code: string | null
+    address_line_1: string | null
+    address_line_2: string | null
+    house_number: string | null
+    street: string | null
+    building_name: string | null
     county: string | null
+    district: string | null
+    post_code: string | null
+    post_town: string | null
+    country: string | null
+    checkboard_address_id: string | null
+    checkboard_raw_address: JsonValue | null
+    is_parsed_address: boolean
+    openai_matching_result: JsonValue | null
+    openai_matching_api_details: JsonValue | null
     created_at: Date | null
     updated_at: Date | null
     _count: UserAddressCountAggregateOutputType | null
@@ -3831,9 +3917,23 @@ export namespace Prisma {
     id?: boolean
     user_id?: boolean
     type?: boolean
+    is_linked_address?: boolean
     full_address?: boolean
-    post_code?: boolean
+    address_line_1?: boolean
+    address_line_2?: boolean
+    house_number?: boolean
+    street?: boolean
+    building_name?: boolean
     county?: boolean
+    district?: boolean
+    post_code?: boolean
+    post_town?: boolean
+    country?: boolean
+    checkboard_address_id?: boolean
+    checkboard_raw_address?: boolean
+    is_parsed_address?: boolean
+    openai_matching_result?: boolean
+    openai_matching_api_details?: boolean
     created_at?: boolean
     updated_at?: boolean
     users?: boolean | UserAddress$usersArgs<ExtArgs>
@@ -3845,9 +3945,23 @@ export namespace Prisma {
     id?: boolean
     user_id?: boolean
     type?: boolean
+    is_linked_address?: boolean
     full_address?: boolean
-    post_code?: boolean
+    address_line_1?: boolean
+    address_line_2?: boolean
+    house_number?: boolean
+    street?: boolean
+    building_name?: boolean
     county?: boolean
+    district?: boolean
+    post_code?: boolean
+    post_town?: boolean
+    country?: boolean
+    checkboard_address_id?: boolean
+    checkboard_raw_address?: boolean
+    is_parsed_address?: boolean
+    openai_matching_result?: boolean
+    openai_matching_api_details?: boolean
     created_at?: boolean
     updated_at?: boolean
   }
@@ -3866,9 +3980,23 @@ export namespace Prisma {
       id: string
       user_id: number
       type: string | null
+      is_linked_address: boolean
       full_address: string | null
-      post_code: string | null
+      address_line_1: string | null
+      address_line_2: string | null
+      house_number: string | null
+      street: string | null
+      building_name: string | null
       county: string | null
+      district: string | null
+      post_code: string | null
+      post_town: string | null
+      country: string | null
+      checkboard_address_id: string | null
+      checkboard_raw_address: Prisma.JsonValue | null
+      is_parsed_address: boolean
+      openai_matching_result: Prisma.JsonValue | null
+      openai_matching_api_details: Prisma.JsonValue | null
       created_at: Date | null
       updated_at: Date | null
     }, ExtArgs["result"]["userAddress"]>
@@ -4244,9 +4372,23 @@ export namespace Prisma {
     readonly id: FieldRef<"UserAddress", 'String'>
     readonly user_id: FieldRef<"UserAddress", 'Int'>
     readonly type: FieldRef<"UserAddress", 'String'>
+    readonly is_linked_address: FieldRef<"UserAddress", 'Boolean'>
     readonly full_address: FieldRef<"UserAddress", 'String'>
-    readonly post_code: FieldRef<"UserAddress", 'String'>
+    readonly address_line_1: FieldRef<"UserAddress", 'String'>
+    readonly address_line_2: FieldRef<"UserAddress", 'String'>
+    readonly house_number: FieldRef<"UserAddress", 'String'>
+    readonly street: FieldRef<"UserAddress", 'String'>
+    readonly building_name: FieldRef<"UserAddress", 'String'>
     readonly county: FieldRef<"UserAddress", 'String'>
+    readonly district: FieldRef<"UserAddress", 'String'>
+    readonly post_code: FieldRef<"UserAddress", 'String'>
+    readonly post_town: FieldRef<"UserAddress", 'String'>
+    readonly country: FieldRef<"UserAddress", 'String'>
+    readonly checkboard_address_id: FieldRef<"UserAddress", 'String'>
+    readonly checkboard_raw_address: FieldRef<"UserAddress", 'Json'>
+    readonly is_parsed_address: FieldRef<"UserAddress", 'Boolean'>
+    readonly openai_matching_result: FieldRef<"UserAddress", 'Json'>
+    readonly openai_matching_api_details: FieldRef<"UserAddress", 'Json'>
     readonly created_at: FieldRef<"UserAddress", 'DateTime'>
     readonly updated_at: FieldRef<"UserAddress", 'DateTime'>
   }
@@ -6534,8 +6676,9 @@ export namespace Prisma {
   export type UserLogMinAggregateOutputType = {
     id: string | null
     user_id: bigint | null
-    action: string | null
-    message: string | null
+    type: string | null
+    detail: string | null
+    ip_address: string | null
     created_at: Date | null
     updated_at: Date | null
   }
@@ -6543,8 +6686,9 @@ export namespace Prisma {
   export type UserLogMaxAggregateOutputType = {
     id: string | null
     user_id: bigint | null
-    action: string | null
-    message: string | null
+    type: string | null
+    detail: string | null
+    ip_address: string | null
     created_at: Date | null
     updated_at: Date | null
   }
@@ -6552,8 +6696,9 @@ export namespace Prisma {
   export type UserLogCountAggregateOutputType = {
     id: number
     user_id: number
-    action: number
-    message: number
+    type: number
+    detail: number
+    ip_address: number
     created_at: number
     updated_at: number
     _all: number
@@ -6571,8 +6716,9 @@ export namespace Prisma {
   export type UserLogMinAggregateInputType = {
     id?: true
     user_id?: true
-    action?: true
-    message?: true
+    type?: true
+    detail?: true
+    ip_address?: true
     created_at?: true
     updated_at?: true
   }
@@ -6580,8 +6726,9 @@ export namespace Prisma {
   export type UserLogMaxAggregateInputType = {
     id?: true
     user_id?: true
-    action?: true
-    message?: true
+    type?: true
+    detail?: true
+    ip_address?: true
     created_at?: true
     updated_at?: true
   }
@@ -6589,8 +6736,9 @@ export namespace Prisma {
   export type UserLogCountAggregateInputType = {
     id?: true
     user_id?: true
-    action?: true
-    message?: true
+    type?: true
+    detail?: true
+    ip_address?: true
     created_at?: true
     updated_at?: true
     _all?: true
@@ -6685,8 +6833,9 @@ export namespace Prisma {
   export type UserLogGroupByOutputType = {
     id: string
     user_id: bigint
-    action: string | null
-    message: string | null
+    type: string
+    detail: string
+    ip_address: string | null
     created_at: Date | null
     updated_at: Date | null
     _count: UserLogCountAggregateOutputType | null
@@ -6713,8 +6862,9 @@ export namespace Prisma {
   export type UserLogSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     user_id?: boolean
-    action?: boolean
-    message?: boolean
+    type?: boolean
+    detail?: boolean
+    ip_address?: boolean
     created_at?: boolean
     updated_at?: boolean
     user?: boolean | UserDefaultArgs<ExtArgs>
@@ -6724,8 +6874,9 @@ export namespace Prisma {
   export type UserLogSelectScalar = {
     id?: boolean
     user_id?: boolean
-    action?: boolean
-    message?: boolean
+    type?: boolean
+    detail?: boolean
+    ip_address?: boolean
     created_at?: boolean
     updated_at?: boolean
   }
@@ -6742,8 +6893,9 @@ export namespace Prisma {
     scalars: $Extensions.GetPayloadResult<{
       id: string
       user_id: bigint
-      action: string | null
-      message: string | null
+      type: string
+      detail: string
+      ip_address: string | null
       created_at: Date | null
       updated_at: Date | null
     }, ExtArgs["result"]["userLog"]>
@@ -7118,8 +7270,9 @@ export namespace Prisma {
   interface UserLogFieldRefs {
     readonly id: FieldRef<"UserLog", 'String'>
     readonly user_id: FieldRef<"UserLog", 'BigInt'>
-    readonly action: FieldRef<"UserLog", 'String'>
-    readonly message: FieldRef<"UserLog", 'String'>
+    readonly type: FieldRef<"UserLog", 'String'>
+    readonly detail: FieldRef<"UserLog", 'String'>
+    readonly ip_address: FieldRef<"UserLog", 'String'>
     readonly created_at: FieldRef<"UserLog", 'DateTime'>
     readonly updated_at: FieldRef<"UserLog", 'DateTime'>
   }
@@ -7505,9 +7658,23 @@ export namespace Prisma {
     id: 'id',
     user_id: 'user_id',
     type: 'type',
+    is_linked_address: 'is_linked_address',
     full_address: 'full_address',
-    post_code: 'post_code',
+    address_line_1: 'address_line_1',
+    address_line_2: 'address_line_2',
+    house_number: 'house_number',
+    street: 'street',
+    building_name: 'building_name',
     county: 'county',
+    district: 'district',
+    post_code: 'post_code',
+    post_town: 'post_town',
+    country: 'country',
+    checkboard_address_id: 'checkboard_address_id',
+    checkboard_raw_address: 'checkboard_raw_address',
+    is_parsed_address: 'is_parsed_address',
+    openai_matching_result: 'openai_matching_result',
+    openai_matching_api_details: 'openai_matching_api_details',
     created_at: 'created_at',
     updated_at: 'updated_at'
   };
@@ -7549,8 +7716,9 @@ export namespace Prisma {
   export const UserLogScalarFieldEnum: {
     id: 'id',
     user_id: 'user_id',
-    action: 'action',
-    message: 'message',
+    type: 'type',
+    detail: 'detail',
+    ip_address: 'ip_address',
     created_at: 'created_at',
     updated_at: 'updated_at'
   };
@@ -7938,9 +8106,23 @@ export namespace Prisma {
     id?: StringFilter<"UserAddress"> | string
     user_id?: IntFilter<"UserAddress"> | number
     type?: StringNullableFilter<"UserAddress"> | string | null
+    is_linked_address?: BoolFilter<"UserAddress"> | boolean
     full_address?: StringNullableFilter<"UserAddress"> | string | null
-    post_code?: StringNullableFilter<"UserAddress"> | string | null
+    address_line_1?: StringNullableFilter<"UserAddress"> | string | null
+    address_line_2?: StringNullableFilter<"UserAddress"> | string | null
+    house_number?: StringNullableFilter<"UserAddress"> | string | null
+    street?: StringNullableFilter<"UserAddress"> | string | null
+    building_name?: StringNullableFilter<"UserAddress"> | string | null
     county?: StringNullableFilter<"UserAddress"> | string | null
+    district?: StringNullableFilter<"UserAddress"> | string | null
+    post_code?: StringNullableFilter<"UserAddress"> | string | null
+    post_town?: StringNullableFilter<"UserAddress"> | string | null
+    country?: StringNullableFilter<"UserAddress"> | string | null
+    checkboard_address_id?: StringNullableFilter<"UserAddress"> | string | null
+    checkboard_raw_address?: JsonNullableFilter<"UserAddress">
+    is_parsed_address?: BoolFilter<"UserAddress"> | boolean
+    openai_matching_result?: JsonNullableFilter<"UserAddress">
+    openai_matching_api_details?: JsonNullableFilter<"UserAddress">
     created_at?: DateTimeNullableFilter<"UserAddress"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"UserAddress"> | Date | string | null
     users?: UserListRelationFilter
@@ -7950,9 +8132,23 @@ export namespace Prisma {
     id?: SortOrder
     user_id?: SortOrder
     type?: SortOrderInput | SortOrder
+    is_linked_address?: SortOrder
     full_address?: SortOrderInput | SortOrder
-    post_code?: SortOrderInput | SortOrder
+    address_line_1?: SortOrderInput | SortOrder
+    address_line_2?: SortOrderInput | SortOrder
+    house_number?: SortOrderInput | SortOrder
+    street?: SortOrderInput | SortOrder
+    building_name?: SortOrderInput | SortOrder
     county?: SortOrderInput | SortOrder
+    district?: SortOrderInput | SortOrder
+    post_code?: SortOrderInput | SortOrder
+    post_town?: SortOrderInput | SortOrder
+    country?: SortOrderInput | SortOrder
+    checkboard_address_id?: SortOrderInput | SortOrder
+    checkboard_raw_address?: SortOrderInput | SortOrder
+    is_parsed_address?: SortOrder
+    openai_matching_result?: SortOrderInput | SortOrder
+    openai_matching_api_details?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
     users?: UserOrderByRelationAggregateInput
@@ -7965,9 +8161,23 @@ export namespace Prisma {
     NOT?: UserAddressWhereInput | UserAddressWhereInput[]
     user_id?: IntFilter<"UserAddress"> | number
     type?: StringNullableFilter<"UserAddress"> | string | null
+    is_linked_address?: BoolFilter<"UserAddress"> | boolean
     full_address?: StringNullableFilter<"UserAddress"> | string | null
-    post_code?: StringNullableFilter<"UserAddress"> | string | null
+    address_line_1?: StringNullableFilter<"UserAddress"> | string | null
+    address_line_2?: StringNullableFilter<"UserAddress"> | string | null
+    house_number?: StringNullableFilter<"UserAddress"> | string | null
+    street?: StringNullableFilter<"UserAddress"> | string | null
+    building_name?: StringNullableFilter<"UserAddress"> | string | null
     county?: StringNullableFilter<"UserAddress"> | string | null
+    district?: StringNullableFilter<"UserAddress"> | string | null
+    post_code?: StringNullableFilter<"UserAddress"> | string | null
+    post_town?: StringNullableFilter<"UserAddress"> | string | null
+    country?: StringNullableFilter<"UserAddress"> | string | null
+    checkboard_address_id?: StringNullableFilter<"UserAddress"> | string | null
+    checkboard_raw_address?: JsonNullableFilter<"UserAddress">
+    is_parsed_address?: BoolFilter<"UserAddress"> | boolean
+    openai_matching_result?: JsonNullableFilter<"UserAddress">
+    openai_matching_api_details?: JsonNullableFilter<"UserAddress">
     created_at?: DateTimeNullableFilter<"UserAddress"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"UserAddress"> | Date | string | null
     users?: UserListRelationFilter
@@ -7977,9 +8187,23 @@ export namespace Prisma {
     id?: SortOrder
     user_id?: SortOrder
     type?: SortOrderInput | SortOrder
+    is_linked_address?: SortOrder
     full_address?: SortOrderInput | SortOrder
-    post_code?: SortOrderInput | SortOrder
+    address_line_1?: SortOrderInput | SortOrder
+    address_line_2?: SortOrderInput | SortOrder
+    house_number?: SortOrderInput | SortOrder
+    street?: SortOrderInput | SortOrder
+    building_name?: SortOrderInput | SortOrder
     county?: SortOrderInput | SortOrder
+    district?: SortOrderInput | SortOrder
+    post_code?: SortOrderInput | SortOrder
+    post_town?: SortOrderInput | SortOrder
+    country?: SortOrderInput | SortOrder
+    checkboard_address_id?: SortOrderInput | SortOrder
+    checkboard_raw_address?: SortOrderInput | SortOrder
+    is_parsed_address?: SortOrder
+    openai_matching_result?: SortOrderInput | SortOrder
+    openai_matching_api_details?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
     _count?: UserAddressCountOrderByAggregateInput
@@ -7996,9 +8220,23 @@ export namespace Prisma {
     id?: StringWithAggregatesFilter<"UserAddress"> | string
     user_id?: IntWithAggregatesFilter<"UserAddress"> | number
     type?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    is_linked_address?: BoolWithAggregatesFilter<"UserAddress"> | boolean
     full_address?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
-    post_code?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    address_line_1?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    address_line_2?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    house_number?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    street?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    building_name?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
     county?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    district?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    post_code?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    post_town?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    country?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    checkboard_address_id?: StringNullableWithAggregatesFilter<"UserAddress"> | string | null
+    checkboard_raw_address?: JsonNullableWithAggregatesFilter<"UserAddress">
+    is_parsed_address?: BoolWithAggregatesFilter<"UserAddress"> | boolean
+    openai_matching_result?: JsonNullableWithAggregatesFilter<"UserAddress">
+    openai_matching_api_details?: JsonNullableWithAggregatesFilter<"UserAddress">
     created_at?: DateTimeNullableWithAggregatesFilter<"UserAddress"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"UserAddress"> | Date | string | null
   }
@@ -8168,8 +8406,9 @@ export namespace Prisma {
     NOT?: UserLogWhereInput | UserLogWhereInput[]
     id?: StringFilter<"UserLog"> | string
     user_id?: BigIntFilter<"UserLog"> | bigint | number
-    action?: StringNullableFilter<"UserLog"> | string | null
-    message?: StringNullableFilter<"UserLog"> | string | null
+    type?: StringFilter<"UserLog"> | string
+    detail?: StringFilter<"UserLog"> | string
+    ip_address?: StringNullableFilter<"UserLog"> | string | null
     created_at?: DateTimeNullableFilter<"UserLog"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"UserLog"> | Date | string | null
     user?: XOR<UserRelationFilter, UserWhereInput>
@@ -8178,8 +8417,9 @@ export namespace Prisma {
   export type UserLogOrderByWithRelationInput = {
     id?: SortOrder
     user_id?: SortOrder
-    action?: SortOrderInput | SortOrder
-    message?: SortOrderInput | SortOrder
+    type?: SortOrder
+    detail?: SortOrder
+    ip_address?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
     user?: UserOrderByWithRelationInput
@@ -8191,8 +8431,9 @@ export namespace Prisma {
     OR?: UserLogWhereInput[]
     NOT?: UserLogWhereInput | UserLogWhereInput[]
     user_id?: BigIntFilter<"UserLog"> | bigint | number
-    action?: StringNullableFilter<"UserLog"> | string | null
-    message?: StringNullableFilter<"UserLog"> | string | null
+    type?: StringFilter<"UserLog"> | string
+    detail?: StringFilter<"UserLog"> | string
+    ip_address?: StringNullableFilter<"UserLog"> | string | null
     created_at?: DateTimeNullableFilter<"UserLog"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"UserLog"> | Date | string | null
     user?: XOR<UserRelationFilter, UserWhereInput>
@@ -8201,8 +8442,9 @@ export namespace Prisma {
   export type UserLogOrderByWithAggregationInput = {
     id?: SortOrder
     user_id?: SortOrder
-    action?: SortOrderInput | SortOrder
-    message?: SortOrderInput | SortOrder
+    type?: SortOrder
+    detail?: SortOrder
+    ip_address?: SortOrderInput | SortOrder
     created_at?: SortOrderInput | SortOrder
     updated_at?: SortOrderInput | SortOrder
     _count?: UserLogCountOrderByAggregateInput
@@ -8218,8 +8460,9 @@ export namespace Prisma {
     NOT?: UserLogScalarWhereWithAggregatesInput | UserLogScalarWhereWithAggregatesInput[]
     id?: StringWithAggregatesFilter<"UserLog"> | string
     user_id?: BigIntWithAggregatesFilter<"UserLog"> | bigint | number
-    action?: StringNullableWithAggregatesFilter<"UserLog"> | string | null
-    message?: StringNullableWithAggregatesFilter<"UserLog"> | string | null
+    type?: StringWithAggregatesFilter<"UserLog"> | string
+    detail?: StringWithAggregatesFilter<"UserLog"> | string
+    ip_address?: StringNullableWithAggregatesFilter<"UserLog"> | string | null
     created_at?: DateTimeNullableWithAggregatesFilter<"UserLog"> | Date | string | null
     updated_at?: DateTimeNullableWithAggregatesFilter<"UserLog"> | Date | string | null
   }
@@ -8564,9 +8807,23 @@ export namespace Prisma {
     id: string
     user_id: number
     type?: string | null
+    is_linked_address?: boolean
     full_address?: string | null
-    post_code?: string | null
+    address_line_1?: string | null
+    address_line_2?: string | null
+    house_number?: string | null
+    street?: string | null
+    building_name?: string | null
     county?: string | null
+    district?: string | null
+    post_code?: string | null
+    post_town?: string | null
+    country?: string | null
+    checkboard_address_id?: string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: Date | string | null
     updated_at?: Date | string | null
     users?: UserCreateNestedManyWithoutAddressInput
@@ -8576,9 +8833,23 @@ export namespace Prisma {
     id: string
     user_id: number
     type?: string | null
+    is_linked_address?: boolean
     full_address?: string | null
-    post_code?: string | null
+    address_line_1?: string | null
+    address_line_2?: string | null
+    house_number?: string | null
+    street?: string | null
+    building_name?: string | null
     county?: string | null
+    district?: string | null
+    post_code?: string | null
+    post_town?: string | null
+    country?: string | null
+    checkboard_address_id?: string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: Date | string | null
     updated_at?: Date | string | null
     users?: UserUncheckedCreateNestedManyWithoutAddressInput
@@ -8588,9 +8859,23 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     user_id?: IntFieldUpdateOperationsInput | number
     type?: NullableStringFieldUpdateOperationsInput | string | null
+    is_linked_address?: BoolFieldUpdateOperationsInput | boolean
     full_address?: NullableStringFieldUpdateOperationsInput | string | null
-    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_1?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_2?: NullableStringFieldUpdateOperationsInput | string | null
+    house_number?: NullableStringFieldUpdateOperationsInput | string | null
+    street?: NullableStringFieldUpdateOperationsInput | string | null
+    building_name?: NullableStringFieldUpdateOperationsInput | string | null
     county?: NullableStringFieldUpdateOperationsInput | string | null
+    district?: NullableStringFieldUpdateOperationsInput | string | null
+    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    post_town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_address_id?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: BoolFieldUpdateOperationsInput | boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     users?: UserUpdateManyWithoutAddressNestedInput
@@ -8600,9 +8885,23 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     user_id?: IntFieldUpdateOperationsInput | number
     type?: NullableStringFieldUpdateOperationsInput | string | null
+    is_linked_address?: BoolFieldUpdateOperationsInput | boolean
     full_address?: NullableStringFieldUpdateOperationsInput | string | null
-    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_1?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_2?: NullableStringFieldUpdateOperationsInput | string | null
+    house_number?: NullableStringFieldUpdateOperationsInput | string | null
+    street?: NullableStringFieldUpdateOperationsInput | string | null
+    building_name?: NullableStringFieldUpdateOperationsInput | string | null
     county?: NullableStringFieldUpdateOperationsInput | string | null
+    district?: NullableStringFieldUpdateOperationsInput | string | null
+    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    post_town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_address_id?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: BoolFieldUpdateOperationsInput | boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     users?: UserUncheckedUpdateManyWithoutAddressNestedInput
@@ -8612,9 +8911,23 @@ export namespace Prisma {
     id: string
     user_id: number
     type?: string | null
+    is_linked_address?: boolean
     full_address?: string | null
-    post_code?: string | null
+    address_line_1?: string | null
+    address_line_2?: string | null
+    house_number?: string | null
+    street?: string | null
+    building_name?: string | null
     county?: string | null
+    district?: string | null
+    post_code?: string | null
+    post_town?: string | null
+    country?: string | null
+    checkboard_address_id?: string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
@@ -8623,9 +8936,23 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     user_id?: IntFieldUpdateOperationsInput | number
     type?: NullableStringFieldUpdateOperationsInput | string | null
+    is_linked_address?: BoolFieldUpdateOperationsInput | boolean
     full_address?: NullableStringFieldUpdateOperationsInput | string | null
-    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_1?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_2?: NullableStringFieldUpdateOperationsInput | string | null
+    house_number?: NullableStringFieldUpdateOperationsInput | string | null
+    street?: NullableStringFieldUpdateOperationsInput | string | null
+    building_name?: NullableStringFieldUpdateOperationsInput | string | null
     county?: NullableStringFieldUpdateOperationsInput | string | null
+    district?: NullableStringFieldUpdateOperationsInput | string | null
+    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    post_town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_address_id?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: BoolFieldUpdateOperationsInput | boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -8634,9 +8961,23 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     user_id?: IntFieldUpdateOperationsInput | number
     type?: NullableStringFieldUpdateOperationsInput | string | null
+    is_linked_address?: BoolFieldUpdateOperationsInput | boolean
     full_address?: NullableStringFieldUpdateOperationsInput | string | null
-    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_1?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_2?: NullableStringFieldUpdateOperationsInput | string | null
+    house_number?: NullableStringFieldUpdateOperationsInput | string | null
+    street?: NullableStringFieldUpdateOperationsInput | string | null
+    building_name?: NullableStringFieldUpdateOperationsInput | string | null
     county?: NullableStringFieldUpdateOperationsInput | string | null
+    district?: NullableStringFieldUpdateOperationsInput | string | null
+    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    post_town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_address_id?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: BoolFieldUpdateOperationsInput | boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -8816,8 +9157,9 @@ export namespace Prisma {
 
   export type UserLogCreateInput = {
     id: string
-    action?: string | null
-    message?: string | null
+    type: string
+    detail: string
+    ip_address?: string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
     user: UserCreateNestedOneWithoutUser_logsInput
@@ -8826,16 +9168,18 @@ export namespace Prisma {
   export type UserLogUncheckedCreateInput = {
     id: string
     user_id: bigint | number
-    action?: string | null
-    message?: string | null
+    type: string
+    detail: string
+    ip_address?: string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
 
   export type UserLogUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    action?: NullableStringFieldUpdateOperationsInput | string | null
-    message?: NullableStringFieldUpdateOperationsInput | string | null
+    type?: StringFieldUpdateOperationsInput | string
+    detail?: StringFieldUpdateOperationsInput | string
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     user?: UserUpdateOneRequiredWithoutUser_logsNestedInput
@@ -8844,8 +9188,9 @@ export namespace Prisma {
   export type UserLogUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     user_id?: BigIntFieldUpdateOperationsInput | bigint | number
-    action?: NullableStringFieldUpdateOperationsInput | string | null
-    message?: NullableStringFieldUpdateOperationsInput | string | null
+    type?: StringFieldUpdateOperationsInput | string
+    detail?: StringFieldUpdateOperationsInput | string
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -8853,16 +9198,18 @@ export namespace Prisma {
   export type UserLogCreateManyInput = {
     id: string
     user_id: bigint | number
-    action?: string | null
-    message?: string | null
+    type: string
+    detail: string
+    ip_address?: string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
 
   export type UserLogUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    action?: NullableStringFieldUpdateOperationsInput | string | null
-    message?: NullableStringFieldUpdateOperationsInput | string | null
+    type?: StringFieldUpdateOperationsInput | string
+    detail?: StringFieldUpdateOperationsInput | string
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -8870,8 +9217,9 @@ export namespace Prisma {
   export type UserLogUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
     user_id?: BigIntFieldUpdateOperationsInput | bigint | number
-    action?: NullableStringFieldUpdateOperationsInput | string | null
-    message?: NullableStringFieldUpdateOperationsInput | string | null
+    type?: StringFieldUpdateOperationsInput | string
+    detail?: StringFieldUpdateOperationsInput | string
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -9303,9 +9651,23 @@ export namespace Prisma {
     id?: SortOrder
     user_id?: SortOrder
     type?: SortOrder
+    is_linked_address?: SortOrder
     full_address?: SortOrder
-    post_code?: SortOrder
+    address_line_1?: SortOrder
+    address_line_2?: SortOrder
+    house_number?: SortOrder
+    street?: SortOrder
+    building_name?: SortOrder
     county?: SortOrder
+    district?: SortOrder
+    post_code?: SortOrder
+    post_town?: SortOrder
+    country?: SortOrder
+    checkboard_address_id?: SortOrder
+    checkboard_raw_address?: SortOrder
+    is_parsed_address?: SortOrder
+    openai_matching_result?: SortOrder
+    openai_matching_api_details?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
   }
@@ -9318,9 +9680,20 @@ export namespace Prisma {
     id?: SortOrder
     user_id?: SortOrder
     type?: SortOrder
+    is_linked_address?: SortOrder
     full_address?: SortOrder
-    post_code?: SortOrder
+    address_line_1?: SortOrder
+    address_line_2?: SortOrder
+    house_number?: SortOrder
+    street?: SortOrder
+    building_name?: SortOrder
     county?: SortOrder
+    district?: SortOrder
+    post_code?: SortOrder
+    post_town?: SortOrder
+    country?: SortOrder
+    checkboard_address_id?: SortOrder
+    is_parsed_address?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
   }
@@ -9329,9 +9702,20 @@ export namespace Prisma {
     id?: SortOrder
     user_id?: SortOrder
     type?: SortOrder
+    is_linked_address?: SortOrder
     full_address?: SortOrder
-    post_code?: SortOrder
+    address_line_1?: SortOrder
+    address_line_2?: SortOrder
+    house_number?: SortOrder
+    street?: SortOrder
+    building_name?: SortOrder
     county?: SortOrder
+    district?: SortOrder
+    post_code?: SortOrder
+    post_town?: SortOrder
+    country?: SortOrder
+    checkboard_address_id?: SortOrder
+    is_parsed_address?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
   }
@@ -9484,8 +9868,9 @@ export namespace Prisma {
   export type UserLogCountOrderByAggregateInput = {
     id?: SortOrder
     user_id?: SortOrder
-    action?: SortOrder
-    message?: SortOrder
+    type?: SortOrder
+    detail?: SortOrder
+    ip_address?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
   }
@@ -9497,8 +9882,9 @@ export namespace Prisma {
   export type UserLogMaxOrderByAggregateInput = {
     id?: SortOrder
     user_id?: SortOrder
-    action?: SortOrder
-    message?: SortOrder
+    type?: SortOrder
+    detail?: SortOrder
+    ip_address?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
   }
@@ -9506,8 +9892,9 @@ export namespace Prisma {
   export type UserLogMinOrderByAggregateInput = {
     id?: SortOrder
     user_id?: SortOrder
-    action?: SortOrder
-    message?: SortOrder
+    type?: SortOrder
+    detail?: SortOrder
+    ip_address?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
   }
@@ -10138,9 +10525,23 @@ export namespace Prisma {
     id: string
     user_id: number
     type?: string | null
+    is_linked_address?: boolean
     full_address?: string | null
-    post_code?: string | null
+    address_line_1?: string | null
+    address_line_2?: string | null
+    house_number?: string | null
+    street?: string | null
+    building_name?: string | null
     county?: string | null
+    district?: string | null
+    post_code?: string | null
+    post_town?: string | null
+    country?: string | null
+    checkboard_address_id?: string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
@@ -10149,9 +10550,23 @@ export namespace Prisma {
     id: string
     user_id: number
     type?: string | null
+    is_linked_address?: boolean
     full_address?: string | null
-    post_code?: string | null
+    address_line_1?: string | null
+    address_line_2?: string | null
+    house_number?: string | null
+    street?: string | null
+    building_name?: string | null
     county?: string | null
+    district?: string | null
+    post_code?: string | null
+    post_town?: string | null
+    country?: string | null
+    checkboard_address_id?: string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
@@ -10163,16 +10578,18 @@ export namespace Prisma {
 
   export type UserLogCreateWithoutUserInput = {
     id: string
-    action?: string | null
-    message?: string | null
+    type: string
+    detail: string
+    ip_address?: string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
 
   export type UserLogUncheckedCreateWithoutUserInput = {
     id: string
-    action?: string | null
-    message?: string | null
+    type: string
+    detail: string
+    ip_address?: string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
@@ -10233,9 +10650,23 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     user_id?: IntFieldUpdateOperationsInput | number
     type?: NullableStringFieldUpdateOperationsInput | string | null
+    is_linked_address?: BoolFieldUpdateOperationsInput | boolean
     full_address?: NullableStringFieldUpdateOperationsInput | string | null
-    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_1?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_2?: NullableStringFieldUpdateOperationsInput | string | null
+    house_number?: NullableStringFieldUpdateOperationsInput | string | null
+    street?: NullableStringFieldUpdateOperationsInput | string | null
+    building_name?: NullableStringFieldUpdateOperationsInput | string | null
     county?: NullableStringFieldUpdateOperationsInput | string | null
+    district?: NullableStringFieldUpdateOperationsInput | string | null
+    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    post_town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_address_id?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: BoolFieldUpdateOperationsInput | boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -10244,9 +10675,23 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     user_id?: IntFieldUpdateOperationsInput | number
     type?: NullableStringFieldUpdateOperationsInput | string | null
+    is_linked_address?: BoolFieldUpdateOperationsInput | boolean
     full_address?: NullableStringFieldUpdateOperationsInput | string | null
-    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_1?: NullableStringFieldUpdateOperationsInput | string | null
+    address_line_2?: NullableStringFieldUpdateOperationsInput | string | null
+    house_number?: NullableStringFieldUpdateOperationsInput | string | null
+    street?: NullableStringFieldUpdateOperationsInput | string | null
+    building_name?: NullableStringFieldUpdateOperationsInput | string | null
     county?: NullableStringFieldUpdateOperationsInput | string | null
+    district?: NullableStringFieldUpdateOperationsInput | string | null
+    post_code?: NullableStringFieldUpdateOperationsInput | string | null
+    post_town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_address_id?: NullableStringFieldUpdateOperationsInput | string | null
+    checkboard_raw_address?: NullableJsonNullValueInput | InputJsonValue
+    is_parsed_address?: BoolFieldUpdateOperationsInput | boolean
+    openai_matching_result?: NullableJsonNullValueInput | InputJsonValue
+    openai_matching_api_details?: NullableJsonNullValueInput | InputJsonValue
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
@@ -10273,8 +10718,9 @@ export namespace Prisma {
     NOT?: UserLogScalarWhereInput | UserLogScalarWhereInput[]
     id?: StringFilter<"UserLog"> | string
     user_id?: BigIntFilter<"UserLog"> | bigint | number
-    action?: StringNullableFilter<"UserLog"> | string | null
-    message?: StringNullableFilter<"UserLog"> | string | null
+    type?: StringFilter<"UserLog"> | string
+    detail?: StringFilter<"UserLog"> | string
+    ip_address?: StringNullableFilter<"UserLog"> | string | null
     created_at?: DateTimeNullableFilter<"UserLog"> | Date | string | null
     updated_at?: DateTimeNullableFilter<"UserLog"> | Date | string | null
   }
@@ -11002,8 +11448,9 @@ export namespace Prisma {
 
   export type UserLogCreateManyUserInput = {
     id: string
-    action?: string | null
-    message?: string | null
+    type: string
+    detail: string
+    ip_address?: string | null
     created_at?: Date | string | null
     updated_at?: Date | string | null
   }
@@ -11047,24 +11494,27 @@ export namespace Prisma {
 
   export type UserLogUpdateWithoutUserInput = {
     id?: StringFieldUpdateOperationsInput | string
-    action?: NullableStringFieldUpdateOperationsInput | string | null
-    message?: NullableStringFieldUpdateOperationsInput | string | null
+    type?: StringFieldUpdateOperationsInput | string
+    detail?: StringFieldUpdateOperationsInput | string
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type UserLogUncheckedUpdateWithoutUserInput = {
     id?: StringFieldUpdateOperationsInput | string
-    action?: NullableStringFieldUpdateOperationsInput | string | null
-    message?: NullableStringFieldUpdateOperationsInput | string | null
+    type?: StringFieldUpdateOperationsInput | string
+    detail?: StringFieldUpdateOperationsInput | string
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type UserLogUncheckedUpdateManyWithoutUserInput = {
     id?: StringFieldUpdateOperationsInput | string
-    action?: NullableStringFieldUpdateOperationsInput | string | null
-    message?: NullableStringFieldUpdateOperationsInput | string | null
+    type?: StringFieldUpdateOperationsInput | string
+    detail?: StringFieldUpdateOperationsInput | string
+    ip_address?: NullableStringFieldUpdateOperationsInput | string | null
     created_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     updated_at?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }

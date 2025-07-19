@@ -226,8 +226,8 @@ export class UserService {
 
       this.logger.debug(`Cache miss for user ${userId}, fetching from databases`);
 
-      // 2. Fetch from MySQL replica (PostgreSQL call scores will be added later)
-      const userData = await this.getUserDataFromReplica(userId);
+      // 2. Fetch from MySQL replica (simplified query to avoid schema issues)
+      const userData = await this.getUserDataFromReplicaSimplified(userId);
 
       if (!userData) {
         this.logger.warn(`User ${userId} not found in replica database`);
@@ -246,7 +246,7 @@ export class UserService {
 
     } catch (error) {
       this.logger.error(`Failed to get user context for ${userId}:`, error);
-      throw error;
+      return null;
     }
   }
 
@@ -526,6 +526,23 @@ export class UserService {
     }
   }
 
+  /**
+   * Get claim owner for CDC processing
+   */
+  async getClaimOwner(claimId: number): Promise<{ userId: number } | null> {
+    try {
+      const claim = await replicaDb.claim.findUnique({
+        where: { id: BigInt(claimId) },
+        select: { user_id: true }
+      });
+
+      return claim ? { userId: Number(claim.user_id) } : null;
+    } catch (error) {
+      this.logger.error(`Failed to get claim owner for ${claimId}:`, error);
+      return null;
+    }
+  }
+
   // Private helper methods
 
   private async getCompleteUserDataFromReplica(userId: number): Promise<UserDataFromReplica | null> {
@@ -540,19 +557,36 @@ export class UserService {
               vehiclePackages: true
             }
           },
-          address: true, // Keep current address relation
-          user_logs: {
-            orderBy: { created_at: 'desc' },
-            take: 50 // Last 50 activity logs
-          }
+          address: true // Keep current address relation
+          // user_logs: {
+          //   orderBy: { created_at: 'desc' },
+          //   take: 50 // Last 50 activity logs
+          // }
         }
       });
 
       if (!userData) return null;
 
-      // Separately fetch ALL addresses for this user
+      // Separately fetch ALL addresses for this user with all fields
       const allAddresses = await replicaDb.userAddress.findMany({
         where: { user_id: Number(userId) },
+        select: {
+          id: true,
+          type: true,
+          full_address: true,
+          address_line_1: true,
+          address_line_2: true,
+          house_number: true,
+          street: true,
+          building_name: true,
+          county: true,
+          district: true,
+          post_code: true,
+          post_town: true,
+          country: true,
+          created_at: true,
+          updated_at: true
+        },
         orderBy: { created_at: 'desc' } // Most recent first
       });
 
@@ -601,6 +635,45 @@ export class UserService {
     } catch (error) {
       this.logger.error(`Failed to fetch user ${userId} from replica:`, error);
       throw new DatabaseConnectionError('mysql', error as Error);
+    }
+  }
+
+  /**
+   * Simplified user data fetch that avoids problematic schema queries
+   */
+  private async getUserDataFromReplicaSimplified(userId: number): Promise<UserDataFromReplica | null> {
+    try {
+      const userData = await replicaDb.user.findUnique({
+        where: { id: BigInt(userId) },
+        include: {
+          claims: {
+            include: {
+              requirements: {
+                where: { status: 'PENDING' }
+              },
+              vehiclePackages: true
+            }
+          },
+          address: true
+        }
+      });
+
+      if (!userData) return null;
+
+      // Separately fetch addresses to avoid any schema issues
+      const allAddresses = await replicaDb.userAddress.findMany({
+        where: { user_id: Number(userId) },
+        orderBy: { created_at: 'desc' }
+      });
+
+      return {
+        ...userData,
+        allAddresses
+      } as UserDataFromReplica & { allAddresses: any[] };
+
+    } catch (error) {
+      this.logger.error(`Failed to fetch simplified user ${userId} from replica:`, error);
+      return null;
     }
   }
 
@@ -697,14 +770,59 @@ export class UserService {
         createdAt: userData.created_at
       },
       
-      addresses: (userData as any).allAddresses?.map((addr: any) => ({
-        id: addr.id,
-        type: addr.type || 'Unknown',
-        fullAddress: addr.full_address || '',
-        postCode: addr.post_code || '',
-        county: addr.county || '',
-        createdAt: addr.created_at
-      })) || [],
+      addresses: (userData as any).allAddresses?.map((addr: any) => {
+        // Build full address from components if full_address is empty
+        let fullAddress = addr.full_address || '';
+        
+        if (!fullAddress) {
+          const parts = [];
+          
+          // Helper function to check if value exists and is not empty
+          const hasValue = (val: any) => val !== null && val !== undefined && String(val).trim() !== '';
+          
+          // Try address_line_1 first
+          if (hasValue(addr.address_line_1)) {
+            parts.push(String(addr.address_line_1).trim());
+          }
+          
+          // Then address_line_2 (this often contains the main address)
+          if (hasValue(addr.address_line_2)) {
+            parts.push(String(addr.address_line_2).trim());
+          }
+          
+          // If no address lines, build from house_number + street
+          if (parts.length === 0) {
+            if (hasValue(addr.house_number) && hasValue(addr.street)) {
+              parts.push(`${addr.house_number} ${addr.street}`);
+            } else if (hasValue(addr.house_number)) {
+              parts.push(String(addr.house_number));
+            } else if (hasValue(addr.street)) {
+              parts.push(String(addr.street));
+            }
+          }
+          
+          // Add building name if available and different
+          if (hasValue(addr.building_name) && String(addr.building_name) !== String(addr.street)) {
+            parts.push(String(addr.building_name).trim());
+          }
+          
+          // Add post town
+          if (hasValue(addr.post_town)) {
+            parts.push(String(addr.post_town).trim());
+          }
+          
+          fullAddress = parts.filter(part => part && String(part).trim()).join(', ');
+        }
+        
+        return {
+          id: addr.id,
+          type: addr.type || 'Unknown',
+          fullAddress: fullAddress || `${addr.post_code || 'Unknown postcode'}`,
+          postCode: addr.post_code || '',
+          county: addr.county || '',
+          createdAt: addr.created_at
+        };
+      }) || [],
       
       claims: userData.claims.map(claim => ({
         id: Number(claim.id),
@@ -736,12 +854,13 @@ export class UserService {
         }))
       })),
       
-      activityLogs: (userData as any).user_logs?.map((log: any) => ({
-        id: log.id,
-        action: log.type || 'Unknown',
-        message: log.detail || '',
-        createdAt: log.created_at
-      })) || [],
+      activityLogs: [], // Temporarily disabled due to schema mismatch
+      // activityLogs: (userData as any).user_logs?.map((log: any) => ({
+      //   id: log.id,
+      //   action: log.type || 'Unknown',
+      //   message: log.detail || '',
+      //   createdAt: log.created_at
+      // })) || [],
       
       callHistory: callHistory.map(call => ({
         id: call.id,

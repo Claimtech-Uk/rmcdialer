@@ -172,9 +172,23 @@ exports.Prisma.UserAddressScalarFieldEnum = {
   id: 'id',
   user_id: 'user_id',
   type: 'type',
+  is_linked_address: 'is_linked_address',
   full_address: 'full_address',
-  post_code: 'post_code',
+  address_line_1: 'address_line_1',
+  address_line_2: 'address_line_2',
+  house_number: 'house_number',
+  street: 'street',
+  building_name: 'building_name',
   county: 'county',
+  district: 'district',
+  post_code: 'post_code',
+  post_town: 'post_town',
+  country: 'country',
+  checkboard_address_id: 'checkboard_address_id',
+  checkboard_raw_address: 'checkboard_raw_address',
+  is_parsed_address: 'is_parsed_address',
+  openai_matching_result: 'openai_matching_result',
+  openai_matching_api_details: 'openai_matching_api_details',
   created_at: 'created_at',
   updated_at: 'updated_at'
 };
@@ -207,8 +221,9 @@ exports.Prisma.ClaimVehiclePackageScalarFieldEnum = {
 exports.Prisma.UserLogScalarFieldEnum = {
   id: 'id',
   user_id: 'user_id',
-  action: 'action',
-  message: 'message',
+  type: 'type',
+  detail: 'detail',
+  ip_address: 'ip_address',
   created_at: 'created_at',
   updated_at: 'updated_at'
 };

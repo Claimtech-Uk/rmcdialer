@@ -72,17 +72,31 @@ model Claim {
 }
 
 model UserAddress {
-  id           String   @id
-  user_id      Int      @map("user_id")
-  type         String?
-  full_address String?  @map("full_address")
-  post_code    String?  @map("post_code")
-  county       String?
-  created_at   DateTime? @map("created_at")
-  updated_at   DateTime? @map("updated_at")
+  id                     String   @id
+  user_id                Int      @map("user_id")
+  type                   String?
+  is_linked_address      Boolean  @default(false) @map("is_linked_address")
+  full_address           String?  @map("full_address")
+  address_line_1         String?  @map("address_line_1")
+  address_line_2         String?  @map("address_line_2")
+  house_number           String?  @map("house_number")
+  street                 String?
+  building_name          String?  @map("building_name")
+  county                 String?
+  district               String?
+  post_code              String?  @map("post_code")
+  post_town              String?  @map("post_town")
+  country                String?
+  checkboard_address_id  String?  @map("checkboard_address_id")
+  checkboard_raw_address Json?    @map("checkboard_raw_address")
+  is_parsed_address      Boolean  @default(false) @map("is_parsed_address")
+  openai_matching_result Json?    @map("openai_matching_result")
+  openai_matching_api_details Json? @map("openai_matching_api_details")
+  created_at             DateTime? @map("created_at")
+  updated_at             DateTime? @map("updated_at")
 
   // Relations
-  users        User[]
+  users                  User[]
 
   @@map("user_addresses")
 }
