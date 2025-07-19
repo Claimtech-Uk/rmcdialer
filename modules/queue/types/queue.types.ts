@@ -19,7 +19,6 @@ export interface UserEligibilityFactors {
   claimId?: bigint;
   daysSinceLastContact: number;
   pendingRequirements: number;
-  claimValue: number;
   lastOutcome?: string;
   totalAttempts: number;
   preferredCallTime?: [number, number]; // [startHour, endHour]

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '@/lib/trpc/server';
 import { QueueService, type QueueFilters } from '@/modules/queue';
+import { PriorityScoringService } from '@/modules/scoring';
 import { prisma } from '@/lib/db';
 
 // Create logger instance (in production this would come from a shared logger service)
@@ -10,8 +11,11 @@ const logger = {
   warn: (message: string, meta?: any) => console.warn(`[Queue WARN] ${message}`, meta)
 };
 
-// Initialize queue service with dependencies
-const queueService = new QueueService({ prisma, logger });
+// Initialize scoring service first
+const scoringService = new PriorityScoringService({ logger });
+
+// Initialize queue service with dependencies including scoring service
+const queueService = new QueueService({ prisma, scoringService, logger });
 
 // Input validation schemas
 const QueueFiltersSchema = z.object({

@@ -217,10 +217,11 @@ export default function UnsignedQueuePage() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-2 min-w-[140px]">
                     <Button 
                       size="sm"
                       variant="outline"
+                      className="w-full justify-start hover:bg-blue-50 border-blue-200 text-blue-700 hover:text-blue-800"
                       onClick={() => {
                         // Navigate to user detail view
                         window.location.href = `/users/${user.user.id}`;
@@ -232,7 +233,7 @@ export default function UnsignedQueuePage() {
                     
                     <Button 
                       size="sm"
-                      className="bg-orange-600 hover:bg-orange-700"
+                      className="w-full justify-start bg-orange-600 hover:bg-orange-700 text-white shadow-sm"
                       onClick={() => {
                         // Navigate to call interface
                         window.location.href = `/calls/${user.user.id}`;

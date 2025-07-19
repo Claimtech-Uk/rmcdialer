@@ -225,38 +225,41 @@ export default function RequirementsQueuePage() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-3">
-                    <div className="text-right text-sm">
-                      <div className="text-gray-500">Requirements</div>
-                      <div className="font-medium">
+                  <div className="flex items-center gap-4">
+                    <div className="text-center text-sm bg-blue-50 px-3 py-2 rounded-md border border-blue-200">
+                      <div className="text-blue-600 font-medium">
                         {user.claims.reduce((acc: number, claim: any) => 
-                          acc + claim.requirements.length, 0)} pending
+                          acc + claim.requirements.length, 0)}
                       </div>
+                      <div className="text-xs text-blue-500">Requirements</div>
                     </div>
                     
-                    <Button 
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        // Navigate to user detail view
-                        window.location.href = `/users/${user.user.id}`;
-                      }}
-                    >
-                      <User className="w-4 h-4 mr-2" />
-                      View Details
-                    </Button>
-                    
-                    <Button 
-                      size="sm"
-                      className="bg-blue-600 hover:bg-blue-700"
-                      onClick={() => {
-                        // Navigate to call interface
-                        window.location.href = `/calls/${user.user.id}`;
-                      }}
-                    >
-                      <Phone className="w-4 h-4 mr-2" />
-                      Call Now
-                    </Button>
+                    <div className="flex flex-col gap-2 min-w-[140px]">
+                      <Button 
+                        size="sm"
+                        variant="outline"
+                        className="w-full justify-start hover:bg-orange-50 border-orange-200 text-orange-700 hover:text-orange-800"
+                        onClick={() => {
+                          // Navigate to user detail view
+                          window.location.href = `/users/${user.user.id}`;
+                        }}
+                      >
+                        <User className="w-4 h-4 mr-2" />
+                        View Details
+                      </Button>
+                      
+                      <Button 
+                        size="sm"
+                        className="w-full justify-start bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                        onClick={() => {
+                          // Navigate to call interface
+                          window.location.href = `/calls/${user.user.id}`;
+                        }}
+                      >
+                        <Phone className="w-4 h-4 mr-2" />
+                        Call Now
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}

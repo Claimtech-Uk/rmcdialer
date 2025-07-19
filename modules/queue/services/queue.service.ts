@@ -12,10 +12,12 @@ import {
   QUEUE_CONFIGS
 } from '../types/queue.types';
 import { UserService } from '@/modules/users/services/user.service';
+import { PriorityScoringService, type ScoringContext } from '@/modules/scoring';
 
 // Dependencies that will be injected
 interface QueueServiceDependencies {
   prisma: PrismaClient;
+  scoringService: PriorityScoringService;
   logger: {
     info: (message: string, meta?: any) => void;
     error: (message: string, error?: any) => void;
@@ -200,44 +202,20 @@ export class QueueService {
   }
 
   /**
-   * Calculate priority score for a user based on their queue type and context
+   * Calculate priority score for a user using the scoring service
    */
   private async calculatePriorityForUser(userContext: any, queueType: QueueType): Promise<ScoredUser> {
     const config = QUEUE_CONFIGS[queueType];
-    let baseScore = config.priority * 1000; // Base score by queue priority
     
-    // Adjust score based on user factors
-    const daysSinceLastContact = userContext.callScore?.lastCallAt 
-      ? Math.floor((Date.now() - new Date(userContext.callScore.lastCallAt).getTime()) / (1000 * 60 * 60 * 24))
-      : 30; // Default if never called
-    
-    const totalAttempts = userContext.callScore?.totalAttempts || 0;
-    const lastOutcome = userContext.callScore?.lastOutcome;
-    
-    // Time factor - longer since last contact = higher priority (lower score)
-    const timeFactor = Math.max(0, 30 - daysSinceLastContact) * 10;
-    
-    // Attempt penalty - more attempts = lower priority (higher score)  
-    const attemptPenalty = totalAttempts * 50;
-    
-    // Outcome penalty based on last call result
-    let outcomePenalty = 0;
-    switch (lastOutcome) {
-      case 'not_interested':
-        outcomePenalty = 500; // Significant penalty
-        break;
-      case 'no_answer':
-      case 'busy':
-        outcomePenalty = 100; // Medium penalty
-        break;
-      case 'contacted':
-        outcomePenalty = 0; // No penalty for successful contact
-        break;
-      default:
-        outcomePenalty = 0;
-    }
-    
-    const finalScore = baseScore + timeFactor + attemptPenalty + outcomePenalty;
+    // Create scoring context for the scoring service
+    const scoringContext: ScoringContext = {
+      userId: userContext.user.id,
+      userCreatedAt: userContext.user.createdAt || new Date(), // Fallback to current date if null
+      currentTime: new Date()
+    };
+
+    // Calculate priority using the scoring service
+    const priorityScore = await this.deps.scoringService.calculatePriority(scoringContext);
     
     // Determine next call time based on cooldown rules
     let nextCallAfter = new Date();
@@ -251,7 +229,7 @@ export class QueueService {
       }
     }
     
-    // Build reason text based on queue type
+    // Build reason text based on queue type and scoring factors
     let reason = `${config.displayName}: `;
     switch (queueType) {
       case 'unsigned_users':
@@ -267,18 +245,24 @@ export class QueueService {
         break;
     }
     
+    // Add scoring explanation to reason
+    if (priorityScore.factors.length > 0) {
+      reason += ` (Score: ${priorityScore.finalScore} - ${priorityScore.factors[0].reason})`;
+    }
+    
     return {
       userId: userContext.user.id,
       claimId: userContext.claims[0]?.id || null,
-      daysSinceLastContact,
+      daysSinceLastContact: userContext.callScore?.lastCallAt 
+        ? Math.floor((Date.now() - new Date(userContext.callScore.lastCallAt).getTime()) / (1000 * 60 * 60 * 24))
+        : 30,
       pendingRequirements: userContext.claims.reduce((acc: any, claim: any) => 
         acc + claim.requirements.filter((req: any) => req.status === 'PENDING').length, 0),
-      claimValue: 0, // TODO: Calculate from claim data if available
-      lastOutcome,
-      totalAttempts,
+      lastOutcome: userContext.callScore?.lastOutcome,
+      totalAttempts: userContext.callScore?.totalAttempts || 0,
       lastCallAt: userContext.callScore?.lastCallAt ? new Date(userContext.callScore.lastCallAt) : undefined,
       hasSignature: queueType !== 'unsigned_users', // Inferred from queue type
-      score: finalScore,
+      score: priorityScore.finalScore,
       reason,
       nextCallAfter,
       queueType
@@ -329,23 +313,21 @@ export class QueueService {
     
     const mockUsers: UserEligibilityFactors[] = [
       {
-        userId: BigInt(12345),
-        claimId: BigInt(456),
-        daysSinceLastContact: 3,
-        pendingRequirements: 2,
-        claimValue: 15000,
-        lastOutcome: 'no_answer',
-        totalAttempts: 1,
-        preferredCallTime: [9, 17],
-        lastCallAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-        hasSignature: true // Mock data - has signature but needs documents
+              userId: BigInt(12345),
+      claimId: BigInt(456),
+      daysSinceLastContact: 3,
+      pendingRequirements: 2,
+      lastOutcome: 'no_answer',
+      totalAttempts: 1,
+      preferredCallTime: [9, 17],
+      lastCallAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      hasSignature: true // Mock data - has signature but needs documents
       },
       {
         userId: BigInt(12346),
         claimId: BigInt(457),
         daysSinceLastContact: 7,
         pendingRequirements: 1,
-        claimValue: 8000,
         lastOutcome: 'callback_requested',
         totalAttempts: 2,
         scheduledCallback: new Date(Date.now() + 2 * 60 * 60 * 1000),

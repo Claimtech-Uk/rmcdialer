@@ -1,6 +1,7 @@
 import { createTRPCRouter } from '@/lib/trpc/server'
 import { authRouter } from './routers/auth'
 import { queueRouter } from './routers/queue'
+import { scoringRouter } from './routers/scoring'
 import { callsRouter } from './routers/calls'
 import { communicationsRouter } from './routers/communications'
 import { usersRouter } from './routers/users'
@@ -13,6 +14,7 @@ import { usersRouter } from './routers/users'
 export const appRouter = createTRPCRouter({
   auth: authRouter,
   queue: queueRouter,
+  scoring: scoringRouter,
   calls: callsRouter,
   communications: communicationsRouter,
   users: usersRouter,
