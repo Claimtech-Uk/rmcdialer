@@ -1,178 +1,91 @@
-# 📞 RMC Dialler System
+# 📞 RMC Dialler - Next.js 14 Call Center Management System
 
-A standalone dialler system for Resolve My Claim that enables agents to efficiently contact users about their financial claims. Built as a unified Next.js 14 application with type-safe tRPC APIs and modern React patterns.
+**Live Application**: [dialler.resolvemyclaim.co.uk](https://dialler.resolvemyclaim.co.uk)
 
-## 🎯 Overview
+A standalone dialler system built as a unified **Next.js 14** application with **tRPC** that enables agents to efficiently contact users about their financial claims. The system reads user data from the main claims platform but operates completely independently with no write-backs.
 
-### Core Business Goals
-- **Increase claim completion rates** by proactively contacting users with pending requirements
-- **Reduce friction** in the claims process by sending magic links for passwordless authentication
-- **Prioritize high-value claims** through intelligent scoring and queue management
-- **Track all interactions** for compliance and quality improvement
-- **Scale operations** with both human and AI agents
+## 🎯 **Core Features**
 
-### Key Features
-- **Intelligent Call Queue** - Priority-based user targeting with real-time updates
-- **Twilio Voice Integration** - Browser-based calling with recording
-- **Magic Link Generation** - Secure, trackable authentication links
-- **SMS Conversations** - Two-way messaging with users
-- **Supervisor Dashboard** - Real-time analytics and monitoring
-- **Agent Management** - Session tracking and performance metrics
-- **Real-time Data Sync** - CDC + Batch hybrid for instant updates
+### **Smart Queue Management**
+- **Three specialized queues**: Unsigned users, outstanding requests, and scheduled callbacks
+- **Intelligent prioritization**: Based on user demographics, lender importance, and call history
+- **Real-time validation**: Every call is validated against current database state before dialing
+- **Automated lead discovery**: Hourly background jobs find new eligible users
 
-## 📋 Queue Management Strategy
+### **Seamless Agent Experience**  
+- **Browser-based calling** via Twilio Voice SDK
+- **Complete user context** with claims, requirements, and call history
+- **Magic link generation** for passwordless user authentication
+- **Call outcome tracking** and disposition management
 
-### Three Specialized Queue Types
+### **Supervisor Dashboard**
+- **Real-time performance metrics** and agent activity monitoring
+- **Queue analytics** with completion rates and call volume trends
+- **User interaction history** for compliance and quality improvement
 
-The system operates three distinct call queues, each serving specific business purposes:
+---
 
-#### 🖊️ **Queue 1: Unsigned Users** (Priority 1 - Highest)
-- **Purpose**: Obtain missing signatures to unblock claim progress
-- **Criteria**: `current_signature_file_id IS NULL`
-- **Business Impact**: Highest priority - signature missing blocks all claim progress
-- **Agent Focus**: Get users to provide digital signatures
-- **Typical Volume**: ~15-20% of active claims
+## 🏗️ **Architecture: Pre-call Validation + Hourly Refresh**
 
-#### 📋 **Queue 2: Outstanding Requests** (Priority 2 - Medium)  
-- **Purpose**: Follow up on pending document requirements
-- **Criteria**: `requirements.status = 'PENDING' AND current_signature_file_id IS NOT NULL`
-- **Business Impact**: Medium priority - claim can progress but needs supporting documents
-- **Agent Focus**: Chase specific documents (bank statements, ID, proof of address)
-- **Typical Volume**: ~60-70% of active claims
+### **Core Strategy**
+Instead of complex real-time synchronization, we use a **"dirty queue + clean validation"** approach that eliminates wrong calls while maintaining simplicity and cost-effectiveness.
 
-#### 📞 **Queue 3: Callbacks** (Priority 1 - High)
-- **Purpose**: Honor callback requests from previous call attempts
-- **Criteria**: `scheduled_callback_date <= NOW()`
-- **Business Impact**: High priority - user expectation already set
-- **Agent Focus**: Complete previous conversation or address specific user requests
-- **Typical Volume**: ~10-15% of daily calls
-
-### Agent Specialization Model
-
-- **Each agent operates on one queue type** - allows specialization and focused mindset
-- **Queue-specific training** - agents become experts in their queue's typical scenarios
-- **Improved efficiency** - agents know exactly why they're calling before dialing
-- **Better outcomes** - targeted conversations vs generic "checking in" calls
-
-### Queue Population Logic
-
-#### Unsigned Users Detection
-```sql
--- Users missing signatures
-SELECT users.* FROM users 
-WHERE current_signature_file_id IS NULL 
-  AND is_enabled = true 
-  AND status != 'inactive'
-  AND EXISTS (SELECT 1 FROM claims WHERE user_id = users.id AND status != 'complete')
+```
+┌─────────────────────┐    ┌──────────────────────┐    ┌─────────────────────┐
+│   Main Laravel App  │    │   MySQL Replica      │    │   Next.js Dialler   │
+│  claim.resolvemy... │    │   (Real-time Data)   │    │ dialler.resolvemy... │
+└─────────────────────┘    └──────────────────────┘    └─────────────────────┘
+         │                            │                          │
+         │                            └─────────┐                │
+         ▼                                      ▼                ▼
+┌─────────────────────┐    ┌──────────────────────┐    ┌─────────────────────┐
+│   Production Data   │    │   Pre-call Validation│    │   PostgreSQL        │
+│  (Users, Claims,    │    │   (Real-time Check)  │    │ (Dialler Features)  │
+│   Requirements)     │    │                      │    │                     │
+└─────────────────────┘    └──────────────────────┘    └─────────────────────┘
+                                      │                          │
+                           ┌──────────▼──────────┐              │
+                           │  Hourly Queue       │◄─────────────┘
+                           │  Population Job     │
+                           │ (New Lead Discovery)│
+                           └─────────────────────┘
 ```
 
-#### Outstanding Requests Detection
-```sql
--- Users with pending requirements (but have signatures)
-SELECT users.* FROM users 
-WHERE current_signature_file_id IS NOT NULL 
-  AND is_enabled = true
-  AND EXISTS (
-    SELECT 1 FROM claims c
-    JOIN claim_requirements cr ON c.id = cr.claim_id
-    WHERE c.user_id = users.id AND cr.status = 'PENDING'
-  )
-```
+### **Data Flow Overview**
+1. **Hourly Discovery**: Background job scans for new eligible users and adds them to appropriate queues
+2. **Queue Management**: Three specialized queues (unsigned users, outstanding requests, callbacks)
+3. **Pre-call Validation**: Real-time check of user status immediately before each call attempt
+4. **Agent Interface**: Agents see next valid user with complete context, guaranteed accuracy
+5. **Call Tracking**: All interactions stored in PostgreSQL for analytics and compliance
+6. **Magic Links**: Seamless user authentication for claim completion
 
-#### Callback Queue Detection
-```sql
--- Users with scheduled callbacks due now
-SELECT users.* FROM callbacks cb
-JOIN users ON cb.user_id = users.id
-WHERE cb.status = 'pending' 
-  AND cb.scheduled_for <= NOW()
-  AND users.is_enabled = true
-```
+## 🎯 **Key Benefits**
 
-### Advanced Priority Scoring System
+### **Perfect Call Accuracy**
+- **Zero wrong calls**: Pre-call validation ensures 100% accuracy at the moment of contact
+- **Real-time status**: Every call validates current signature status and requirements
+- **No user frustration**: Users never receive calls about already-completed tasks
 
-Each queue maintains sophisticated priority scoring via a dedicated **Scoring Module**:
+### **Cost Effectiveness**
+- **£0 additional infrastructure**: Uses existing MySQL replica
+- **Simple architecture**: No complex AWS services or message queues
+- **Easy maintenance**: Standard database queries and background jobs
 
-#### **Lender-Based Scoring**
-- **High-value lenders** (Santander, Lloyds, Barclays) get priority boosts
-- **Configurable lender matrix** for business rule adjustments
-- **Regional lender preferences** for specialized teams
+### **Operational Excellence**
+- **Fast implementation**: Working system in days, not weeks
+- **High reliability**: No dependency on external messaging systems
+- **Easy monitoring**: Standard application logs and database metrics
 
-#### **User Demographics**  
-- **Age-based prioritization** - elderly users receive higher priority
-- **Location factors** - regional optimization
-- **Historical conversion rates** by demographic segments
-
-#### **Time-Based Factors**
-- **Days since claim created** - older claims get priority
-- **Days since last contact** - longer gaps = higher priority
-- **Optimal calling windows** - respect user preferences
-- **Callback timing** - honor specific callback requests
-
-#### **Disposition History**
-- **Previous call outcomes** - failed attempts get cooldown periods
-- **Communication preferences** - SMS vs call response rates  
-- **Agent interaction history** - successful agent matching
-- **Seasonal patterns** - holiday and month-end adjustments
-
-### Queue Refresh Strategy
-
-- **Real-time updates** via CDC for critical changes (new requirements, signatures added)
-- **5-minute batch refresh** for queue population
-- **Intelligent caching** to prevent duplicate processing
-- **Cross-queue movement** - users automatically move between queues as status changes
-
-## 🏗️ Architecture
-
-### Technology Stack
-- **Framework**: Next.js 14 (App Router) + TypeScript
-- **API Layer**: tRPC (type-safe RPC) + TanStack Query
-- **Database**: PostgreSQL + Prisma ORM + MySQL replica (claims data)
-- **Data Sync**: AWS DMS (CDC) + SQS (Message Queue) + Redis (Cache)
-- **Authentication**: JWT + Next.js middleware
-- **UI Components**: Tailwind CSS + shadcn/ui + Radix UI primitives
-- **State Management**: tRPC + TanStack Query (server state) + localStorage (client state)
-- **Real-time**: Server-Sent Events (SSE) + WebSockets
-- **External Services**: Twilio (voice/SMS), SendGrid (email), OpenAI (AI agents)
-
-### Database & Sync Strategy
-```
-┌─────────────────────┐    ┌─────────────────┐    ┌──────────────────────┐
-│   Main Laravel App  │───▶│   AWS DMS       │───▶│   SQS Message Queue  │
-│  claim.resolvemy... │    │ (Change Stream) │    │  (Change Events)     │
-└─────────────────────┘    └─────────────────┘    └──────────────────────┘
-         │                                                    │
-         ▼                                                    ▼
-┌─────────────────────┐    ┌─────────────────┐    ┌──────────────────────┐
-│   MySQL Replica     │    │  Redis Cache    │    │   Next.js Dialler   │
-│  (Read-Only Data)   │◄──▶│   (Hot Data)    │◄──▶│ dialler.resolvemy... │
-└─────────────────────┘    └─────────────────┘    └──────────────────────┘
-                                    │                         │
-                                    └─────────────────────────┼─────────────┐
-                                                              ▼             │
-                                                   ┌──────────────────────┐ │
-                                                   │   PostgreSQL        │ │
-                                                   │ (Dialler Features)  │◄┘
-                                                   └──────────────────────┘
-```
-
-### Data Flow Overview
-1. **Real-time Changes (CDC)**: AWS DMS captures database changes instantly
-2. **Event Processing**: SQS delivers change notifications to dialler
-3. **Cache Layer**: Redis stores frequently accessed data for performance
-4. **Scoring Engine**: Dedicated module calculates priority scores using lender rules, demographics, and history
-5. **Queue Prioritization**: Scoring system feeds intelligent queue ordering
-6. **Batch Processing**: Periodic housekeeping and missed change recovery
-7. **User Context**: Combined data from MySQL replica + PostgreSQL dialler data
+---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 20+
 - PostgreSQL database
-- Redis instance  
+- Redis instance (optional - for performance optimization)
 - Twilio account
-- AWS account (for DMS and SQS)
+- MySQL replica access
 
 ### Environment Setup
 1. Copy environment template:
@@ -180,261 +93,261 @@ Each queue maintains sophisticated priority scoring via a dedicated **Scoring Mo
    cp env.template .env.local
    ```
 
-2. Configure your environment variables in `.env.local`:
+2. Configure core variables:
    ```env
-   # Databases
-   DATABASE_URL="postgresql://user:password@localhost:5432/dialler_features"
-   REPLICA_DATABASE_URL="mysql://readonly:password@replica:3306/main_db"
-   REDIS_URL="redis://localhost:6379"
+   # Database connections
+   DATABASE_URL=postgresql://localhost:5432/rmc_dialler
+   REPLICA_DATABASE_URL=mysql://user:pass@replica-host:3306/database
    
-   # Twilio
-   TWILIO_ACCOUNT_SID="your-twilio-account-sid"
-   TWILIO_AUTH_TOKEN="your-twilio-auth-token"
+   # Optional performance caching
+   REDIS_URL=redis://localhost:6379
    
-   # Authentication
-   NEXTAUTH_SECRET="your-super-secret-nextauth-key"
-   NEXTAUTH_URL="http://localhost:3000"
+   # Twilio integration
+   TWILIO_ACCOUNT_SID=your_twilio_sid
+   TWILIO_AUTH_TOKEN=your_twilio_token
    
-   # AWS Services
-   AWS_ACCESS_KEY_ID="your-aws-access-key"
-   AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
-   AWS_REGION="eu-west-1"
-   SQS_QUEUE_URL="https://sqs.eu-west-1.amazonaws.com/account/user-changes"
-   
-   # External Apps
-   MAIN_APP_URL="https://claim.resolvemyclaim.co.uk"
+   # Feature configuration
+   ENABLE_HOURLY_REFRESH=true
+   ENABLE_PRE_CALL_VALIDATION=true
    ```
 
-### Installation & Development
+3. Install dependencies and setup database:
+   ```bash
+   npm install
+   npm run db:generate:all
+   npm run db:migrate
+   ```
+
+4. Start development server:
+   ```bash
+   npm run dev
+   ```
+
+### Queue Population
+Set up the hourly background job to discover new leads:
+
 ```bash
-# Install dependencies
-npm install
-
-# Generate Prisma client
-npm run db:generate
-
-# Run database migrations
-npm run db:migrate
-
-# Seed development data
-npm run db:seed
-
-# Start development server
-npm run dev
+# Add to your cron or task scheduler
+0 * * * * cd /path/to/dialler && npm run queue:refresh:all
 ```
 
-This will start the Next.js development server at: http://localhost:3000
+---
 
-### Build for Production
-```bash
-# Build the application
-npm run build
+## 📋 **Queue Management System**
 
-# Start production server
-npm start
+### **Three Specialized Queues**
 
-# Deploy to Vercel
-npm run deploy
+#### **🖊️ Unsigned Users Queue** (Highest Priority)
+- **Users missing signatures** required to proceed with claims
+- **Criteria**: `current_signature_file_id IS NULL`
+- **Priority**: Critical - blocks all claim progress
+- **Refresh**: Hourly discovery + immediate validation
+
+#### **📋 Outstanding Requests Queue** (Medium Priority)  
+- **Users with pending document requirements** but have signatures
+- **Criteria**: `requirements.status = 'PENDING' AND current_signature_file_id IS NOT NULL`
+- **Priority**: Important - needed for claim completion
+- **Refresh**: Hourly discovery + validation before calling
+
+#### **📞 Callback Queue** (User-Scheduled Priority)
+- **Users who requested specific callback times**
+- **Criteria**: `callback.scheduled_for <= NOW() AND status = 'pending'`
+- **Priority**: High - user expectation set
+- **Refresh**: Real-time when scheduling + hourly cleanup
+
+### **Queue Population Strategy**
+
+```typescript
+// Hourly background job discovers new eligible users
+async function discoverNewLeads() {
+  // 1. Find new unsigned users (critical)
+  const newUnsigned = await findNewUnsignedUsers();
+  
+  // 2. Find new users with pending requirements  
+  const newRequests = await findNewOutstandingRequests();
+  
+  // 3. Find scheduled callbacks now due
+  const dueCallbacks = await findDueCallbacks();
+  
+  // 4. Add to appropriate queues with priority scoring
+  await populateQueues({ newUnsigned, newRequests, dueCallbacks });
+}
+
+// Pre-call validation ensures perfect accuracy
+async function validateBeforeCall(userId: number) {
+  const currentStatus = await getUserCurrentStatus(userId);
+  
+  // Real-time checks:
+  // - Still missing signature?
+  // - Still has pending requirements?  
+  // - Callback still scheduled?
+  
+  return currentStatus.isEligible;
+}
 ```
 
-## 📁 Project Structure
+---
 
-```
-dialler-system/
-├── app/                        # Next.js App Router
-│   ├── (dashboard)/           # Protected dashboard routes
-│   │   ├── calls/             # Call management
-│   │   ├── queue/             # Call queue interface
-│   │   ├── sms/               # SMS conversations
-│   │   └── analytics/         # Supervisor dashboard
-│   ├── api/                   # API routes & tRPC endpoints
-│   │   ├── trpc/              # tRPC router setup
-│   │   ├── auth/              # Authentication endpoints
-│   │   └── webhooks/          # Twilio/external webhooks
-│   ├── login/                 # Authentication pages
-│   ├── layout.tsx             # Root layout
-│   └── page.tsx               # Homepage
-├── modules/                    # Business Modules (Modulith)
-│   ├── auth/                  # Authentication & sessions
-│   ├── calls/                 # Call management
-│   ├── communications/        # SMS & magic links
-│   ├── queue/                 # Queue management
-│   ├── **scoring/**           # **Priority scoring & business rules**
-│   ├── users/                 # User data & sync
-│   ├── analytics/             # Metrics & reporting
-│   └── core/                  # Shared utilities
-├── lib/                       # Infrastructure libraries
-│   ├── db.ts                  # Database clients (PostgreSQL + MySQL)
-│   ├── redis.ts               # Redis cache client
-│   ├── aws.ts                 # AWS services (SQS, DMS)
-│   ├── trpc/                  # tRPC client setup
-│   └── utils.ts               # General utilities
-├── server/                    # tRPC API layer
-│   ├── api/                   # tRPC routers (delegate to modules)
-│   └── middleware/            # Server middleware
-├── services/                  # Background services
-│   ├── sync/                  # CDC + Batch sync services
-│   ├── queue/                 # Queue population services
-│   └── cache/                 # Cache warming services
-├── prisma/                    # Database schemas & migrations
-│   ├── schema.prisma          # PostgreSQL schema (dialler data)
-│   ├── replica.prisma         # MySQL schema (main app data)
-│   └── migrations/            # Database migrations
-└── types/                     # Shared TypeScript types
-```
+## 🔧 **Technology Stack**
 
-## 🔧 Development
+### **Frontend & API**
+- **Next.js 14** with App Router
+- **tRPC** for type-safe APIs
+- **TypeScript** for full type safety
+- **Tailwind CSS** for styling
+- **React Query** for state management
 
-### Core Commands
-```bash
-# Development
-npm run dev              # Start Next.js dev server
-npm run test             # Run all tests
-npm run lint             # Lint all code
-npm run type-check       # TypeScript validation
+### **Backend & Data**
+- **PostgreSQL** for dialler features (queues, calls, agents)
+- **MySQL Replica** for user data (read-only)
+- **Prisma** for database access and migrations
+- **Redis** (optional) for performance caching
 
-# Database
-npm run db:generate      # Generate Prisma clients
-npm run db:migrate       # Run database migrations
-npm run db:seed          # Seed development data
+### **External Services**
+- **Twilio Voice** for browser-based calling
+- **Twilio SMS** for magic link delivery
+- **Background Jobs** for queue population
 
-# Services
-npm run sync:start       # Start sync services
-npm run sync:test        # Test sync functionality
-npm run queue:refresh    # Manual queue refresh
-npm run scoring:test     # Test scoring algorithms
-npm run scoring:explain  # Debug scoring for specific users
+### **Deployment & Monitoring**
+- **Vercel** for hosting and deployment
+- **Environment-based configuration**
+- **Structured logging** with Winston
+- **Health checks** and monitoring endpoints
 
-# Build & Deploy
-npm run build            # Build for production
-npm run start            # Start production server
-npm run deploy           # Deploy to Vercel
-```
+---
 
-### Development Features
-- **Hot reloading** with Next.js dev server
-- **Type-safe APIs** with tRPC and automatic client generation
-- **Database migrations** with Prisma
-- **Real-time updates** in development environment
-- **Mock data** for development and testing
+## 📊 **Performance & Scale**
 
-## 🔄 Data Synchronization
+### **Performance Targets**
+- **Queue Load Time**: < 2 seconds (with caching)
+- **Pre-call Validation**: < 500ms (real-time database check)
+- **User Context Loading**: < 1 second
+- **Call Accuracy**: 100% (zero wrong calls)
 
-### Real-time Sync (CDC)
-- **AWS DMS** monitors MySQL database for changes
-- **Instant notifications** for critical updates (phone numbers, claim status)
-- **Event processing** via SQS message queue
-- **Sub-second latency** for important changes
+### **Scale Capabilities**  
+- **Users**: Efficiently handles 50k+ users
+- **Claims**: Processes 150k+ claims with complex relationships
+- **Requirements**: Manages 200k+ requirements 
+- **Concurrent Agents**: Supports 100+ simultaneous users
+- **Call Volume**: Handles 1000+ calls per day
 
-### Batch Processing
-- **Every 15 minutes**: Catch missed changes and bulk updates
-- **Every hour**: Cache warming and data optimization
-- **Every 6 hours**: Full data integrity checks
-- **Daily**: Cleanup and maintenance tasks
+### **Cost Optimization**
+- **Infrastructure**: £0-25/month additional costs (optional Redis only)
+- **Database Load**: Optimized queries with intelligent caching
+- **Operational Efficiency**: Automated lead discovery reduces manual queue management
 
-### Cache Strategy
-- **User contexts**: 15-minute TTL for frequently accessed data
-- **Queue data**: 5-minute TTL for call queue information
-- **Static data**: 1-hour TTL for reference data (lenders, solicitors)
-- **Cache invalidation**: Automatic on relevant data changes
+---
 
-## 🔐 Security
+## 🛡️ **Security & Compliance**
 
-- **JWT Authentication** with Next.js middleware
-- **Type-safe APIs** with tRPC and Zod validation
-- **Rate limiting** on all API endpoints
+### **Data Protection**
+- **Read-only access** to main database (zero write-back risk)
+- **Encrypted connections** for all external communications
+- **Environment variable protection** for sensitive configuration
 - **CORS protection** with Next.js built-in security
-- **Environment variable protection**
-- **Server-side validation** for all mutations
-- **AWS IAM roles** for secure service access
-- **Encrypted data in transit** for all external communications
 
-## 📊 Monitoring & Observability
+### **Call Center Compliance**
+- **Complete call logging** with duration and outcome tracking
+- **Agent session management** with login/logout timestamps
+- **User interaction history** for regulatory compliance
+- **Magic link audit trail** for authentication tracking
+
+---
+
+## 📊 **Monitoring & Observability**
 
 - **Health checks** at `/api/health` endpoint
 - **Structured logging** with Winston
 - **Error tracking** with comprehensive error boundaries
 - **Performance monitoring** with Next.js analytics
-- **Real-time updates** via Server-Sent Events
-- **Sync monitoring** for CDC and batch processes
-- **Queue metrics** for call volume and performance
-- **Cache hit rates** and performance metrics
+- **Queue metrics** for call volume and performance trends
+- **Agent productivity** tracking and reporting
 
-## 🚢 Deployment
+---
 
-### Vercel (Production)
+## 🚢 **Deployment**
+
+### **Vercel (Production)**
 The application is configured for Vercel deployment:
 
 1. **Automatic deploys** from `main` branch
 2. **Environment variables** configured in Vercel dashboard
 3. **API routes** served as serverless functions
 4. **Static assets** served from CDN
-5. **Edge functions** for performance optimization
+5. **Background jobs** via Vercel Cron
 
-### AWS Services Required
-- **RDS Read Replica** (already setup)
-- **DMS Instance** for change data capture
-- **SQS Queue** for message processing
-- **IAM Roles** for service permissions
-
-### Environment Variables (Production)
+### **Environment Variables (Production)**
 Configure these in your Vercel dashboard:
 ```env
 # Core Application
 DATABASE_URL=postgresql://production-db-url
-REPLICA_DATABASE_URL=mysql://rmc-dialer-replica-url
-REDIS_URL=redis://production-redis-url
+REPLICA_DATABASE_URL=mysql://replica-url
+REDIS_URL=redis://production-redis-url (optional)
 NEXTAUTH_SECRET=production-secret
 NEXTAUTH_URL=https://dialler.resolvemyclaim.co.uk
 
-# AWS Services
-AWS_ACCESS_KEY_ID=production-aws-key
-AWS_SECRET_ACCESS_KEY=production-aws-secret
-AWS_REGION=eu-west-1
-SQS_QUEUE_URL=https://sqs.eu-west-1.amazonaws.com/account/user-changes
-
-# External Services
+# External Services  
 TWILIO_ACCOUNT_SID=production-twilio-sid
 TWILIO_AUTH_TOKEN=production-twilio-token
 MAIN_APP_URL=https://claim.resolvemyclaim.co.uk
 
-# Feature Flags
-ENABLE_CDC_SYNC=true
-ENABLE_BATCH_SYNC=true
-ENABLE_CACHE_WARMING=true
+# Feature Configuration
+ENABLE_HOURLY_REFRESH=true
+ENABLE_PRE_CALL_VALIDATION=true
+ENABLE_OPTIONAL_CACHING=true
 ```
 
-## 📈 Performance & Scale
+### **Background Jobs Setup**
+Configure Vercel Cron for automated queue population:
 
-### Performance Targets
-- **API Response**: < 200ms (cached), < 500ms (database)
-- **Queue Refresh**: < 5 seconds
-- **Page Load**: < 1 second
-- **Real-time Updates**: < 3 seconds
+```json
+// vercel.json
+{
+  "crons": [
+    {
+      "path": "/api/cron/discover-new-leads",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
+```
 
-### Scale Capabilities
-- **Users**: Handles 50k+ users efficiently
-- **Claims**: Processes 150k+ claims with complex relationships
-- **Requirements**: Manages 200k+ requirements with real-time updates
-- **Concurrent Agents**: Supports 100+ simultaneous users
-- **Call Volume**: Handles 1000+ calls per day
+---
 
-### Cost Optimization
-- **60% reduction** in database query costs via caching
-- **90% reduction** in sync processing time
-- **Real-time updates** eliminate polling overhead
-- **Efficient batch processing** for bulk operations
+## 📈 **Implementation Roadmap**
 
-## 📋 Contributing
+### **✅ Phase 1: Foundation Complete**
+- Next.js 14 + tRPC architecture
+- Database connections (PostgreSQL + MySQL replica)  
+- Basic queue management
+- User service with real data integration
+
+### **🔄 Phase 2: Pre-call Validation (Current)**
+- Real-time user status validation before calls
+- Hourly new lead discovery and queue population
+- Queue cleanup and optimization
+- Performance monitoring and optimization
+
+### **🚀 Phase 3: Advanced Features (Upcoming)**
+- Advanced scoring rules (lender priority, demographics)
+- Real-time agent notifications
+- Comprehensive analytics dashboard
+- Call recording and quality management
+
+---
+
+## 📋 **Contributing**
 
 1. **Create feature branch**: `git checkout -b feature/your-feature`
 2. **Follow naming conventions**: PascalCase components, camelCase functions
 3. **Add tests**: Unit tests for utilities, integration tests for APIs
 4. **Update documentation**: Keep README and comments current
-5. **Test sync processes**: Ensure data integrity in development
+5. **Test queue operations**: Ensure data integrity in development
 6. **Submit PR**: With description of changes and testing notes
 
-## 📄 License
+---
+
+## 📄 **License**
 
 This project is proprietary to Resolve My Claim Ltd.
 

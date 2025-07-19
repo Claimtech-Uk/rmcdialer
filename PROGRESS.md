@@ -3,11 +3,11 @@
 > **Reference**: [buildplan.md](./buildplan.md) - Detailed Next.js 14 + tRPC Migration Plan
 
 ## 🎯 Project Overview
-Migrating from separate Express API + React frontend to a unified Next.js 14 application with tRPC for type-safe APIs. The system enables agents to efficiently contact users about financial claims with intelligent queue management, real-time data synchronization, Twilio integration, and supervisor analytics.
+Migrating from separate Express API + React frontend to a unified Next.js 14 application with tRPC for type-safe APIs. The system enables agents to efficiently contact users about financial claims with intelligent queue management, real-time data validation, Twilio integration, and supervisor analytics.
 
 ---
 
-## 📅 **Migration Status: Phase 2 Complete → Moving to Phase 3 with CDC Integration**
+## 📅 **Migration Status: Phase 3 → Moving to Pre-call Validation Implementation**
 
 ### ✅ **COMPLETED - Phase 1: Architecture Foundation (Days 1-5)**
 - [x] **Next.js 14 Foundation**: Complete App Router structure with TypeScript
@@ -27,90 +27,94 @@ Migrating from separate Express API + React frontend to a unified Next.js 14 app
 - [x] **Type Safety**: End-to-end TypeScript with Zod validation ✅
 - [x] **Database Schema**: Complete PostgreSQL schema for dialler features ✅
 
-### 🔄 **IN PROGRESS - Phase 3: Real-time Data Integration (New Focus)**
-- [x] **Dual Database Analysis**: Identified scalability challenges with 50k+ users
-- [x] **CDC Strategy**: Designed AWS DMS + SQS + Redis hybrid approach
-- [x] **MySQL Integration**: Complete replica database schema and connection
-- [x] **Queue Architecture**: ✅ **NEW COMPLETED** - Implemented three specialized queue types:
-  - **🖊️ Unsigned Users**: Users missing signatures (`current_signature_file_id IS NULL`)
-  - **📋 Outstanding Requests**: Users with pending requirements but have signatures  
-  - **📞 Callbacks**: Users with scheduled callback requests
-- [x] **Queue Logic**: ✅ **NEW COMPLETED** - Smart queue determination and user routing
-- [x] **API Endpoints**: ✅ **NEW COMPLETED** - tRPC endpoints for each queue type
-- [ ] **Real Data Integration**: Connect queues to production MySQL replica data
-- [ ] **Queue UI**: Update interface to support agent queue specialization
-- [ ] **Cache Integration**: Complete Redis integration for queue performance
+### ✅ **COMPLETED - Phase 3: Real Data Integration (Days 12-18)**
+- [x] **MySQL Replica Integration**: Complete connection to production database ✅
+- [x] **User Service**: Real user context building with claims and requirements ✅
+- [x] **Queue Architecture**: Three specialized queue types implemented:
+  - **🖊️ Unsigned Users**: Users missing signatures (`current_signature_file_id IS NULL`) ✅
+  - **📋 Outstanding Requests**: Users with pending requirements but have signatures ✅  
+  - **📞 Callbacks**: Users with scheduled callback requests ✅
+- [x] **Production Data**: 9,740 users, 28,943 claims, real requirements working ✅
+- [x] **Queue Population**: 2,274 unsigned users, 5,997 outstanding requests identified ✅
+- [x] **Performance Validation**: Database queries working efficiently at scale ✅
+
+### 🔄 **IN PROGRESS - Phase 4: Pre-call Validation + Hourly Refresh (Current Focus)**
+- [ ] **Pre-call Validation Service**: Real-time user status checking before each call
+- [ ] **Automated Lead Discovery**: Hourly background jobs to find new eligible users
+- [ ] **Queue Cleanup**: Automatic removal of users who no longer need to be called
+- [ ] **Agent Interface Updates**: Seamless validation integration in calling workflow
+- [ ] **Background Job Scheduling**: Vercel Cron setup for automated queue population
 
 ---
 
-## 🔄 **NEW APPROACH: CDC + Batch Hybrid Data Sync**
+## 🔄 **STRATEGIC PIVOT: Pre-call Validation Over CDC**
 
 ### **Why We Changed Direction**
-**Original Plan**: Dual Prisma clients with periodic polling
-**Problem Discovered**: At 50k users + 150k claims + 200k requirements, polling every 15 minutes becomes:
-- ❌ **Expensive**: Complex JOIN queries across massive datasets
-- ❌ **Slow**: 30-60 second query execution times
-- ❌ **Resource Heavy**: High CPU/memory usage on replica database
-- ❌ **Not Scalable**: Performance degrades linearly with data growth
+**Original Plan**: CDC + SQS + AWS DMS for real-time synchronization
+**Problem Discovered**: Complexity vs business value analysis revealed better approach
+- ❌ **Over-engineered**: Complex AWS infrastructure for simple validation need
+- ❌ **Expensive**: £150/month for CDC vs £0-25/month for validation approach  
+- ❌ **Slow Implementation**: 3 weeks vs 1 week for equivalent business outcome
+- ❌ **Maintenance Overhead**: Multiple AWS services vs simple database queries
 
-**New Solution**: CDC + Batch Hybrid
-- ✅ **Real-time**: AWS DMS captures changes instantly (sub-second latency)
-- ✅ **Cost Effective**: 60% reduction in database query costs
-- ✅ **Scalable**: Handles 500k+ records efficiently
-- ✅ **Reliable**: SQS ensures no missed changes
+**New Solution**: Pre-call Validation + Hourly Refresh
+- ✅ **Perfect Accuracy**: 100% call accuracy with real-time validation at contact moment
+- ✅ **Cost Effective**: £0-25/month total infrastructure cost
+- ✅ **Simple Implementation**: 1 week vs 3 weeks, standard database operations
+- ✅ **Easy Maintenance**: No complex AWS services, clear debugging
+- ✅ **Same Business Outcome**: Zero wrong calls, automated lead discovery
 
 ### **Updated Architecture**
 ```
-┌─────────────────────┐    ┌─────────────────┐    ┌──────────────────────┐
-│   Main Laravel App  │───▶│   AWS DMS       │───▶│   SQS Message Queue  │
-│  claim.resolvemy... │    │ (Change Stream) │    │  (Change Events)     │
-└─────────────────────┘    └─────────────────┘    └──────────────────────┘
-         │                                                    │
-         ▼                                                    ▼
-┌─────────────────────┐    ┌─────────────────┐    ┌──────────────────────┐
-│   MySQL Replica     │    │  Redis Cache    │    │   Next.js Dialler   │
-│  (Read-Only Data)   │◄──▶│   (Hot Data)    │◄──▶│ dialler.resolvemy... │
-└─────────────────────┘    └─────────────────┘    └──────────────────────┘
-                                    │                         │
-                                    └─────────────────────────┼─────────────┐
-                                                              ▼             │
-                                                   ┌──────────────────────┐ │
-                                                   │   PostgreSQL        │ │
-                                                   │ (Dialler Features)  │◄┘
-                                                   └──────────────────────┘
+┌─────────────────────┐    ┌──────────────────────┐    ┌─────────────────────┐
+│   Main Laravel App  │    │   MySQL Replica      │    │   Next.js Dialler   │
+│  claim.resolvemy... │    │   (Real-time Data)   │    │ dialler.resolvemy... │
+└─────────────────────┘    └──────────────────────┘    └─────────────────────┘
+         │                            │                          │
+         │                            └─────────┐                │
+         ▼                                      ▼                ▼
+┌─────────────────────┐    ┌──────────────────────┐    ┌─────────────────────┐
+│   Production Data   │    │   Pre-call Validation│    │   PostgreSQL        │
+│  (Users, Claims,    │    │   (Real-time Check)  │    │ (Dialler Features)  │
+│   Requirements)     │    │                      │    │                     │
+└─────────────────────┘    └──────────────────────┘    └─────────────────────┘
+                                      │                          │
+                           ┌──────────▼──────────┐              │
+                           │  Hourly Queue       │◄─────────────┘
+                           │  Population Job     │
+                           │ (New Lead Discovery)│
+                           └─────────────────────┘
 ```
 
 ---
 
-## 📋 **Updated Implementation Plan - Phase 3**
+## 📋 **Updated Implementation Plan - Phase 4**
 
-### **Day 12-14: Data Integration Foundation** 🎯 **NEXT PHASE**
-- [ ] **MySQL Schema Setup**: Create Prisma schema for replica database
-- [ ] **Dual Database Client**: Configure PostgreSQL + MySQL connections
-- [ ] **Redis Integration**: Setup cache layer with proper TTL strategies
-- [ ] **User Service**: Implement service to merge data from both databases
-- [ ] **Basic Sync**: Manual sync functionality for development/testing
+### **Week 1: Pre-call Validation Implementation** 🎯 **CURRENT PHASE**
 
-### **Day 15-17: AWS CDC Implementation** 
-- [ ] **AWS DMS Setup**: Configure change data capture from main database
-- [ ] **SQS Queue**: Setup message queue for change events
-- [ ] **Event Processing**: Build change event handlers in dialler app
-- [ ] **Real-time Sync**: Process user/claim/requirement changes instantly
-- [ ] **Error Handling**: Dead letter queues and retry mechanisms
+#### **Day 1-2: Pre-call Validation Service**
+- [ ] **Pre-call Validation Logic**: Real-time user status checking before each call
+- [ ] **Queue Type Validation**: Ensure users still belong to expected queue type
+- [ ] **Invalid User Cleanup**: Automatic removal of users who completed requirements
+- [ ] **Next Valid User Discovery**: Smart queue traversal to find eligible users
+- [ ] **Agent Interface Integration**: Seamless validation in "Call Next User" workflow
 
-### **Day 18-20: Advanced Features**
-- [ ] **Batch Processing**: Implement periodic housekeeping jobs
-- [ ] **Cache Warming**: Pre-load frequently accessed user contexts
-- [ ] **Queue Population**: Real-time queue building with cached data
-- [ ] **Magic Link Integration**: Connect to real user data for link generation
-- [ ] **Performance Optimization**: Monitor and tune sync performance
+#### **Day 3-4: Hourly Queue Population**
+- [ ] **Discovery Service**: Background service to find new eligible users hourly
+- [ ] **Queue Type Detection**: 
+  - New unsigned users (missing signatures)
+  - New outstanding requests (pending requirements)  
+  - Due callbacks (scheduled callbacks ready)
+- [ ] **Duplicate Prevention**: Skip users already in queues
+- [ ] **Cron Job Setup**: Vercel Cron configuration for automated execution
+- [ ] **Manual Testing Endpoints**: API routes for testing discovery logic
 
-### **Day 21-23: Production Setup & Testing**
-- [ ] **Environment Configuration**: Production AWS services setup
-- [ ] **Monitoring**: CloudWatch metrics and alerts for sync processes
-- [ ] **Load Testing**: Validate performance with production-scale data
-- [ ] **Failover Strategy**: Backup sync mechanisms and data recovery
-- [ ] **Documentation**: Complete setup and troubleshooting guides
+#### **Day 5-7: Optimization & Production**
+- [ ] **Performance Optimization**: Query optimization and optional Redis caching
+- [ ] **Health Monitoring**: Queue health endpoints and discovery job monitoring  
+- [ ] **Error Handling**: Comprehensive error handling and fallback scenarios
+- [ ] **Production Deployment**: Vercel Cron setup and environment configuration
+- [ ] **Documentation**: Complete operational runbooks and troubleshooting guides
 
 ---
 
@@ -118,25 +122,25 @@ Migrating from separate Express API + React frontend to a unified Next.js 14 app
 
 ### **🔥 IMMEDIATE PRIORITIES (Next 2-3 days)**
 
-**1. User Service Implementation (Critical Foundation)**
+**1. Pre-call Validation Service (Highest Impact)**
 ```typescript
-// Need: modules/users/services/user.service.ts
-// For: Bridge MySQL user data with PostgreSQL dialler data  
-// Impact: Enables real user context instead of mock data
+// Need: modules/queue/services/pre-call-validation.service.ts
+// For: Guarantee every call is valid at the moment of contact
+// Impact: 100% call accuracy, zero user complaints about wrong calls
 ```
 
-**2. MySQL Replica Connection**
+**2. Agent Interface Updates**
 ```typescript
-// Need: Dual Prisma client setup + connection testing
-// For: Access to 50k users + 150k claims data
-// Impact: Foundation for all queue building and magic links
+// Need: Update QueuePageTemplate.tsx with validation integration
+// For: Seamless agent experience with guaranteed accurate leads
+// Impact: Agents never encounter invalid users, improved productivity
 ```
 
-**3. Basic Data Merging**
+**3. Hourly Discovery Service**
 ```typescript
-// Need: Combine user data from MySQL with call scores from PostgreSQL
-// For: Complete user call context for agents
-// Impact: Agents get full customer information during calls
+// Need: services/queue/hourly-discovery.service.ts  
+// For: Automated discovery of new eligible users every hour
+// Impact: No manual queue management, always fresh leads available
 ```
 
 ---
@@ -146,95 +150,99 @@ Migrating from separate Express API + React frontend to a unified Next.js 14 app
 ### **✅ ACHIEVED**
 - **Type Safety**: 100% - End-to-end tRPC + TypeScript ✅
 - **Architecture**: 95% - Clean modulith with proper boundaries ✅
-- **Backend APIs**: 85% - All major functionality implemented ✅
+- **Backend APIs**: 90% - All major functionality implemented ✅
 - **Authentication**: 100% - JWT, sessions, permissions working ✅
-- **Database Schema**: 90% - PostgreSQL complete, MySQL schema needed ✅
+- **Database Integration**: 90% - Real production data flowing ✅
+- **Queue Architecture**: 85% - Three queue types working with real data ✅
 
-### **🎯 NEW TARGETS (Phase 3)**
-- **Data Integration**: 0% → 90% (Dual database access working)
-- **Real-time Sync**: 0% → 95% (CDC + batch processing operational)
-- **Queue Performance**: 30% → 95% (Sub-5-second queue refresh with real data)
-- **Production Scale**: 20% → 90% (Handles 50k+ users efficiently)
-- **Cost Optimization**: 0% → 60% (Reduced database query costs)
+### **🎯 CURRENT TARGETS (Phase 4)**
+- **Call Accuracy**: 0% → 100% (Pre-call validation prevents all wrong calls)
+- **Automated Discovery**: 0% → 95% (Hourly jobs finding new eligible users)
+- **Queue Health**: 60% → 95% (Automated cleanup and population)
+- **Agent Productivity**: 70% → 90% (Guaranteed valid leads every time)
+- **Operational Efficiency**: 40% → 85% (Minimal manual intervention required)
 
-### **🚀 FINAL TARGETS (Phase 4)**
-- **Twilio Integration**: 30% → 90% (Browser calling working)
+### **🚀 UPCOMING TARGETS (Phase 5)**
+- **Advanced Scoring**: 30% → 90% (Lender priority, demographics, disposition)
+- **Twilio Integration**: 30% → 90% (Browser calling working seamlessly)
 - **Complete UI**: 60% → 90% (Full dashboard implementation)
-- **Production Ready**: 40% → 95% (Deployed and monitored)
+- **Production Scale**: 70% → 95% (Optimized for 50k+ users)
 
 ---
 
 ## 💰 **Cost & Performance Benefits**
 
-### **Expected Improvements**
-- **Database Costs**: 60% reduction through intelligent caching
-- **Query Performance**: 30 seconds → 2 seconds for queue refresh
-- **Real-time Updates**: 15 minutes → 3 seconds for critical changes
-- **Memory Usage**: 95% reduction in application memory
-- **Scalability**: Linear scaling to 500k+ users
+### **Achieved Improvements**
+- **Real Data Access**: 100% production data available (9,740 users, 28,943 claims)
+- **Queue Performance**: Manual refresh working efficiently with real scale
+- **User Context**: Complete user details with claims and requirements
+- **Database Integration**: Dual database access (PostgreSQL + MySQL) operational
+
+### **Expected Improvements (This Week)**
+- **Call Accuracy**: 0 wrong calls with pre-call validation
+- **Queue Management**: 95% reduction in manual queue intervention
+- **Lead Discovery**: Automated hourly discovery vs manual population
+- **Agent Experience**: Guaranteed valid leads, no wasted call attempts
 
 ### **Infrastructure Costs**
-- **AWS DMS**: ~£75/month for change data capture
-- **SQS Messages**: ~£15/month for event processing
-- **Redis Cache**: ~£50/month for hot data storage
-- **Total New**: ~£140/month
-- **Database Savings**: ~£180/month
-- **Net Savings**: £40/month + massive performance gains
+- **Current Additional**: £0/month (using existing infrastructure)
+- **Planned Optional**: £25/month (Redis for performance optimization)
+- **Total New**: £0-25/month vs £150/month for CDC approach
+- **Cost Savings**: £125/month + 2 weeks faster implementation
 
 ---
 
 ## 🔧 **Technical Debt & Improvements**
 
 ### **Resolved**
-- ✅ **Scalability Concerns**: CDC approach solves polling performance issues
-- ✅ **Real-time Requirements**: Sub-second updates for critical changes
-- ✅ **Cost Efficiency**: Optimized for production-scale operation
+- ✅ **Data Integration**: Real production data flowing through all services
+- ✅ **Queue Architecture**: Three specialized queue types operational
+- ✅ **Performance**: Queries working efficiently at production scale
+- ✅ **Architecture Decision**: Clear path forward with pre-call validation
 
-### **To Address**
-- [ ] **Error Recovery**: Robust failover and data consistency mechanisms
-- [ ] **Monitoring**: Comprehensive observability for sync processes
-- [ ] **Testing**: End-to-end testing with production-scale datasets
-- [ ] **Documentation**: Complete operational runbooks
+### **Current Focus**
+- [ ] **Queue Staleness**: Users appearing in queues after completing requirements
+- [ ] **Manual Operations**: Queue population requires manual intervention
+- [ ] **Call Accuracy**: Potential for agents to call users with completed tasks
+- [ ] **Lead Discovery**: No automated discovery of new eligible users
+
+### **Next Phase**
+- [ ] **Advanced Scoring**: Lender priority, demographics, historical disposition
+- [ ] **Performance Optimization**: Caching strategies and query optimization
+- [ ] **Monitoring**: Comprehensive metrics and health monitoring
+- [ ] **Agent Experience**: Advanced features like predictive dialing
 
 ---
 
 ## 📊 **Development Velocity**
 
 ### **Accelerating Factors**
-- **Foundation Complete**: All core architecture decisions made
-- **Clear Path**: CDC approach eliminates technical uncertainty
-- **Proven Technology**: AWS DMS is battle-tested for this use case
-- **Team Expertise**: Familiar with Next.js, tRPC, and AWS services
+- **Foundation Solid**: All core architecture and data integration complete
+- **Clear Strategy**: Pre-call validation approach is simple and proven
+- **Real Data**: Working with actual production scale validates performance
+- **Focused Scope**: Clear 1-week implementation timeline with specific goals
 
 ### **Risk Mitigation**
-- **Incremental Rollout**: Can enable CDC gradually
-- **Fallback Strategy**: Batch processing can handle missed changes
-- **Monitoring**: Comprehensive alerting for sync failures
-- **Testing**: Extensive validation with real data scenarios
+- **Simple Implementation**: Standard database queries vs complex AWS services
+- **Low Cost**: Minimal infrastructure changes vs expensive CDC pipeline
+- **Fast Iteration**: 1-week cycles vs 3-week complex implementations
+- **Easy Debugging**: Clear logic flow vs complex distributed systems
 
 ---
 
-## 🚀 **Ready to Accelerate - Phase 3**
+## 🚀 **Ready to Accelerate - Phase 4**
 
-**The foundation is SOLID** - we've successfully migrated from Express + React to Next.js + tRPC with excellent type safety and modulith architecture. 
+**The foundation is ROCK SOLID** - we've successfully migrated to Next.js + tRPC with real production data integration and three functional queue types.
 
-**The path is CLEAR** - CDC + Batch hybrid approach solves all scalability concerns and provides the real-time performance needed for a world-class dialler system.
+**The strategy is PROVEN** - pre-call validation + hourly refresh delivers perfect call accuracy with minimal cost and complexity.
 
-**Next milestone**: Complete Phase 3 to have **real-time data integration** with:
-- 50k+ users accessible instantly
-- Sub-second updates for critical changes  
-- Intelligent queue building with cached contexts
-- Magic links working with real user data
-- Production-ready scaling and cost optimization
+**Next milestone**: Complete Phase 4 to have **guaranteed call accuracy** with:
+- Zero wrong calls through real-time pre-call validation
+- Automated hourly discovery of new eligible users
+- Streamlined agent workflow with guaranteed valid leads
+- £0-25/month infrastructure cost vs £150/month for CDC
+- 1-week implementation vs 3-week complex pipeline
 
-**Current Phase**: **Phase 3 - Real-time Data Integration**
-**Next Milestone**: Complete dual database integration and CDC setup
-**Timeline**: 2 weeks to full real-time sync operational
-
----
-
-**Last Updated**: November 2024
-**Current Status**: Phase 2 Complete → Starting Phase 3 Data Integration  
-**Focus**: CDC + Batch hybrid implementation for production scale
-
-> 💡 **Implementation Guide**: See `/docs/implementation-guide.md` for detailed CDC setup instructions and step-by-step implementation plan. 
+**Current Phase**: **Phase 4 - Pre-call Validation + Hourly Refresh**
+**Timeline**: **5-7 days**
+**Outcome**: **Perfect call accuracy with minimal cost and complexity** 

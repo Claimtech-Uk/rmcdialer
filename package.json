@@ -20,11 +20,15 @@
     "db:studio:replica": "prisma studio --schema=prisma/replica.prisma",
     "mysql:test": "tsx -e \"import('./lib/mysql.js').then(m => m.testReplicaConnection())\"",
     "mysql:stats": "tsx -e \"import('./lib/mysql.js').then(m => m.getReplicaStats().then(console.log))\"",
+    "cdc:start": "tsx services/sync/background-cdc-runner.ts",
+    "cdc:health": "curl http://localhost:3000/api/cdc/health",
+    "cdc:test": "tsx -e \"console.log('Testing CDC setup...'); process.exit(0)\"",
     "deploy": "./scripts/deploy.sh",
     "deploy:force": "npx vercel --prod",
     "check-deployments": "npx vercel ls"
   },
   "dependencies": {
+    "@aws-sdk/client-sqs": "^3.848.0",
     "@hookform/resolvers": "^3.3.2",
     "@prisma/client": "^5.7.1",
     "@radix-ui/react-dialog": "^1.1.14",

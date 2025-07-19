@@ -1,810 +1,757 @@
-# 📋 Implementation Guide: CDC + Batch Hybrid Data Sync
+# 📋 Implementation Guide: Pre-call Validation + Hourly Refresh
 
-This guide provides step-by-step instructions to implement the CDC + Batch hybrid approach for real-time data synchronization between the main Laravel application and the Next.js dialler system.
+This guide provides step-by-step instructions to implement the **pre-call validation + hourly refresh** approach for real-time data accuracy in the Next.js dialler system.
 
 ## 🎯 **Overview**
 
 ### **Current State**
-- ✅ **Next.js Dialler App**: Running with tRPC, PostgreSQL, mock data
-- ✅ **AWS RDS Replica**: MySQL read replica of main database available
-- ❌ **Data Integration**: Not connected - using mock data for development
+- ✅ **Next.js Dialler App**: Running with tRPC, PostgreSQL, real data integration
+- ✅ **MySQL Replica**: Connected and providing real user/claim data
+- ✅ **Three Queue Types**: Unsigned users, outstanding requests, callbacks working
+- ❌ **Queue Staleness**: Users may appear in queues after completing requirements
 
 ### **Target State**
-- ✅ **Real-time Sync**: Changes from main app appear in dialler within 3 seconds
-- ✅ **Scale Ready**: Handles 50k+ users, 150k+ claims efficiently  
-- ✅ **Cost Optimized**: 60% reduction in database query costs
-- ✅ **Production Ready**: Monitoring, error handling, failover mechanisms
+- ✅ **Zero Wrong Calls**: Pre-call validation ensures 100% accuracy at contact moment
+- ✅ **Automated Lead Discovery**: Hourly background jobs find new eligible users
+- ✅ **Cost Effective**: £0-25/month additional infrastructure costs
+- ✅ **Simple Operations**: Standard database queries and background jobs
 
 ---
 
-## 📅 **Implementation Timeline: 4 Weeks**
+## 📅 **Implementation Timeline: 1 Week**
 
-### **Week 1: Foundation (Days 1-7)**
-- **Days 1-2**: MySQL connection and User Service
-- **Days 3-4**: Basic data merging and testing
-- **Days 5-7**: Cache layer and performance optimization
-
-### **Week 2: CDC Implementation (Days 8-14)**
-- **Days 8-9**: AWS DMS setup and configuration
-- **Days 10-11**: SQS message queue and event processing
-- **Days 12-14**: Real-time sync and error handling
-
-### **Week 3: Scoring System (Days 15-21)**
-- **Days 15-16**: Scoring module architecture and setup
-- **Days 17-18**: Priority scoring rules and lender logic
-- **Days 19-21**: User demographics and historical data integration
-
-### **Week 4: Production Ready (Days 22-28)**
-- **Days 22-23**: Batch processing and housekeeping
-- **Days 24-25**: Monitoring and alerting
-- **Days 26-28**: Load testing and production deployment
+### **Day 1-2: Pre-call Validation Service**
+### **Day 3-4: Hourly Queue Population**
+### **Day 5-7: Optimization & Monitoring**
 
 ---
 
-## 📋 **Phase 1: Foundation Setup (Week 1)**
+## 📋 **Phase 1: Pre-call Validation (Days 1-2)**
 
-### **Step 1: MySQL Database Connection** 
-**Complexity**: 🟡 Medium | **Location**: Dialler App | **Time**: 1 day
+### **Step 1: Pre-call Validation Service**
+**Complexity**: 🟢 Low | **Location**: Dialler App | **Time**: 1 day
 
 #### **What to Build**
 ```typescript
-// lib/mysql.ts - NEW FILE
-import { PrismaClient } from '@prisma/mysql-client'
+// modules/queue/services/pre-call-validation.service.ts - NEW FILE
+import { replicaDb } from '@/lib/mysql';
+import { prisma } from '@/lib/db';
+import type { QueueType } from '../types/queue.types';
 
-const globalForReplicaDb = globalThis as unknown as {
-  replicaDb: PrismaClient | undefined
+export interface PreCallValidationResult {
+  isValid: boolean;
+  reason?: string;
+  currentQueueType?: QueueType | null;
+  userStatus: {
+    hasSignature: boolean;
+    pendingRequirements: number;
+    hasScheduledCallback: boolean;
+    isEnabled: boolean;
+  };
 }
 
-export const replicaDb = globalForReplicaDb.replicaDb ?? new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.REPLICA_DATABASE_URL
+export class PreCallValidationService {
+  /**
+   * Validate user is still eligible for calling RIGHT NOW
+   * This is called immediately before agent dials the number
+   */
+  async validateUserForCall(userId: number, expectedQueueType: QueueType): Promise<PreCallValidationResult> {
+    try {
+      // 1. Get current user state from MySQL replica (real-time)
+      const userData = await replicaDb.user.findUnique({
+        where: { id: BigInt(userId) },
+        include: {
+          claims: {
+            include: {
+              requirements: {
+                where: { status: 'PENDING' }
+              }
+            }
+          }
+        }
+      });
+
+      if (!userData || !userData.is_enabled) {
+        return {
+          isValid: false,
+          reason: 'User not found or disabled',
+          userStatus: {
+            hasSignature: false,
+            pendingRequirements: 0,
+            hasScheduledCallback: false,
+            isEnabled: false
+          }
+        };
+      }
+
+      // 2. Check for scheduled callback from PostgreSQL
+      const scheduledCallback = await prisma.callback.findFirst({
+        where: {
+          userId: BigInt(userId),
+          status: 'pending',
+          scheduledFor: { lte: new Date() }
+        }
+      });
+
+      // 3. Determine current eligibility
+      const hasSignature = userData.current_signature_file_id !== null;
+      const pendingRequirements = userData.claims.reduce((acc, claim) => 
+        acc + claim.requirements.length, 0
+      );
+
+      const userStatus = {
+        hasSignature,
+        pendingRequirements,
+        hasScheduledCallback: !!scheduledCallback,
+        isEnabled: userData.is_enabled
+      };
+
+      // 4. Determine current queue type
+      let currentQueueType: QueueType | null = null;
+      
+      if (scheduledCallback) {
+        currentQueueType = 'callback';
+      } else if (!hasSignature) {
+        currentQueueType = 'unsigned_users';
+      } else if (pendingRequirements > 0) {
+        currentQueueType = 'outstanding_requests';
+      }
+
+      // 5. Validate against expected queue type
+      const isValid = currentQueueType === expectedQueueType;
+
+      return {
+        isValid,
+        reason: isValid ? undefined : `User moved from ${expectedQueueType} to ${currentQueueType || 'none'}`,
+        currentQueueType,
+        userStatus
+      };
+
+    } catch (error) {
+      console.error(`Pre-call validation failed for user ${userId}:`, error);
+      return {
+        isValid: false,
+        reason: 'Validation error - please try another user',
+        userStatus: {
+          hasSignature: false,
+          pendingRequirements: 0,
+          hasScheduledCallback: false,
+          isEnabled: false
+        }
+      };
     }
-  },
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error'] : ['error']
-})
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForReplicaDb.replicaDb = replicaDb
-}
-```
-
-#### **Tasks**
-1. **Create MySQL Prisma Schema**
-   ```bash
-   # Create new schema file
-   touch prisma/replica.prisma
-   ```
-
-2. **Define MySQL Schema** (based on main app tables)
-   ```prisma
-   // prisma/replica.prisma
-   generator client {
-     provider = "prisma-client-js"
-     output   = "./generated/mysql-client"
-   }
-
-   datasource db {
-     provider = "mysql"
-     url      = env("REPLICA_DATABASE_URL")
-   }
-
-   model User {
-     id                      BigInt   @id
-     first_name              String?  @map("first_name")
-     last_name               String?  @map("last_name")
-     email                   String?
-     phone_number            String?  @map("phone_number")
-     status                  String?
-     is_enabled              Boolean? @map("is_enabled")
-     introducer              String?
-     solicitor               String?
-     current_user_address_id String?  @map("current_user_address_id")
-     last_login              DateTime? @map("last_login")
-     created_at              DateTime @map("created_at")
-     updated_at              DateTime @map("updated_at")
-
-     claims                  Claim[]
-     address                 UserAddress? @relation(fields: [current_user_address_id], references: [id])
-
-     @@map("users")
-   }
-
-   model Claim {
-     id                      BigInt    @id
-     user_id                 BigInt    @map("user_id")
-     type                    String?
-     status                  String?
-     lender                  String?
-     solicitor               String?
-     client_last_updated_at  DateTime? @map("client_last_updated_at")
-     created_at              DateTime  @map("created_at")
-     updated_at              DateTime  @map("updated_at")
-
-     user                    User      @relation(fields: [user_id], references: [id])
-     requirements            ClaimRequirement[]
-     vehiclePackages         ClaimVehiclePackage[]
-
-     @@map("claims")
-   }
-
-   // ... additional models for requirements, addresses, vehicle packages
-   ```
-
-3. **Generate MySQL Client**
-   ```bash
-   npx prisma generate --schema=prisma/replica.prisma
-   ```
-
-4. **Test Connection**
-   ```typescript
-   // Test connection to replica database
-   await replicaDb.user.findFirst()
-   ```
-
-#### **Environment Variables**
-```env
-REPLICA_DATABASE_URL="mysql://readonly:password@rmc-dialer-replica.cluster-xyz.eu-west-1.rds.amazonaws.com:3306/main_database"
-```
-
----
-
-### **Step 2: User Service Implementation**
-**Complexity**: 🟡 Medium | **Location**: Dialler App | **Time**: 1 day
-
-#### **What to Build**
-```typescript
-// modules/users/services/user.service.ts - NEW FILE
-import { replicaDb } from '@/lib/mysql'
-import { prisma } from '@/lib/db'
-import { redis } from '@/lib/redis'
-import type { UserCallContext, ClaimContext } from '../types/user.types'
-
-export class UserService {
-  constructor(
-    private dependencies: {
-      replicaDb: typeof replicaDb
-      prisma: typeof prisma
-      redis: typeof redis
-      logger: any
-    }
-  ) {}
-
-  async getUserCallContext(userId: number): Promise<UserCallContext> {
-    // 1. Check cache first
-    const cacheKey = `user:${userId}:context`
-    const cached = await this.dependencies.redis.get(cacheKey)
-    if (cached) {
-      return JSON.parse(cached)
-    }
-
-    // 2. Fetch from both databases in parallel
-    const [userData, callScore] = await Promise.all([
-      this.getUserDataFromReplica(userId),
-      this.getCallScoreFromDialler(userId)
-    ])
-
-    // 3. Merge data
-    const context = this.mergeUserContext(userData, callScore)
-
-    // 4. Cache result (15 minute TTL)
-    await this.dependencies.redis.setex(cacheKey, 900, JSON.stringify(context))
-
-    return context
   }
 
-  private async getUserDataFromReplica(userId: number) {
-    return await this.dependencies.replicaDb.user.findUnique({
-      where: { id: BigInt(userId) },
+  /**
+   * Get the next valid user from queue for calling
+   * Automatically skips invalid users until finding a valid one
+   */
+  async getNextValidUserForCall(queueType: QueueType): Promise<{
+    userId: number;
+    userContext: any;
+    queuePosition: number;
+  } | null> {
+    
+    const queueEntries = await prisma.callQueue.findMany({
+      where: {
+        queueType,
+        status: 'pending'
+      },
+      orderBy: [
+        { priorityScore: 'asc' },
+        { queuePosition: 'asc' }
+      ],
+      take: 10 // Check up to 10 users to find a valid one
+    });
+
+    for (const entry of queueEntries) {
+      const validation = await this.validateUserForCall(Number(entry.userId), queueType);
+      
+      if (validation.isValid) {
+        // Get complete user context for the call
+        const userService = new (await import('../../users/services/user.service')).UserService();
+        const userContext = await userService.getUserCallContext(Number(entry.userId));
+        
+        if (userContext) {
+          return {
+            userId: Number(entry.userId),
+            userContext,
+            queuePosition: entry.queuePosition
+          };
+        }
+      } else {
+        // Mark this queue entry as invalid and remove it
+        await prisma.callQueue.update({
+          where: { id: entry.id },
+          data: { 
+            status: 'invalid',
+            queueReason: validation.reason || 'No longer eligible'
+          }
+        });
+      }
+    }
+
+    return null; // No valid users found in queue
+  }
+}
+```
+
+#### **Integration with Queue Service**
+```typescript
+// Add to modules/queue/services/queue.service.ts
+
+import { PreCallValidationService } from './pre-call-validation.service';
+
+export class QueueService {
+  private preCallValidator = new PreCallValidationService();
+
+  /**
+   * Get next user for calling with real-time validation
+   */
+  async getNextUserForCall(queueType: QueueType): Promise<NextUserForCallResult | null> {
+    const result = await this.preCallValidator.getNextValidUserForCall(queueType);
+    
+    if (!result) {
+      // Queue is empty or no valid users - trigger refresh
+      await this.refreshQueueByType(queueType);
+      return await this.preCallValidator.getNextValidUserForCall(queueType);
+    }
+
+    return result;
+  }
+}
+```
+
+### **Step 2: Update Agent Interface**
+**Complexity**: 🟢 Low | **Location**: Frontend Components | **Time**: 4 hours
+
+#### **Update Queue Components**
+```typescript
+// app/queue/components/QueuePageTemplate.tsx - UPDATE
+
+// Add pre-call validation to "Call Next User" button
+const handleCallNextUser = async () => {
+  setIsLoading(true);
+  
+  try {
+    // Get next valid user with real-time validation
+    const nextUser = await trpc.queue.getNextUserForCall.mutate({ queueType });
+    
+    if (!nextUser) {
+      toast({
+        title: "No eligible users",
+        description: "Queue is empty or being refreshed. Please try again in a moment.",
+        variant: "warning"
+      });
+      return;
+    }
+
+    // Start call session with validated user
+    router.push(`/calls/${nextUser.sessionId}`);
+    
+  } catch (error) {
+    toast({
+      title: "Validation failed",
+      description: "Unable to validate next user. Please try again.",
+      variant: "destructive"
+    });
+  } finally {
+    setIsLoading(false);
+  }
+};
+```
+
+---
+
+## 🔄 **Phase 2: Hourly Queue Population (Days 3-4)**
+
+### **Step 3: Background Job Service**
+**Complexity**: 🟡 Medium | **Location**: Dialler App | **Time**: 1 day
+
+#### **Create Queue Discovery Service**
+```typescript
+// services/queue/hourly-discovery.service.ts - NEW FILE
+import { replicaDb } from '@/lib/mysql';
+import { prisma } from '@/lib/db';
+import { QueueService } from '@/modules/queue/services/queue.service';
+import type { QueueType } from '@/modules/queue/types/queue.types';
+
+export interface DiscoveryStats {
+  queueType: QueueType;
+  newUsersFound: number;
+  newUsersAdded: number;
+  duplicatesSkipped: number;
+  invalidUsersSkipped: number;
+}
+
+export class HourlyDiscoveryService {
+  private queueService = new QueueService();
+
+  /**
+   * Main discovery job - runs every hour
+   */
+  async discoverAndPopulateAllQueues(): Promise<DiscoveryStats[]> {
+    console.log('🔍 Starting hourly queue discovery...');
+    
+    const results = await Promise.all([
+      this.discoverUnsignedUsers(),
+      this.discoverOutstandingRequests(),
+      this.discoverDueCallbacks(),
+      this.cleanupStaleQueueEntries()
+    ]);
+
+    const stats = results.slice(0, 3) as DiscoveryStats[];
+    const cleanupCount = results[3] as number;
+
+    console.log(`✅ Hourly discovery complete:`, {
+      totalNewUsers: stats.reduce((acc, s) => acc + s.newUsersAdded, 0),
+      cleanupCount,
+      queueStats: stats
+    });
+
+    return stats;
+  }
+
+  /**
+   * Find new users missing signatures
+   */
+  private async discoverUnsignedUsers(): Promise<DiscoveryStats> {
+    const newUsers = await replicaDb.user.findMany({
+      where: {
+        is_enabled: true,
+        status: { not: 'inactive' },
+        current_signature_file_id: null,
+        claims: {
+          some: {
+            status: { not: 'complete' }
+          }
+        }
+      },
+      include: {
+        claims: {
+          include: {
+            requirements: true
+          }
+        }
+      },
+      take: 500 // Limit to prevent overwhelming the queue
+    });
+
+    return await this.addUsersToQueue(newUsers, 'unsigned_users');
+  }
+
+  /**
+   * Find new users with pending requirements (have signatures)
+   */
+  private async discoverOutstandingRequests(): Promise<DiscoveryStats> {
+    const newUsers = await replicaDb.user.findMany({
+      where: {
+        is_enabled: true,
+        status: { not: 'inactive' },
+        current_signature_file_id: { not: null },
+        claims: {
+          some: {
+            requirements: {
+              some: {
+                status: 'PENDING'
+              }
+            }
+          }
+        }
+      },
       include: {
         claims: {
           include: {
             requirements: {
               where: { status: 'PENDING' }
-            },
-            vehiclePackages: true
+            }
           }
-        },
-        address: true
-      }
-    })
-  }
-
-  private async getCallScoreFromDialler(userId: number) {
-    return await this.dependencies.prisma.userCallScore.findUnique({
-      where: { userId: BigInt(userId) }
-    })
-  }
-
-  private mergeUserContext(userData: any, callScore: any): UserCallContext {
-    if (!userData) return null
-
-    return {
-      user: {
-        id: Number(userData.id),
-        firstName: userData.first_name,
-        lastName: userData.last_name,
-        phoneNumber: userData.phone_number,
-        email: userData.email,
-        status: userData.status,
-        isEnabled: userData.is_enabled,
-        address: userData.address ? {
-          fullAddress: userData.address.full_address,
-          postCode: userData.address.post_code,
-          county: userData.address.county
-        } : null
-      },
-      claims: userData.claims.map(claim => ({
-        id: Number(claim.id),
-        type: claim.type,
-        status: claim.status,
-        lender: claim.lender,
-        solicitor: claim.solicitor,
-        lastUpdated: claim.client_last_updated_at,
-        requirements: claim.requirements.map(req => ({
-          id: req.id,
-          type: req.type,
-          status: req.status,
-          reason: req.claim_requirement_reason
-        })),
-        vehiclePackages: claim.vehiclePackages.map(pkg => ({
-          registration: pkg.vehicle_registration,
-          make: pkg.vehicle_make,
-          model: pkg.vehicle_model,
-          dealership: pkg.dealership_name,
-          monthlyPayment: pkg.monthly_payment
-        }))
-      })),
-      callScore: callScore ? {
-        currentScore: callScore.currentScore,
-        totalAttempts: callScore.totalAttempts,
-        lastOutcome: callScore.lastOutcome,
-        nextCallAfter: callScore.nextCallAfter
-      } : null
-    }
-  }
-}
-```
-
-#### **Tasks**
-1. **Create User Types**
-2. **Implement UserService**
-3. **Add User Router to tRPC**
-4. **Test with Real Data**
-
----
-
-### **Step 3: Cache Layer & Performance**
-**Complexity**: 🟢 Low | **Location**: Dialler App | **Time**: 1 day
-
-#### **What to Build**
-```typescript
-// lib/redis.ts - UPDATE EXISTING
-import Redis from 'redis'
-
-export const redis = Redis.createClient({
-  url: process.env.REDIS_URL,
-  retry_strategy: (options) => {
-    if (options.error && options.error.code === 'ECONNREFUSED') {
-      return new Error('Redis server refused connection')
-    }
-    if (options.total_retry_time > 1000 * 60 * 60) {
-      return new Error('Retry time exhausted')
-    }
-    if (options.attempt > 10) {
-      return undefined
-    }
-    return Math.min(options.attempt * 100, 3000)
-  }
-})
-
-// Cache key patterns
-export const CACHE_KEYS = {
-  user: (id: number) => `user:${id}:context`,
-  eligibleUsers: () => 'eligible_users',
-  queue: (status: string) => `queue:${status}`,
-  userClaims: (userId: number) => `user:${userId}:claims`
-} as const
-
-// Cache TTLs (in seconds)
-export const CACHE_TTL = {
-  USER_CONTEXT: 900,      // 15 minutes
-  ELIGIBLE_USERS: 300,    // 5 minutes
-  QUEUE_DATA: 300,        // 5 minutes
-  STATIC_DATA: 3600       // 1 hour
-} as const
-```
-
----
-
-## 📋 **Phase 2: CDC Implementation (Week 2)**
-
-### **Step 4: AWS DMS Setup**
-**Complexity**: 🔴 High | **Location**: AWS Console | **Time**: 2 days
-
-#### **AWS Resources to Create**
-
-1. **DMS Replication Instance**
-   ```yaml
-   # AWS CLI or CloudFormation
-   ReplicationInstance:
-     Type: AWS::DMS::ReplicationInstance
-     Properties:
-       ReplicationInstanceClass: dms.t3.micro
-       ReplicationInstanceIdentifier: rmc-dialler-dms
-       VpcSecurityGroupIds:
-         - !Ref DMSSecurityGroup
-   ```
-
-2. **Source Endpoint (MySQL)**
-   ```yaml
-   SourceEndpoint:
-     Type: AWS::DMS::Endpoint
-     Properties:
-       EndpointType: source
-       EngineName: mysql
-       ServerName: rmc-main-database.cluster-xyz.eu-west-1.rds.amazonaws.com
-       Port: 3306
-       Username: dms_user
-       Password: !Ref DMSPassword
-   ```
-
-3. **Target Endpoint (SQS)**
-   ```yaml
-   TargetEndpoint:
-     Type: AWS::DMS::Endpoint
-     Properties:
-       EndpointType: target
-       EngineName: kinesis
-       KinesisSettings:
-         MessageFormat: json
-         StreamArn: !GetAtt UserChangesQueue.Arn
-   ```
-
-#### **Tasks**
-1. **Create DMS IAM Roles**
-2. **Setup VPC Security Groups**
-3. **Create DMS Endpoints**
-4. **Test Connection**
-
-⚠️ **Platform Work Required**: AWS Console configuration (no code changes to main app)
-
----
-
-### **Step 5: SQS Message Processing**
-**Complexity**: 🟡 Medium | **Location**: Dialler App | **Time**: 2 days
-
-#### **What to Build**
-```typescript
-// services/sync/cdc-processor.ts - NEW FILE
-import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs'
-import { UserService } from '@/modules/users'
-
-export class CDCProcessor {
-  private sqsClient: SQSClient
-  private userService: UserService
-
-  constructor() {
-    this.sqsClient = new SQSClient({ region: process.env.AWS_REGION })
-    this.userService = new UserService(/* dependencies */)
-  }
-
-  async startProcessing() {
-    while (true) {
-      try {
-        const messages = await this.receiveMessages()
-        
-        if (messages.length > 0) {
-          await this.processMessages(messages)
         }
-        
-        await this.sleep(1000) // 1 second polling
-      } catch (error) {
-        console.error('CDC processing error:', error)
-        await this.sleep(5000) // 5 second delay on error
+      },
+      take: 1000 // Higher limit as this is the largest queue
+    });
+
+    return await this.addUsersToQueue(newUsers, 'outstanding_requests');
+  }
+
+  /**
+   * Find callbacks that are now due
+   */
+  private async discoverDueCallbacks(): Promise<DiscoveryStats> {
+    const dueCallbacks = await prisma.callback.findMany({
+      where: {
+        status: 'pending',
+        scheduledFor: {
+          lte: new Date()
+        }
       }
-    }
-  }
+    });
 
-  private async receiveMessages() {
-    const command = new ReceiveMessageCommand({
-      QueueUrl: process.env.SQS_QUEUE_URL,
-      MaxNumberOfMessages: 10,
-      WaitTimeSeconds: 20 // Long polling
-    })
-
-    const response = await this.sqsClient.send(command)
-    return response.Messages || []
-  }
-
-  private async processMessages(messages: any[]) {
-    await Promise.all(messages.map(msg => this.processMessage(msg)))
-  }
-
-  private async processMessage(message: any) {
-    try {
-      const changeEvent = JSON.parse(message.Body)
-      
-      switch (changeEvent.eventName) {
-        case 'INSERT':
-        case 'UPDATE':
-          await this.handleUserChange(changeEvent)
-          break
-        case 'DELETE':
-          await this.handleUserDeletion(changeEvent)
-          break
-      }
-
-      // Delete message after successful processing
-      await this.deleteMessage(message.ReceiptHandle)
-      
-    } catch (error) {
-      console.error('Message processing error:', error)
-      // Let message return to queue for retry
-    }
-  }
-
-  private async handleUserChange(event: any) {
-    const { tableName, dynamodb } = event
+    const userIds = dueCallbacks.map(cb => Number(cb.userId));
     
-    if (tableName === 'users') {
-      const userId = dynamodb.NewImage?.id?.N
-      if (userId) {
-        // Invalidate cache for this user
-        await this.userService.invalidateUserCache(parseInt(userId))
-        
-        // Check if user should be added to queue
-        await this.userService.checkQueueEligibility(parseInt(userId))
+    if (userIds.length === 0) {
+      return {
+        queueType: 'callback',
+        newUsersFound: 0,
+        newUsersAdded: 0,
+        duplicatesSkipped: 0,
+        invalidUsersSkipped: 0
+      };
+    }
+
+    const users = await replicaDb.user.findMany({
+      where: {
+        id: { in: userIds.map(id => BigInt(id)) },
+        is_enabled: true
+      },
+      include: {
+        claims: {
+          include: {
+            requirements: true
+          }
+        }
+      }
+    });
+
+    return await this.addUsersToQueue(users, 'callback');
+  }
+
+  /**
+   * Add discovered users to appropriate queue
+   */
+  private async addUsersToQueue(users: any[], queueType: QueueType): Promise<DiscoveryStats> {
+    let newUsersAdded = 0;
+    let duplicatesSkipped = 0;
+    let invalidUsersSkipped = 0;
+
+    for (const user of users) {
+      try {
+        // Check if user already in this queue
+        const existingEntry = await prisma.callQueue.findFirst({
+          where: {
+            userId: user.id,
+            queueType,
+            status: 'pending'
+          }
+        });
+
+        if (existingEntry) {
+          duplicatesSkipped++;
+          continue;
+        }
+
+        // Validate user is still eligible
+        const validation = await this.validateUserEligibility(Number(user.id), queueType);
+        if (!validation.isEligible) {
+          invalidUsersSkipped++;
+          continue;
+        }
+
+        // Calculate priority score
+        const priorityScore = await this.calculatePriorityScore(user, queueType);
+
+        // Add to queue
+        await prisma.callQueue.create({
+          data: {
+            userId: user.id,
+            claimId: user.claims[0]?.id || null,
+            queueType,
+            priorityScore,
+            queuePosition: newUsersAdded + 1,
+            status: 'pending',
+            queueReason: this.getQueueReason(queueType, user),
+            availableFrom: new Date()
+          }
+        });
+
+        newUsersAdded++;
+
+      } catch (error) {
+        console.error(`Failed to add user ${user.id} to ${queueType} queue:`, error);
+        invalidUsersSkipped++;
       }
     }
-  }
-}
-```
-
-#### **Tasks**
-1. **Setup AWS SDK**
-2. **Create SQS Client**
-3. **Implement Message Processing**
-4. **Add Error Handling**
-5. **Create Background Service**
-
----
-
-## 📋 **Phase 3: Scoring System Implementation (Week 3)**
-
-### **Step 8: Scoring Module Architecture**
-**Complexity**: 🟡 Medium | **Location**: Dialler App | **Time**: 2 days
-
-#### **What to Build**
-```typescript
-// modules/scoring/services/priority-scoring.service.ts - NEW FILE
-import { CallService } from '@/modules/calls'
-import { UserService } from '@/modules/users'
-import type { ScoringContext, PriorityScore, ScoreExplanation } from '../types/scoring.types'
-
-export class PriorityScoringService {
-  constructor(
-    private dependencies: {
-      callService: CallService
-      userService: UserService
-      redis: any
-      logger: any
-    }
-  ) {}
-
-  async calculatePriority(context: ScoringContext): Promise<PriorityScore> {
-    // 1. Apply lender scoring rules
-    let score = await this.applyLenderRules(context)
-
-    // 2. Factor in user age demographics  
-    score += await this.applyAgeRules(context)
-
-    // 3. Apply time-based scoring
-    score += await this.applyTimeRules(context)
-
-    // 4. Apply disposition history
-    score += await this.applyDispositionRules(context)
 
     return {
-      finalScore: Math.max(0, score),
-      factors: this.getScoreFactors(context),
-      nextCallAfter: this.calculateNextCallTime(context),
-      queueType: this.determineQueueType(context)
+      queueType,
+      newUsersFound: users.length,
+      newUsersAdded,
+      duplicatesSkipped,
+      invalidUsersSkipped
+    };
+  }
+
+  /**
+   * Remove stale queue entries (users no longer eligible)
+   */
+  private async cleanupStaleQueueEntries(): Promise<number> {
+    const staleEntries = await prisma.callQueue.findMany({
+      where: {
+        status: 'pending',
+        createdAt: {
+          lt: new Date(Date.now() - 24 * 60 * 60 * 1000) // Older than 24 hours
+        }
+      },
+      take: 100 // Process in batches
+    });
+
+    let cleanedUp = 0;
+
+    for (const entry of staleEntries) {
+      try {
+        const validation = await this.validateUserEligibility(Number(entry.userId), entry.queueType);
+        
+        if (!validation.isEligible) {
+          await prisma.callQueue.update({
+            where: { id: entry.id },
+            data: {
+              status: 'invalid',
+              queueReason: validation.reason || 'No longer eligible'
+            }
+          });
+          cleanedUp++;
+        }
+      } catch (error) {
+        console.error(`Failed to validate queue entry ${entry.id}:`, error);
+      }
     }
-  }
 
-  async explainScore(userId: number): Promise<ScoreExplanation> {
-    // Provides detailed breakdown of score calculation for debugging
-  }
-
-  private async applyLenderRules(context: ScoringContext): Promise<number> {
-    // High-value lenders get priority boost
-    const lenderPriorities = {
-      'santander': -20,     // Higher priority
-      'lloyds': -15,
-      'barclays': -15,
-      'hsbc': -10,
-      'nationwide': -10,
-      'default': 0
-    }
-    
-    return lenderPriorities[context.claim.lender.toLowerCase()] || 0
-  }
-
-  private async applyAgeRules(context: ScoringContext): Promise<number> {
-    // Older users typically get higher priority
-    const userAge = this.calculateAge(context.user.dateOfBirth)
-    
-    if (userAge >= 65) return -15      // Elderly - highest priority
-    if (userAge >= 45) return -10      // Middle age - medium priority  
-    if (userAge >= 25) return -5       // Adult - slight priority
-    return 0                           // Young adult - standard
-  }
-
-  private async applyTimeRules(context: ScoringContext): Promise<number> {
-    let timeScore = 0
-    
-    // Age since claim created
-    const daysSinceCreated = this.daysBetween(context.claim.createdAt, new Date())
-    timeScore += Math.min(daysSinceCreated * 1.5, 30) // Max 30 points
-    
-    // Age since last contact
-    const daysSinceContact = context.lastContact 
-      ? this.daysBetween(context.lastContact.date, new Date())
-      : 30 // No contact = 30 days
-    timeScore += Math.min(daysSinceContact * 2, 60) // Max 60 points
-    
-    return timeScore
-  }
-
-  private async applyDispositionRules(context: ScoringContext): Promise<number> {
-    if (!context.callHistory?.length) return 0
-    
-    const lastOutcome = context.callHistory[0].outcome
-    const outcomeScores = {
-      'not_interested': 100,     // Very low priority
-      'wrong_number': 80,        // Low priority  
-      'no_answer': 10,           // Slight penalty
-      'busy': 5,                 // Minimal penalty
-      'callback_requested': -25,  // High priority
-      'contacted': -5,           // Slight boost for follow-up
-      'left_voicemail': 15       // Medium penalty
-    }
-    
-    let dispositionScore = outcomeScores[lastOutcome] || 0
-    
-    // Multiple failed attempts penalty
-    const failedAttempts = context.callHistory.filter(
-      call => ['no_answer', 'busy', 'failed'].includes(call.outcome)
-    ).length
-    
-    dispositionScore += failedAttempts * 8
-    
-    return dispositionScore
+    return cleanedUp;
   }
 }
 ```
 
-#### **Tasks**
-1. **Create Scoring Module Structure**
-   ```bash
-   mkdir -p modules/scoring/{services,types,utils}
-   ```
+### **Step 4: Background Job Endpoints**
+**Complexity**: 🟢 Low | **Location**: API Routes | **Time**: 2 hours
 
-2. **Define Scoring Types**
-   ```typescript
-   // modules/scoring/types/scoring.types.ts
-   export interface ScoringContext {
-     user: {
-       id: number
-       dateOfBirth: Date
-       demographics: UserDemographics
-     }
-     claim: {
-       id: number
-       lender: string
-       value: number
-       createdAt: Date
-       type: string
-     }
-     callHistory: CallHistoryItem[]
-     lastContact?: ContactEvent
-     currentTime: Date
-   }
+#### **Create Cron API Endpoints**
+```typescript
+// app/api/cron/discover-new-leads/route.ts - NEW FILE
+import { NextResponse } from 'next/server';
+import { HourlyDiscoveryService } from '@/services/queue/hourly-discovery.service';
 
-   export interface PriorityScore {
-     finalScore: number
-     factors: ScoreFactor[]
-     nextCallAfter: Date
-     queueType: QueueType
-   }
+export async function GET() {
+  try {
+    // Verify this is a legitimate cron request
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-   export interface ScoreExplanation {
-     userId: number
-     totalScore: number
-     breakdown: {
-       lenderScore: number
-       ageScore: number  
-       timeScore: number
-       dispositionScore: number
-     }
-     factors: string[]
-     recommendations: string[]
-   }
-   ```
+    console.log('🔄 Starting hourly lead discovery cron job...');
+    
+    const discoveryService = new HourlyDiscoveryService();
+    const stats = await discoveryService.discoverAndPopulateAllQueues();
+    
+    const totalNewUsers = stats.reduce((acc, s) => acc + s.newUsersAdded, 0);
+    
+    console.log(`✅ Hourly discovery completed: ${totalNewUsers} new users added`);
+    
+    return NextResponse.json({
+      success: true,
+      stats,
+      totalNewUsers,
+      timestamp: new Date().toISOString()
+    });
 
-3. **Integrate with Queue Service**
-4. **Add Comprehensive Testing**
+  } catch (error: any) {
+    console.error('❌ Hourly discovery failed:', error);
+    
+    return NextResponse.json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    }, { status: 500 });
+  }
+}
 
----
+// For manual testing
+export async function POST() {
+  return GET();
+}
+```
 
-### **Step 9: Advanced Scoring Rules**
-**Complexity**: 🟡 Medium | **Location**: Dialler App | **Time**: 2 days
-
-#### **What to Build**
-- **Lender Priority Matrix**: Configurable scoring rules per lender
-- **Demographic Factors**: Age, location, claim type interactions
-- **Seasonal Adjustments**: Holiday periods, month-end priorities
-- **Machine Learning Hooks**: Preparation for AI-driven scoring
-
-#### **Tasks**
-1. **Create Scoring Rules Engine**
-2. **Add Configuration Management**
-3. **Implement A/B Testing Framework** 
-4. **Add Performance Monitoring**
-
----
-
-## 📋 **Phase 4: Production Ready (Week 4)**
-
-### **Step 10: Monitoring & Alerting**
-**Complexity**: 🟡 Medium | **Location**: AWS + Dialler App | **Time**: 2 days
-
-#### **What to Build**
-1. **CloudWatch Metrics**
-2. **Application Health Checks**
-3. **Sync Performance Monitoring**
-4. **Error Rate Alerts**
-
-### **Step 11: Load Testing**
-**Complexity**: 🟡 Medium | **Location**: Test Environment | **Time**: 1 day
-
-#### **What to Test**
-- 50k user context requests
-- Queue refresh with 1000+ entries
-- CDC processing under load
-- Cache performance
+#### **Update vercel.json for Cron Jobs**
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/discover-new-leads",
+      "schedule": "0 * * * *"
+    }
+  ],
+  "functions": {
+    "app/api/cron/discover-new-leads/route.ts": {
+      "maxDuration": 300
+    }
+  }
+}
+```
 
 ---
 
-## 🏗️ **Complexity Breakdown**
+## ⚡ **Phase 3: Optimization & Monitoring (Days 5-7)**
 
-### **By Component**
+### **Step 5: Performance Optimization**
+**Complexity**: 🟡 Medium | **Location**: Various Services | **Time**: 1 day
 
-| Component | Complexity | Time | Platform Work |
-|-----------|------------|------|---------------|
-| MySQL Connection | 🟡 Medium | 1 day | Dialler App |
-| User Service | 🟡 Medium | 1 day | Dialler App |
-| Cache Layer | 🟢 Low | 1 day | Dialler App |
-| AWS DMS Setup | 🔴 High | 2 days | AWS Console |
-| SQS Processing | 🟡 Medium | 2 days | Dialler App |
-| **Scoring Module** | 🟡 **Medium** | **2 days** | **Dialler App** |
-| **Advanced Scoring** | 🟡 **Medium** | **2 days** | **Dialler App** |
-| Batch Jobs | 🟢 Low | 1 day | Dialler App |
-| Monitoring | 🟡 Medium | 2 days | AWS + App |
-| Testing | 🟡 Medium | 1 day | Test Env |
+#### **Optional Redis Integration**
+```typescript
+// lib/redis.ts - UPDATE cache keys for new approach
 
-### **By Platform**
+export const CACHE_KEYS = {
+  // Longer TTLs since we validate before calling
+  userContext: (userId: number) => `user:${userId}:context`,
+  queueUsers: (queueType: string) => `queue:${queueType}:users`,
+  discoveryStats: () => `discovery:stats:latest`,
+  
+  // New cache keys for pre-call validation
+  userValidation: (userId: number) => `validation:${userId}`,
+  queueHealth: (queueType: string) => `queue:${queueType}:health`
+};
 
-| Platform | Work Required | Complexity |
-|----------|---------------|------------|
-| **Main Laravel App** | ❌ **NONE** | No changes |
-| **Dialler App** | ✅ **Medium** | **12 days work** |
-| **AWS Services** | ✅ **High** | 4 days setup |
-| **Testing/Ops** | ✅ **Medium** | 2 days |
+export const CACHE_TTL = {
+  USER_CONTEXT: 1800,      // 30 min (longer since we validate before calling)
+  QUEUE_USERS: 900,        // 15 min (can be stale since we validate)
+  DISCOVERY_STATS: 3600,   // 1 hour
+  USER_VALIDATION: 300,    // 5 min (cache recent validations)
+  QUEUE_HEALTH: 600        // 10 min
+};
+```
+
+### **Step 6: Monitoring & Health Checks**
+**Complexity**: 🟢 Low | **Location**: API Routes | **Time**: 4 hours
+
+#### **Queue Health Monitoring**
+```typescript
+// app/api/health/queues/route.ts - NEW FILE
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
+import { replicaDb } from '@/lib/mysql';
+
+export async function GET() {
+  try {
+    const [queueStats, replicaHealth] = await Promise.all([
+      // Get queue statistics
+      Promise.all([
+        prisma.callQueue.count({ where: { queueType: 'unsigned_users', status: 'pending' } }),
+        prisma.callQueue.count({ where: { queueType: 'outstanding_requests', status: 'pending' } }),
+        prisma.callQueue.count({ where: { queueType: 'callback', status: 'pending' } }),
+        prisma.callQueue.count({ where: { status: 'invalid' } })
+      ]),
+      
+      // Test MySQL replica connection
+      replicaDb.user.count({ where: { is_enabled: true } })
+    ]);
+
+    const [unsignedCount, outstandingCount, callbackCount, invalidCount] = queueStats;
+
+    return NextResponse.json({
+      status: 'healthy',
+      queues: {
+        unsigned_users: unsignedCount,
+        outstanding_requests: outstandingCount,
+        callback: callbackCount,
+        invalid_entries: invalidCount
+      },
+      replica: {
+        connection: 'healthy',
+        enabled_users: replicaHealth
+      },
+      last_check: new Date().toISOString()
+    });
+
+  } catch (error: any) {
+    return NextResponse.json({
+      status: 'unhealthy',
+      error: error.message,
+      last_check: new Date().toISOString()
+    }, { status: 500 });
+  }
+}
+```
 
 ---
 
-## 💰 **Cost Analysis**
+## 📋 **Testing Strategy**
+
+### **Manual Testing Checklist**
+- [ ] **Pre-call validation**: Test with users who recently signed/completed requirements
+- [ ] **Queue population**: Run hourly discovery manually and verify new users added
+- [ ] **Agent workflow**: Ensure "Call Next User" always returns valid users
+- [ ] **Queue cleanup**: Verify stale entries are removed
+- [ ] **Performance**: Test queue loading times with/without Redis
+
+### **API Testing**
+```bash
+# Test hourly discovery
+curl -X POST "http://localhost:3000/api/cron/discover-new-leads" \
+  -H "Authorization: Bearer your-cron-secret"
+
+# Test queue health  
+curl "http://localhost:3000/api/health/queues"
+
+# Test pre-call validation
+curl "http://localhost:3000/api/queue/validate-user" \
+  -d '{"userId": 12345, "queueType": "unsigned_users"}'
+```
+
+---
+
+## 🎯 **Success Metrics**
+
+### **Week 1 Targets**
+- [ ] **Zero wrong calls**: Pre-call validation prevents all incorrect contacts
+- [ ] **Automated discovery**: Hourly jobs find 50+ new eligible users per hour
+- [ ] **Queue health**: <5% invalid entries in queues at any time
+- [ ] **Agent satisfaction**: Fast queue loading (<2 seconds) and reliable user data
+
+### **Performance Benchmarks**
+- **Pre-call validation**: <500ms per user
+- **Hourly discovery**: <5 minutes total execution time
+- **Queue loading**: <2 seconds with caching
+- **User context**: <1 second load time
+
+---
+
+## 💰 **Cost Summary**
 
 ### **Implementation Costs**
-- **Development Time**: 4 weeks (1 developer)
-- **AWS Setup**: 4 days (DevOps/Senior)
-- **Testing**: 4 days (QA + Developer)
+- **Development Time**: 5-7 days (1 developer)
+- **No AWS setup required**: Uses existing infrastructure
+- **Simple deployment**: Standard Next.js deployment
 
 ### **Ongoing Monthly Costs**
-- **AWS DMS**: £75/month
-- **SQS Messages**: £15/month  
-- **Redis Cache**: £50/month
-- **CloudWatch**: £10/month
-- **Total**: £150/month
+- **Redis Cache (Optional)**: £25/month (Upstash basic tier)
+- **Background Jobs**: £0 (Vercel Cron included)
+- **Database Queries**: Minimal additional load on existing replica
+- **Total**: £0-25/month
 
-### **Cost Savings**
-- **Database Query Reduction**: £180/month
-- **Performance Gains**: Reduced server costs
-- **Net Benefit**: £30/month + massive performance improvement
-
----
-
-## ⚠️ **Risks & Mitigation**
-
-### **High Risk**
-- **AWS DMS Complexity**: Requires AWS expertise
-  - *Mitigation*: Start with AWS support, detailed documentation
-  
-- **Data Consistency**: Race conditions between systems
-  - *Mitigation*: Proper cache invalidation, eventual consistency design
-
-### **Medium Risk**  
-- **Message Processing Failures**: SQS message loss
-  - *Mitigation*: Dead letter queues, retry mechanisms
-  
-- **Cache Strategy**: Cache invalidation complexity
-  - *Mitigation*: Short TTLs, multiple invalidation triggers
-
-### **Low Risk**
-- **Performance**: System performance under load
-  - *Mitigation*: Load testing, gradual rollout
+### **Business Benefits**
+- **Perfect call accuracy**: Zero user complaints about wrong calls
+- **Automated operations**: No manual queue management required
+- **Fast implementation**: Working in 1 week vs 3 weeks for CDC
+- **Easy maintenance**: Standard database operations and monitoring
 
 ---
 
-## ✅ **Success Criteria**
+## 🚀 **Next Steps After Implementation**
 
-### **Phase 1 (Week 1) - Foundation + Dual Queue System**
-- [x] Connect to MySQL replica successfully
-- [x] User service returns real user data
-- [x] Cache layer operational with proper TTLs
-- [x] **NEW**: Dual queue system implemented with three queue types
-- [x] **NEW**: Queue type determination logic for unsigned users vs outstanding requests
-- [x] **NEW**: Separate API endpoints for each queue type
-- [ ] Queue population works with real production data
-- [ ] Queue UI updated to support multiple queue types
+Once pre-call validation is working:
 
-### **Phase 2 (Week 2) - Real-time Integration**  
-- [ ] AWS DMS captures database changes
-- [ ] SQS processes messages reliably
-- [ ] Real-time updates appear within 3 seconds
-- [ ] Error handling and retry mechanisms work
-- [ ] **NEW**: Real-time queue updates when users move between queues
-- [ ] **NEW**: Signature status changes trigger queue reassignment
+1. **Advanced Features**:
+   - Lender-based priority scoring
+   - User demographics integration
+   - Agent specialization by queue type
 
-### **Phase 3 (Week 3) - Scoring System**
-- [ ] Scoring module architecture implemented and tested
-- [ ] Lender-based priority scoring operational (Santander, Lloyds, etc.)
-- [ ] User age demographics factored into scoring
-- [ ] Historical disposition data influences priority
-- [ ] Time-based scoring (claim age, contact frequency) working
-- [ ] Queue service integration with scoring complete
-- [ ] Score explanation and debugging tools functional
-- [ ] A/B testing framework for scoring rules ready
+2. **Performance Enhancements**:
+   - Queue prefetching
+   - Predictive user context loading
+   - Smart cache warming
 
-### **Phase 4 (Week 4) - Production Scale**
-- [ ] System handles 50k+ users efficiently across all queue types
-- [ ] Each queue type refreshes under 5 seconds
-- [ ] **NEW**: Agent specialization workflow operational
-- [ ] **NEW**: Cross-queue analytics and reporting
-- [ ] Monitoring and alerts operational
-- [ ] Load testing passes with production data
+3. **Business Intelligence**:
+   - Queue transition analytics
+   - Discovery efficiency metrics
+   - Agent productivity correlation
 
-### **Production Ready - Dual Queue System + Scoring**
-- [ ] All three queues (unsigned, outstanding requests, callbacks) operational
-- [ ] **NEW**: Advanced priority scoring system deployed in production
-- [ ] **NEW**: Lender-specific rules validated with business stakeholders
-- [ ] **NEW**: Scoring performance metrics monitored and optimized
-- [ ] Agent training completed for queue specialization
-- [ ] Queue-specific performance metrics tracked
-- [ ] Cross-queue movement logic verified
-- [ ] Documentation updated for operational procedures
-- [ ] Rollback procedures tested and documented
-
-### **Queue System Verification Checklist**
-- [ ] **Unsigned Users Queue**: Shows only users with `current_signature_file_id IS NULL`
-- [ ] **Outstanding Requests Queue**: Shows only users with pending requirements AND signatures
-- [ ] **Callbacks Queue**: Shows users with scheduled callbacks due now
-- [ ] **No Queue Overlap**: Users appear in only one queue at a time
-- [ ] **Real-time Movement**: Users move between queues when status changes
-- [ ] **Agent Experience**: Agents can select and work from one queue type
-
----
-
-**Next Steps**: Start with Phase 1, Step 1 - MySQL Database Connection setup. The foundation is solid, and this approach will scale beautifully! 🚀 
+**This approach provides the perfect foundation for these advanced capabilities while maintaining simplicity and cost-effectiveness!** 🎉 
