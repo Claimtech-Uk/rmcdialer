@@ -15,8 +15,8 @@ export type QueueType =
   | 'callback';           // Users who requested to be called back from previous calls
 
 export interface UserEligibilityFactors {
-  userId: number;
-  claimId?: number;
+  userId: bigint;
+  claimId?: bigint;
   daysSinceLastContact: number;
   pendingRequirements: number;
   claimValue: number;
@@ -39,8 +39,8 @@ export interface ScoredUser extends UserEligibilityFactors {
 
 export interface QueueEntry {
   id: string;
-  userId: number;
-  claimId?: number;
+  userId: bigint;
+  claimId?: bigint | null;
   queueType: QueueType;
   priorityScore: number;
   queuePosition?: number;

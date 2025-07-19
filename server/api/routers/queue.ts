@@ -19,7 +19,7 @@ const QueueFiltersSchema = z.object({
   limit: z.number().min(1).max(100).default(20),
   status: z.enum(['pending', 'assigned', 'completed']).default('pending'),
   agentId: z.number().optional(),
-  queueType: z.enum(['priority_call', 'callback', 'follow_up']).optional()
+  queueType: z.enum(['unsigned_users', 'outstanding_requests', 'callback']).optional()
 });
 
 const AssignCallSchema = z.object({

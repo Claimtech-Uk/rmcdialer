@@ -171,7 +171,7 @@ export class QueueService {
     ]);
     
     return {
-      entries,
+      entries: entries as QueueEntry[], // Type assertion for Prisma return type
       queueType: queueType || 'unsigned_users', // Default queue type for backwards compatibility
       meta: {
         page,
@@ -329,8 +329,8 @@ export class QueueService {
     
     const mockUsers: UserEligibilityFactors[] = [
       {
-        userId: 12345,
-        claimId: 456,
+        userId: BigInt(12345),
+        claimId: BigInt(456),
         daysSinceLastContact: 3,
         pendingRequirements: 2,
         claimValue: 15000,
@@ -341,8 +341,8 @@ export class QueueService {
         hasSignature: true // Mock data - has signature but needs documents
       },
       {
-        userId: 12346,
-        claimId: 457,
+        userId: BigInt(12346),
+        claimId: BigInt(457),
         daysSinceLastContact: 7,
         pendingRequirements: 1,
         claimValue: 8000,
@@ -392,8 +392,8 @@ export class QueueService {
   private mapToQueueEntry(dbEntry: any): QueueEntry {
     return {
       id: dbEntry.id,
-      userId: Number(dbEntry.userId),
-      claimId: dbEntry.claimId ? Number(dbEntry.claimId) : undefined,
+      userId: dbEntry.userId,
+      claimId: dbEntry.claimId,
       queueType: dbEntry.queueType,
       priorityScore: dbEntry.priorityScore,
       queuePosition: dbEntry.queuePosition,
