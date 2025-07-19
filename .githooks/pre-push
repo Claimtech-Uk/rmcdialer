@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# RMC Dialler - Pre-push Hook
+# Prevents pushing when deployments are active
+
+echo "🔍 Checking for active Vercel deployments before push..."
+
+# Check if we have Vercel CLI
+if ! command -v vercel &> /dev/null; then
+    echo "⚠️  Vercel CLI not found - install with: npm i -g vercel"
+    echo "⚠️  Proceeding with push, but consider using 'npm run deploy' instead"
+    exit 0
+fi
+
+# Check for active deployments
+ACTIVE_DEPLOYMENTS=$(npx vercel ls --limit 5 2>/dev/null | grep -E "Building|Queued" || true)
+
+if [ ! -z "$ACTIVE_DEPLOYMENTS" ]; then
+    echo "⚠️  Active deployments detected:"
+    echo "$ACTIVE_DEPLOYMENTS"
+    echo ""
+    echo "❌ Push blocked to prevent multiple simultaneous deployments"
+    echo "💡 Wait for current deployments to finish, or use 'npm run deploy:force'"
+    exit 1
+fi
+
+echo "✅ No active deployments - proceeding with push"
+exit 0 

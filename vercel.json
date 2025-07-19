@@ -1,13 +1,22 @@
 {
   "version": 2,
-  "framework": "nextjs",
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm ci",
+  "framework": "nextjs",
   "functions": {
     "app/api/**": {
       "maxDuration": 30
     }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
+  "github": {
+    "autoAlias": false,
+    "autoJobCancelation": true
   },
   "rewrites": [
     {

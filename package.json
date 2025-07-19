@@ -19,7 +19,10 @@
     "db:studio": "prisma studio",
     "db:studio:replica": "prisma studio --schema=prisma/replica.prisma",
     "mysql:test": "tsx -e \"import('./lib/mysql.js').then(m => m.testReplicaConnection())\"",
-    "mysql:stats": "tsx -e \"import('./lib/mysql.js').then(m => m.getReplicaStats().then(console.log))\""
+    "mysql:stats": "tsx -e \"import('./lib/mysql.js').then(m => m.getReplicaStats().then(console.log))\"",
+    "deploy": "./scripts/deploy.sh",
+    "deploy:force": "npx vercel --prod",
+    "check-deployments": "npx vercel ls --limit 10"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",
