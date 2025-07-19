@@ -13,6 +13,7 @@ import {
 } from '../types/queue.types';
 import { UserService } from '@/modules/users/services/user.service';
 import { PriorityScoringService, type ScoringContext } from '@/modules/scoring';
+import { PreCallValidationService, type NextUserForCallResult, type PreCallValidationResult } from './pre-call-validation.service';
 
 // Dependencies that will be injected
 interface QueueServiceDependencies {
@@ -27,9 +28,11 @@ interface QueueServiceDependencies {
 
 export class QueueService {
   private userService: UserService;
+  private preCallValidator: PreCallValidationService;
 
   constructor(private deps: QueueServiceDependencies) {
     this.userService = new UserService();
+    this.preCallValidator = new PreCallValidationService();
   }
 
   /**
@@ -199,6 +202,110 @@ export class QueueService {
     
     this.deps.logger.info(`Call ${queueId} assigned to agent ${agentId}`);
     return entry as QueueEntry;
+  }
+
+  /**
+   * Get next valid user for calling with real-time validation
+   * This is the main method agents use to get guaranteed valid leads
+   */
+  async getNextUserForCall(queueType: QueueType): Promise<NextUserForCallResult | null> {
+    this.deps.logger.info(`Getting next valid user for ${queueType} queue`);
+    
+    try {
+      // Try PostgreSQL queue first, but fall back to direct replica mode
+      let result: NextUserForCallResult | null = null;
+      
+      try {
+        // Use pre-call validation to get next valid user from PostgreSQL queue
+        result = await this.preCallValidator.getNextValidUserForCall(queueType);
+      } catch (pgError: any) {
+        this.deps.logger.warn(`PostgreSQL queue unavailable: ${pgError.message}, using direct replica mode`);
+        
+        // Fall back to direct replica mode
+        result = await this.preCallValidator.getNextValidUserDirectFromReplica(queueType);
+      }
+      
+      if (!result) {
+        this.deps.logger.warn(`No valid users found in ${queueType} queue`);
+        return null;
+      }
+
+      this.deps.logger.info(`Successfully found valid user ${result.userId} for ${queueType} queue`);
+      return result;
+      
+    } catch (error) {
+      this.deps.logger.error(`Failed to get next user for ${queueType}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Validate a specific user for calling
+   */
+  async validateUserForCall(userId: number, queueType: QueueType): Promise<PreCallValidationResult> {
+    this.deps.logger.info(`Validating user ${userId} for ${queueType} queue`);
+    
+    try {
+      const result = await this.preCallValidator.validateUserForCall(userId, queueType);
+      
+      if (result.isValid) {
+        this.deps.logger.info(`User ${userId} is valid for ${queueType} queue`);
+      } else {
+        this.deps.logger.warn(`User ${userId} is invalid for ${queueType} queue: ${result.reason}`);
+      }
+      
+      return result;
+    } catch (error) {
+      this.deps.logger.error(`Failed to validate user ${userId} for ${queueType}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Run health check on a queue to identify and clean up invalid entries
+   */
+  async runQueueHealthCheck(queueType: QueueType, limit: number = 50): Promise<{
+    totalChecked: number;
+    validUsers: number;
+    invalidUsers: number;
+    invalidEntries: Array<{ userId: number; reason: string; queueEntryId: string }>;
+  }> {
+    this.deps.logger.info(`Running health check for ${queueType} queue (limit: ${limit})`);
+    
+    try {
+      const result = await this.preCallValidator.validateQueueHealth(queueType, limit);
+      
+      this.deps.logger.info(
+        `Health check complete for ${queueType}: ${result.validUsers} valid, ${result.invalidUsers} invalid`
+      );
+      
+      return result;
+    } catch (error) {
+      this.deps.logger.error(`Health check failed for ${queueType}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get queue statistics including validation status
+   */
+  async getQueueStatistics(queueType?: QueueType): Promise<{
+    queueStats: Array<{
+      queueType: QueueType;
+      totalPending: number;
+      totalInvalid: number;
+      lastUpdated: Date;
+    }>;
+  }> {
+    this.deps.logger.info(`Getting queue statistics for ${queueType || 'all queues'}`);
+    
+    try {
+      const result = await this.preCallValidator.getQueueStatistics(queueType);
+      return result;
+    } catch (error) {
+      this.deps.logger.error(`Failed to get queue statistics:`, error);
+      throw error;
+    }
   }
 
   /**

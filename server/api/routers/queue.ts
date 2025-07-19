@@ -30,6 +30,18 @@ const AssignCallSchema = z.object({
   queueId: z.string().uuid('Invalid queue ID format')
 });
 
+const QueueTypeSchema = z.enum(['unsigned_users', 'outstanding_requests', 'callback']);
+
+const ValidateUserSchema = z.object({
+  userId: z.number().int().positive('User ID must be a positive integer'),
+  queueType: QueueTypeSchema
+});
+
+const HealthCheckSchema = z.object({
+  queueType: QueueTypeSchema,
+  limit: z.number().int().min(1).max(100).default(50)
+});
+
 export const queueRouter = createTRPCRouter({
   // Get the current queue with filtering and pagination
   getQueue: protectedProcedure
@@ -54,7 +66,38 @@ export const queueRouter = createTRPCRouter({
       return await queueService.assignCall(input.queueId, ctx.agent.id);
     }),
 
-  // Get queue statistics (to be implemented)
+  // Get next valid user for calling with real-time validation
+  getNextUserForCall: protectedProcedure
+    .input(z.object({ queueType: QueueTypeSchema }))
+    .mutation(async ({ input, ctx }) => {
+      logger.info(`Agent ${ctx.agent.id} requesting next user for ${input.queueType} queue`);
+      return await queueService.getNextUserForCall(input.queueType);
+    }),
+
+  // Validate a specific user for calling
+  validateUserForCall: protectedProcedure
+    .input(ValidateUserSchema)
+    .query(async ({ input, ctx }) => {
+      logger.info(`Agent ${ctx.agent.id} validating user ${input.userId} for ${input.queueType} queue`);
+      return await queueService.validateUserForCall(input.userId, input.queueType);
+    }),
+
+  // Run health check on a queue
+  runQueueHealthCheck: protectedProcedure
+    .input(HealthCheckSchema)
+    .mutation(async ({ input, ctx }) => {
+      logger.info(`Agent ${ctx.agent.id} running health check for ${input.queueType} queue`);
+      return await queueService.runQueueHealthCheck(input.queueType, input.limit);
+    }),
+
+  // Get queue statistics with validation status
+  getQueueStatistics: protectedProcedure
+    .input(z.object({ queueType: QueueTypeSchema.optional() }))
+    .query(async ({ input, ctx }) => {
+      return await queueService.getQueueStatistics(input.queueType);
+    }),
+
+  // Get queue statistics (existing endpoint - keeping for backwards compatibility)
   getStats: protectedProcedure
     .query(async ({ ctx }) => {
       // For now, return basic stats

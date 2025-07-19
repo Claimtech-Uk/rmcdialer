@@ -107,6 +107,49 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
     setIsModalOpen(false);
   };
 
+  // Pre-call validation: Get next valid user for calling
+  const getNextUserMutation = api.queue.getNextUserForCall.useMutation({
+    onSuccess: (result) => {
+      if (result) {
+        // Start call with validated user
+        const { userId, userContext } = result;
+        startCall(
+          userId, 
+          userContext.user.firstName, 
+          userContext.user.lastName, 
+          userContext.user.phoneNumber
+        );
+        
+        toast({
+          title: "✅ Valid user found",
+          description: `Starting call with ${userContext.user.firstName} ${userContext.user.lastName}`,
+        });
+      } else {
+        toast({
+          title: "No valid users available",
+          description: "Queue is empty or all users need attention. Try refreshing the queue.",
+          variant: "default",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to find valid user",
+        description: error.message || "Unable to validate next user for calling",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const handleCallNextValidUser = async () => {
+    try {
+      await getNextUserMutation.mutateAsync({ queueType });
+    } catch (error) {
+      // Error handling is done in onError callback
+      console.error('Call next user failed:', error);
+    }
+  };
+
   const startCall = (userId: number, firstName: string, lastName: string, phoneNumber: string) => {
     // Set up active call state
     setActiveCall({
@@ -262,15 +305,26 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
           </div>
         </div>
         
-        <Button 
-          onClick={handleRefresh} 
-          variant="outline"
-          disabled={isLoading}
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh Queue
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button 
+            onClick={handleCallNextValidUser}
+            disabled={getNextUserMutation.isLoading || isLoading}
+            className={`${getButtonClasses()} text-white flex items-center gap-2`}
+          >
+            <Phone className={`w-4 h-4 ${getNextUserMutation.isLoading ? 'animate-pulse' : ''}`} />
+            {getNextUserMutation.isLoading ? 'Finding User...' : 'Call Next Valid User'}
+          </Button>
+          
+          <Button 
+            onClick={handleRefresh} 
+            variant="outline"
+            disabled={isLoading}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh Queue
+          </Button>
+        </div>
       </div>
 
       {/* Queue Stats */}
