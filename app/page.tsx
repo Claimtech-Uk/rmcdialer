@@ -23,8 +23,7 @@ export default function HomePage() {
     const { role } = session.agent;
     
     if (role === 'agent') {
-      // Agents now have two queue options - redirect to unsigned queue by default
-      // (Most urgent - signatures block claim progress)
+      // Agents redirect to unsigned queue by default (highest priority)
       router.push('/queue/unsigned');
     } else if (role === 'supervisor' || role === 'admin') {
       // Supervisors and admins go to the analytics dashboard
