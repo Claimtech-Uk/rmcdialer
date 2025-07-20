@@ -342,15 +342,15 @@ export default function DashboardPage() {
       busyAgents: agentsStatus?.filter(a => a.currentStatus === 'on_call')?.length || 0,
       availableAgents: agentsStatus?.filter(a => a.currentStatus === 'available')?.length || 0
     },
-    outcomeBreakdown: callAnalytics?.outcomeBreakdown || [],
+    outcomeBreakdown: [], // TODO: Add outcomeBreakdown to CallAnalytics type
     hourlyData: [] // Will need to implement hourly analytics endpoint
   };
 
   // Transform agent status data
-  const agents: AgentStatus[] = (agentsStatus || []).map(agentSession => ({
+  const agents: AgentStatus[] = (agentsStatus || []).filter(session => session.agent).map(agentSession => ({
     id: agentSession.agentId,
-    name: `${agentSession.agent.firstName} ${agentSession.agent.lastName}`,
-    email: agentSession.agent.email,
+    name: `${agentSession.agent?.firstName || ''} ${agentSession.agent?.lastName || ''}`,
+    email: agentSession.agent?.email || '',
     status: agentSession.currentStatus as AgentStatus['status'],
     callsToday: agentSession.totalCallsToday,
     totalTalkTime: agentSession.totalTalkTimeSeconds,
