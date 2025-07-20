@@ -500,10 +500,16 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                           console.log('VIEW DETAILS CLICKED - FULL USER OBJECT:', userContext);
                           console.log('VIEW DETAILS CLICKED - USER ID:', user.id);
                           console.log('VIEW DETAILS CLICKED - USER KEYS:', Object.keys(user));
-                          alert(`Opening details for user ${user.id || 'UNDEFINED'}`);
-                          if (user.id) {
-                            openUserModal(user.id);
+                          
+                          const userId = user.id;
+                          console.log('Attempting to open modal for user ID:', userId);
+                          
+                          if (userId) {
+                            console.log('User ID is valid, calling openUserModal');
+                            openUserModal(userId);
+                            console.log('openUserModal called successfully');
                           } else {
+                            console.error('User ID is undefined or falsy:', userId);
                             alert('Error: User ID is undefined');
                           }
                         }}
@@ -519,10 +525,30 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                           console.log('CALL NOW CLICKED - FULL USER OBJECT:', userContext);
                           console.log('CALL NOW CLICKED - USER ID:', user.id);
                           console.log('CALL NOW CLICKED - USER KEYS:', Object.keys(user));
-                          alert(`Navigating to user ${user.id || 'UNDEFINED'}`);
-                          if (user.id) {
-                            router.push(`/users/${user.id}`);
+                          
+                          const userId = user.id;
+                          const targetUrl = `/users/${userId}`;
+                          
+                          console.log('Attempting navigation to:', targetUrl);
+                          console.log('Router object:', router);
+                          
+                          if (userId) {
+                            console.log('User ID is valid, calling router.push');
+                            try {
+                              router.push(targetUrl as any);
+                              console.log('router.push called successfully');
+                              
+                              // Add a slight delay to see if navigation occurs
+                              setTimeout(() => {
+                                console.log('Current window location after navigation attempt:', window.location.href);
+                              }, 100);
+                              
+                            } catch (error) {
+                              console.error('Error during router.push:', error);
+                              alert(`Navigation error: ${error}`);
+                            }
                           } else {
+                            console.error('User ID is undefined or falsy:', userId);
                             alert('Error: User ID is undefined');
                           }
                         }}
