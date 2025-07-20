@@ -50,7 +50,26 @@ export class CallService {
       // Get user context for the call
       const userContext = await this.getUserCallContext(userId);
 
-      // Create call session
+      // Get queue context if available
+      let queueContext: any = null;
+      if (queueId) {
+        queueContext = await tx.callQueue.findUnique({
+          where: { id: queueId },
+          select: {
+            queueType: true,
+            priorityScore: true,
+            queuePosition: true,
+            queueReason: true
+          }
+        });
+      }
+
+      // Calculate call attempt number for this user
+      const previousAttempts = await tx.callSession.count({
+        where: { userId: BigInt(userId) }
+      });
+
+      // Create call session with enhanced context
       const callSession = await tx.callSession.create({
         data: {
           userId: BigInt(userId),
@@ -59,7 +78,14 @@ export class CallService {
           status: 'initiated',
           direction,
           startedAt: new Date(),
-          userClaimsContext: JSON.stringify(userContext.claims)
+          userClaimsContext: JSON.stringify(userContext.claims),
+          
+          // Queue & priority context
+          sourceQueueType: queueContext?.queueType || null,
+          userPriorityScore: queueContext?.priorityScore || null,
+          queuePosition: queueContext?.queuePosition || null,
+          callAttemptNumber: previousAttempts + 1,
+          callSource: queueId ? 'queue' : 'manual'
         }
       });
 
@@ -167,6 +193,20 @@ export class CallService {
           smsSent: outcome.smsSent || false,
           documentsRequested: outcome.documentsRequested ? JSON.stringify(outcome.documentsRequested) : undefined,
           recordedByAgentId: agentId
+        }
+      });
+
+      // Update call session with denormalized outcome data for performance
+      await tx.callSession.update({
+        where: { id: sessionId },
+        data: {
+          lastOutcomeType: outcome.outcomeType,
+          lastOutcomeNotes: outcome.outcomeNotes || null,
+          lastOutcomeAgentId: agentId,
+          lastOutcomeAt: new Date(),
+          magicLinkSent: outcome.magicLinkSent || false,
+          smsSent: outcome.smsSent || false,
+          followUpRequired: ['callback_requested', 'not_interested', 'wrong_number'].includes(outcome.outcomeType)
         }
       });
 
@@ -601,7 +641,48 @@ export class CallService {
       durationSeconds: dbSession.durationSeconds,
       talkTimeSeconds: dbSession.talkTimeSeconds,
       userClaimsContext: dbSession.userClaimsContext,
-      createdAt: dbSession.createdAt
+      
+      // Recording fields
+      recordingUrl: dbSession.recordingUrl,
+      recordingSid: dbSession.recordingSid,
+      recordingStatus: dbSession.recordingStatus,
+      recordingDurationSeconds: dbSession.recordingDurationSeconds,
+      
+      // Call outcome fields (denormalized for performance)
+      lastOutcomeType: dbSession.lastOutcomeType,
+      lastOutcomeNotes: dbSession.lastOutcomeNotes,
+      lastOutcomeAgentId: dbSession.lastOutcomeAgentId,
+      lastOutcomeAt: dbSession.lastOutcomeAt,
+      
+      // Quick action flags
+      magicLinkSent: dbSession.magicLinkSent || false,
+      smsSent: dbSession.smsSent || false,
+      callbackScheduled: dbSession.callbackScheduled || false,
+      followUpRequired: dbSession.followUpRequired || false,
+      
+      // Queue & priority context (snapshots at time of call)
+      sourceQueueType: dbSession.sourceQueueType,
+      userPriorityScore: dbSession.userPriorityScore,
+      queuePosition: dbSession.queuePosition,
+      callAttemptNumber: dbSession.callAttemptNumber,
+      callSource: dbSession.callSource,
+      
+      // Call transcripts
+      transcriptUrl: dbSession.transcriptUrl,
+      transcriptStatus: dbSession.transcriptStatus,
+      transcriptText: dbSession.transcriptText,
+      transcriptSummary: dbSession.transcriptSummary,
+      
+      // Call scoring & quality
+      callScore: dbSession.callScore,
+      sentimentScore: dbSession.sentimentScore ? Number(dbSession.sentimentScore) : undefined,
+      agentPerformanceScore: dbSession.agentPerformanceScore,
+      
+      // Sales & conversion (simplified)
+      saleMade: dbSession.saleMade || false,
+      
+      createdAt: dbSession.createdAt,
+      updatedAt: dbSession.updatedAt
     };
   }
 

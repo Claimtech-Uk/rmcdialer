@@ -10,6 +10,7 @@ import {
   type CallAnalyticsFilters,
   type GetCallbacksOptions
 } from '@/modules/calls';
+import { UserService } from '@/modules/users';
 import { prisma } from '@/lib/db';
 
 // Create logger instance (in production this would come from a shared logger service)
@@ -19,8 +20,9 @@ const logger = {
   warn: (message: string, meta?: any) => console.warn(`[Calls WARN] ${message}`, meta)
 };
 
-// Initialize call service with dependencies
-const callService = new CallService({ prisma, logger });
+// Initialize services with dependencies
+const userService = new UserService();
+const callService = new CallService({ prisma, userService, logger });
 
 // Input validation schemas
 const InitiateCallSchema = z.object({
@@ -100,6 +102,21 @@ export const callsRouter = createTRPCRouter({
     .input(InitiateCallSchema)
     .mutation(async ({ input, ctx }) => {
       try {
+        logger.info('Initiating call with input:', { 
+          userId: input.userId, 
+          agentId: ctx.agent?.id,
+          direction: input.direction 
+        });
+
+        // Validate agent context
+        if (!ctx.agent?.id) {
+          logger.error('No agent ID in context');
+          throw new TRPCError({
+            code: 'UNAUTHORIZED',
+            message: 'Agent not authenticated'
+          });
+        }
+
         const callOptions: CallSessionOptions = {
           userId: input.userId,
           agentId: ctx.agent.id,
@@ -108,12 +125,22 @@ export const callsRouter = createTRPCRouter({
           phoneNumber: input.phoneNumber
         };
 
+        logger.info('Calling callService.initiateCall with options:', callOptions);
         const result = await callService.initiateCall(callOptions);
+        logger.info('Call initiated successfully:', { sessionId: result.callSession.id });
         return result;
-      } catch (error) {
+      } catch (error: any) {
+        logger.error('Failed to initiate call:', {
+          error: error.message,
+          stack: error.stack,
+          input,
+          agentId: ctx.agent?.id
+        });
+        
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Failed to initiate call'
+          message: error.message || 'Failed to initiate call',
+          cause: error
         });
       }
     }),
@@ -321,6 +348,87 @@ export const callsRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to get call session'
+        });
+      }
+    }),
+
+  // Get recording information for a call session
+  getRecording: protectedProcedure
+    .input(z.object({
+      sessionId: z.string().uuid()
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const session = await prisma.callSession.findUnique({
+          where: { id: input.sessionId },
+          select: {
+            id: true,
+            agentId: true,
+            recordingUrl: true,
+            recordingSid: true,
+            recordingStatus: true,
+            recordingDurationSeconds: true,
+            twilioCallSid: true,
+            direction: true,
+            startedAt: true,
+            endedAt: true,
+            durationSeconds: true,
+            agent: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        });
+
+        if (!session) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Call session not found'
+          });
+        }
+
+        // Check permissions - agents can only access their own call recordings
+        if (ctx.agent.role === 'agent' && session.agentId !== ctx.agent.id) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Access denied'
+          });
+        }
+
+        return {
+          hasRecording: !!session.recordingUrl && session.recordingStatus === 'completed',
+          recording: session.recordingUrl && session.recordingStatus === 'completed' ? {
+            url: session.recordingUrl,
+            sid: session.recordingSid,
+            status: session.recordingStatus,
+            durationSeconds: session.recordingDurationSeconds,
+            callInfo: {
+              sessionId: session.id,
+              twilioCallSid: session.twilioCallSid,
+              direction: session.direction,
+              startedAt: session.startedAt,
+              endedAt: session.endedAt,
+              durationSeconds: session.durationSeconds,
+              agentName: `${session.agent.firstName} ${session.agent.lastName}`
+            }
+          } : null,
+          status: session.recordingStatus || 'no_recording',
+          message: session.recordingStatus === 'failed' 
+            ? 'Recording failed' 
+            : session.recordingStatus === 'completed' 
+              ? 'Recording available'
+              : 'Recording not available'
+        };
+
+      } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get recording'
         });
       }
     }),
