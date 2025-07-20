@@ -546,6 +546,83 @@ export class UserService {
 
   // Private helper methods
 
+  private buildAddressForUserContext(userData: UserDataFromReplica): any {
+    // If we have allAddresses (from complete fetch), use the current address
+    if ((userData as any).allAddresses && (userData as any).allAddresses.length > 0) {
+      const currentAddress = (userData as any).allAddresses.find((addr: any) => !addr.is_linked_address);
+      if (currentAddress) {
+        return this.formatSingleAddress(currentAddress);
+      }
+    }
+
+    // Fallback to the single address relation
+    if (userData.address) {
+      // For single address, we need to fetch additional fields for proper formatting
+      return {
+        id: userData.address.id,
+        type: userData.address.type,
+        fullAddress: userData.address.full_address || `${userData.address.post_code}`,
+        postCode: userData.address.post_code,
+        county: userData.address.county
+      };
+    }
+
+    return null;
+  }
+
+  private formatSingleAddress(addr: any): any {
+    // Helper function to check if value exists and is not empty
+    const hasValue = (val: any) => val !== null && val !== undefined && String(val).trim() !== '';
+    
+    // Always build address from structured components to ensure consistency
+    const parts = [];
+    
+    // Start with house number and street if available
+    if (hasValue(addr.house_number) && hasValue(addr.street)) {
+      parts.push(`${addr.house_number} ${addr.street}`);
+    } else if (hasValue(addr.house_number)) {
+      parts.push(String(addr.house_number));
+    } else if (hasValue(addr.street)) {
+      parts.push(String(addr.street));
+    }
+    
+    // If no house/street, fall back to address lines
+    if (parts.length === 0) {
+      if (hasValue(addr.address_line_1)) {
+        parts.push(String(addr.address_line_1).trim());
+      }
+      if (hasValue(addr.address_line_2)) {
+        parts.push(String(addr.address_line_2).trim());
+      }
+    }
+    
+    // Add building name if available and different from street
+    if (hasValue(addr.building_name) && String(addr.building_name) !== String(addr.street)) {
+      parts.push(String(addr.building_name).trim());
+    }
+    
+    // Always add post town if available
+    if (hasValue(addr.post_town)) {
+      parts.push(String(addr.post_town).trim());
+    }
+    
+    // Build the full address, fallback to stored full_address if our parts are empty
+    let fullAddress = parts.filter(part => part && String(part).trim()).join(', ');
+    
+    // If we couldn't build from parts, use stored full_address
+    if (!fullAddress && hasValue(addr.full_address)) {
+      fullAddress = String(addr.full_address).trim();
+    }
+    
+    return {
+      id: addr.id,
+      type: addr.type || 'Unknown',
+      fullAddress: fullAddress || `${addr.post_code || 'Unknown postcode'}`,
+      postCode: addr.post_code || '',
+      county: addr.county || ''
+    };
+  }
+
   private async getCompleteUserDataFromReplica(userId: number): Promise<UserDataFromReplica | null> {
     try {
       // Fetch user data with claims and activity logs
@@ -946,13 +1023,7 @@ export class UserService {
         introducer: userData.introducer,
         solicitor: userData.solicitor,
         lastLogin: userData.last_login,
-        address: userData.address ? {
-          id: userData.address.id,
-          type: userData.address.type,
-          fullAddress: userData.address.full_address,
-          postCode: userData.address.post_code,
-          county: userData.address.county
-        } : null
+        address: this.buildAddressForUserContext(userData)
       },
       claims: userData.claims.map(claim => ({
         id: Number(claim.id),
