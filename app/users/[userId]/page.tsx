@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/compone
 import { Badge } from '@/modules/core/components/ui/badge';
 import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { useToast } from '@/modules/core/hooks/use-toast';
+import { useTwilioVoice } from '@/modules/calls/hooks/useTwilioVoice';
 import { CallHistoryTable } from '@/modules/calls/components/CallHistoryTable';
 
 export default function UserDetailPage() {
@@ -77,20 +78,24 @@ export default function UserDetailPage() {
     { enabled: !!userId && !isNaN(parseInt(userId)) }
   );
 
-  // Call initiation mutation
-  const initiateCallMutation = api.calls.initiateCall.useMutation({
-    onSuccess: (result) => {
-      console.log('Call initiated successfully:', result);
-      router.push(`/calls/${result.callSession.id}`);
-    },
-    onError: (error) => {
-      console.error('Failed to initiate call:', error);
-      toast({ 
-        title: "Call Failed", 
-        description: error.message || "Failed to initiate call",
-        variant: "destructive"
-      });
-    }
+  // Twilio Voice SDK for direct calling (same approach as test page)
+  const agentId = 'agent_1'; // In production, get from auth context
+  const agentEmail = 'agent@rmcdialer.app'; // In production, get from auth context
+  
+  const {
+    isReady,
+    isConnecting,
+    isInCall,
+    callStatus,
+    error: callError,
+    makeCall,
+    hangUp,
+    callDuration,
+    isMuted
+  } = useTwilioVoice({
+    agentId,
+    agentEmail,
+    autoConnect: true
   });
 
   // Magic link sending mutation
@@ -111,7 +116,7 @@ export default function UserDetailPage() {
     }
   });
 
-  const handleStartCall = () => {
+  const handleStartCall = async () => {
     if (!user.phoneNumber) {
       toast({ 
         title: "No Phone Number", 
@@ -121,11 +126,39 @@ export default function UserDetailPage() {
       return;
     }
 
-    initiateCallMutation.mutate({
-      userId: parseInt(userId),
-      phoneNumber: user.phoneNumber,
-      direction: 'outbound'
-    });
+    if (!isReady) {
+      toast({
+        title: "Twilio Not Ready",
+        description: "Please wait for Twilio Voice to initialize",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      console.log('Starting call to:', user.phoneNumber);
+      await makeCall({
+        phoneNumber: user.phoneNumber,
+        userContext: {
+          userId: parseInt(userId),
+          firstName: user.firstName || 'Unknown',
+          lastName: user.lastName || 'User',
+          claimId: userDetails?.claims?.[0]?.id
+        }
+      });
+      
+      toast({
+        title: "Call Started",
+        description: `Calling ${user.firstName} ${user.lastName}`,
+      });
+    } catch (error: any) {
+      console.error('Failed to make call:', error);
+      toast({
+        title: "Call Failed",
+        description: error.message || "Failed to start call",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleSendLink = () => {
@@ -213,6 +246,16 @@ export default function UserDetailPage() {
           </div>
         </div>
         
+        {/* Twilio Voice Status */}
+        {callError && (
+          <Alert className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Voice system error: {callError}
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <div className="flex gap-3">
           <Button 
             variant="outline"
@@ -226,11 +269,11 @@ export default function UserDetailPage() {
           </Button>
           <Button 
             onClick={handleStartCall}
-            disabled={initiateCallMutation.isPending}
+            disabled={isConnecting || isInCall || !isReady}
             className="bg-blue-600 hover:bg-blue-700"
           >
             <Phone className="w-4 h-4 mr-2" />
-            {initiateCallMutation.isPending ? 'Starting Call...' : 'Start Call'}
+            {isConnecting ? 'Connecting...' : isInCall ? 'In Call' : !isReady ? 'Initializing...' : 'Start Call'}
           </Button>
           <Button 
             onClick={handleSendLink}
