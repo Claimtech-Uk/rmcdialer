@@ -771,47 +771,47 @@ export class UserService {
       },
       
       addresses: (userData as any).allAddresses?.map((addr: any) => {
-        // Build full address from components if full_address is empty
-        let fullAddress = addr.full_address || '';
+        // Helper function to check if value exists and is not empty
+        const hasValue = (val: any) => val !== null && val !== undefined && String(val).trim() !== '';
         
-        if (!fullAddress) {
-          const parts = [];
-          
-          // Helper function to check if value exists and is not empty
-          const hasValue = (val: any) => val !== null && val !== undefined && String(val).trim() !== '';
-          
-          // Try address_line_1 first
+        // Always build address from structured components to ensure consistency
+        const parts = [];
+        
+        // Start with house number and street if available
+        if (hasValue(addr.house_number) && hasValue(addr.street)) {
+          parts.push(`${addr.house_number} ${addr.street}`);
+        } else if (hasValue(addr.house_number)) {
+          parts.push(String(addr.house_number));
+        } else if (hasValue(addr.street)) {
+          parts.push(String(addr.street));
+        }
+        
+        // If no house/street, fall back to address lines
+        if (parts.length === 0) {
           if (hasValue(addr.address_line_1)) {
             parts.push(String(addr.address_line_1).trim());
           }
-          
-          // Then address_line_2 (this often contains the main address)
           if (hasValue(addr.address_line_2)) {
             parts.push(String(addr.address_line_2).trim());
           }
-          
-          // If no address lines, build from house_number + street
-          if (parts.length === 0) {
-            if (hasValue(addr.house_number) && hasValue(addr.street)) {
-              parts.push(`${addr.house_number} ${addr.street}`);
-            } else if (hasValue(addr.house_number)) {
-              parts.push(String(addr.house_number));
-            } else if (hasValue(addr.street)) {
-              parts.push(String(addr.street));
-            }
-          }
-          
-          // Add building name if available and different
-          if (hasValue(addr.building_name) && String(addr.building_name) !== String(addr.street)) {
-            parts.push(String(addr.building_name).trim());
-          }
-          
-          // Add post town
-          if (hasValue(addr.post_town)) {
-            parts.push(String(addr.post_town).trim());
-          }
-          
-          fullAddress = parts.filter(part => part && String(part).trim()).join(', ');
+        }
+        
+        // Add building name if available and different from street
+        if (hasValue(addr.building_name) && String(addr.building_name) !== String(addr.street)) {
+          parts.push(String(addr.building_name).trim());
+        }
+        
+        // Always add post town if available
+        if (hasValue(addr.post_town)) {
+          parts.push(String(addr.post_town).trim());
+        }
+        
+        // Build the full address, fallback to stored full_address if our parts are empty
+        let fullAddress = parts.filter(part => part && String(part).trim()).join(', ');
+        
+        // If we couldn't build from parts, use stored full_address
+        if (!fullAddress && hasValue(addr.full_address)) {
+          fullAddress = String(addr.full_address).trim();
         }
         
         return {
