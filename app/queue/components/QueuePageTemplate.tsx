@@ -524,6 +524,8 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                           console.log('Attempting navigation to:', targetUrl);
                           console.log('Router object:', router);
                           
+                          alert(`Call Now clicked for user ${userId}. Check console for navigation details.`);
+                          
                           if (userId) {
                             console.log('User ID is valid, calling router.push');
                             try {

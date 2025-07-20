@@ -71,7 +71,8 @@ export default function UserDetailsModal({ userId, isOpen, onClose }: UserDetail
     }
   };
 
-  if (!userResponse && !isLoading && !error) {
+  // Always render the dialog when isOpen is true, even if data is loading
+  if (!isOpen) {
     return null;
   }
 
