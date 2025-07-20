@@ -40,6 +40,7 @@ export interface CompleteUserDetails {
     fullAddress: string;
     postCode: string;
     county: string;
+    isCurrent: boolean;
     createdAt: Date | null;
   }>;
   
@@ -573,6 +574,7 @@ export class UserService {
         select: {
           id: true,
           type: true,
+          is_linked_address: true,
           full_address: true,
           address_line_1: true,
           address_line_2: true,
@@ -814,12 +816,19 @@ export class UserService {
           fullAddress = String(addr.full_address).trim();
         }
         
+        // Determine address category based on is_linked_address
+        // is_linked_address = false (0) = Current address
+        // is_linked_address = true (1) = Previous/linked address
+        const isCurrent = !addr.is_linked_address;
+        const addressType = isCurrent ? 'Current Address' : 'Previous Address';
+        
         return {
           id: addr.id,
-          type: addr.type || 'Unknown',
+          type: addressType,
           fullAddress: fullAddress || `${addr.post_code || 'Unknown postcode'}`,
           postCode: addr.post_code || '',
           county: addr.county || '',
+          isCurrent: isCurrent,
           createdAt: addr.created_at
         };
       }) || [],

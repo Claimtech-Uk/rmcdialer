@@ -196,12 +196,15 @@ export default function UserDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {userDetails.addresses.map((address, index) => (
+                {/* Sort addresses: current first, then previous */}
+                {userDetails.addresses
+                  .sort((a, b) => (b.isCurrent ? 1 : 0) - (a.isCurrent ? 1 : 0))
+                  .map((address, index) => (
                   <div key={address.id} className="border-b last:border-b-0 pb-4 last:pb-0">
                     <div className="flex items-center justify-between mb-2">
                       <Badge 
-                        variant={address.type?.toLowerCase().includes('current') ? 'default' : 'outline'} 
-                        className="text-xs"
+                        variant={address.isCurrent ? 'default' : 'outline'} 
+                        className={`text-xs ${address.isCurrent ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
                       >
                         {address.type || 'Unknown Type'}
                       </Badge>
