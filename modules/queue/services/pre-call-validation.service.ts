@@ -193,7 +193,7 @@ export class PreCallValidationService {
             return {
               userId,
               userContext,
-              queuePosition: entry.queuePosition,
+              queuePosition: entry.queuePosition ?? 0,
               queueEntryId: entry.id,
               validationResult: validation
             };

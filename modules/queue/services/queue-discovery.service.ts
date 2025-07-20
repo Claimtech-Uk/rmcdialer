@@ -139,7 +139,6 @@ export class QueueDiscoveryService {
               status: 'pending',
               queueReason: 'Missing signature to proceed with claim',
               availableFrom: new Date(),
-              discoveredAt: new Date(),
               createdAt: new Date(),
               updatedAt: new Date()
             }
@@ -247,7 +246,6 @@ export class QueueDiscoveryService {
               status: 'pending',
               queueReason: `${pendingRequirements} pending requirement(s)`,
               availableFrom: new Date(),
-              discoveredAt: new Date(),
               createdAt: new Date(),
               updatedAt: new Date()
             }

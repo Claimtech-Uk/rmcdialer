@@ -129,7 +129,7 @@ export class CDCProcessor {
       QueueUrl: process.env.SQS_QUEUE_URL!,
       MaxNumberOfMessages: 10, // Process up to 10 messages at once
       WaitTimeSeconds: 20,     // Long polling - wait up to 20 seconds
-      VisibilityTimeoutSeconds: 300, // 5 minutes to process messages
+      VisibilityTimeout: 300, // 5 minutes to process messages
       MessageAttributeNames: ['All'],
       AttributeNames: ['All']
     })
