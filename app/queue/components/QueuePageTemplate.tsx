@@ -231,6 +231,8 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
 
   const users = (usersResult as any)?.data || [];
   console.log('QUEUE DEBUG - final users array:', users);
+  console.log('QUEUE DEBUG - first user object:', users[0]);
+  console.log('QUEUE DEBUG - user object keys:', users[0] ? Object.keys(users[0]) : 'no user');
   
   const stats = statsData?.queue || { pending: 0, assigned: 0, completedToday: 0 };
 
@@ -480,9 +482,15 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         variant="outline"
                         className={`w-full justify-start ${getSecondaryButtonClasses()} h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-md border-2`}
                         onClick={() => {
+                          console.log('VIEW DETAILS CLICKED - FULL USER OBJECT:', user);
                           console.log('VIEW DETAILS CLICKED - USER ID:', user.id);
-                          alert(`Opening details for user ${user.id}`);
-                          openUserModal(user.id);
+                          console.log('VIEW DETAILS CLICKED - USER KEYS:', Object.keys(user));
+                          alert(`Opening details for user ${user.id || 'UNDEFINED'}`);
+                          if (user.id) {
+                            openUserModal(user.id);
+                          } else {
+                            alert('Error: User ID is undefined');
+                          }
                         }}
                       >
                         <User className="w-4 h-4 mr-3" />
@@ -493,9 +501,15 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         size="default"
                         className={`w-full justify-start ${getButtonClasses()} text-white shadow-lg h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0`}
                         onClick={() => {
+                          console.log('CALL NOW CLICKED - FULL USER OBJECT:', user);
                           console.log('CALL NOW CLICKED - USER ID:', user.id);
-                          alert(`Navigating to user ${user.id}`);
-                          router.push(`/users/${user.id}`);
+                          console.log('CALL NOW CLICKED - USER KEYS:', Object.keys(user));
+                          alert(`Navigating to user ${user.id || 'UNDEFINED'}`);
+                          if (user.id) {
+                            router.push(`/users/${user.id}`);
+                          } else {
+                            alert('Error: User ID is undefined');
+                          }
                         }}
                       >
                         <Phone className="w-4 h-4 mr-3" />
