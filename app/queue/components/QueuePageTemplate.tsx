@@ -412,7 +412,14 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
             </div>
           ) : (
             <div className="space-y-4">
-              {users.map((user: any) => (
+              {users.map((userContext: any) => {
+                // Extract user data from UserCallContext structure
+                const user = userContext.user || userContext;
+                const claims = userContext.claims || [];
+                
+                console.log('RENDERING USER:', { userContext, user, claims });
+                
+                return (
                 <div 
                   key={user.id} 
                   className={`flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 ${getColorClasses('hover')} transition-colors`}
@@ -427,7 +434,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                           {user.firstName} {user.lastName}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {user.phoneNumber} • {user.claims.length} claim(s)
+                          {user.phoneNumber} • {claims.length} claim(s)
                         </div>
                         <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
                           <Calendar className="w-3 h-3" />
@@ -443,18 +450,26 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                       <div className="flex gap-2">
                         {queueType === 'outstanding_requests' ? (
                           // Show requirements for requirements queue
-                          user.claims.flatMap((claim: any) => 
-                            claim.requirements.slice(0, 3).map((req: any) => (
-                              <Badge key={req.id} variant="outline" className="text-xs bg-blue-50">
-                                {req.type} • {req.reason || 'Document required'}
+                          claims.flatMap((claim: any) => 
+                            claim.requirements.map((req: any) => (
+                              <Badge 
+                                key={req.id} 
+                                variant="destructive" 
+                                className="text-xs px-2 py-1 bg-red-100 text-red-700 border border-red-200"
+                              >
+                                {req.type.replace(/([A-Z])/g, ' $1').trim()}
                               </Badge>
                             ))
-                          ).slice(0, 3)
+                          )
                         ) : (
-                          // Show claims for other queues with friendly lender names
-                          user.claims.map((claim: any, index: number) => (
-                            <Badge key={claim.id} variant="outline" className="text-xs">
-                              {claim.type} Claim • {getShortLenderName(claim.lender)}
+                          // Show claim types for unsigned users
+                          claims.map((claim: any) => (
+                            <Badge 
+                              key={claim.id} 
+                              variant="secondary" 
+                              className="text-xs px-2 py-1 bg-gray-100 text-gray-700 border border-gray-200"
+                            >
+                              {getFriendlyLenderName(claim.lender)}
                             </Badge>
                           ))
                         )}
@@ -469,7 +484,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         onClick={(e) => e.stopPropagation()} // Prevent card click when clicking the badge
                       >
                         <div className="text-blue-600 font-medium">
-                          {user.claims.reduce((acc: number, claim: any) => 
+                          {claims.reduce((acc: number, claim: any) => 
                             acc + claim.requirements.length, 0)}
                         </div>
                         <div className="text-xs text-blue-500">Requirements</div>
@@ -482,7 +497,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         variant="outline"
                         className={`w-full justify-start ${getSecondaryButtonClasses()} h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-md border-2`}
                         onClick={() => {
-                          console.log('VIEW DETAILS CLICKED - FULL USER OBJECT:', user);
+                          console.log('VIEW DETAILS CLICKED - FULL USER OBJECT:', userContext);
                           console.log('VIEW DETAILS CLICKED - USER ID:', user.id);
                           console.log('VIEW DETAILS CLICKED - USER KEYS:', Object.keys(user));
                           alert(`Opening details for user ${user.id || 'UNDEFINED'}`);
@@ -501,7 +516,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         size="default"
                         className={`w-full justify-start ${getButtonClasses()} text-white shadow-lg h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0`}
                         onClick={() => {
-                          console.log('CALL NOW CLICKED - FULL USER OBJECT:', user);
+                          console.log('CALL NOW CLICKED - FULL USER OBJECT:', userContext);
                           console.log('CALL NOW CLICKED - USER ID:', user.id);
                           console.log('CALL NOW CLICKED - USER KEYS:', Object.keys(user));
                           alert(`Navigating to user ${user.id || 'UNDEFINED'}`);
@@ -518,7 +533,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                     </div>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </CardContent>
