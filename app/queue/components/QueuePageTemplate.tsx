@@ -228,10 +228,8 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
 
   // Debug the API response structure
   console.log('QUEUE DEBUG - usersResult:', usersResult);
-  console.log('QUEUE DEBUG - usersResult.data:', usersResult?.data);
-  console.log('QUEUE DEBUG - usersResult.data.data:', usersResult?.data?.data);
 
-  const users = usersResult?.data?.data || [];
+  const users = (usersResult as any)?.data || [];
   console.log('QUEUE DEBUG - final users array:', users);
   
   const stats = statsData?.queue || { pending: 0, assigned: 0, completedToday: 0 };
