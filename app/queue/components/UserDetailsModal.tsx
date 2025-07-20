@@ -16,7 +16,7 @@ import {
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
 import { Badge } from '@/modules/core/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/modules/core/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/modules/core/components/ui/dialog';
 import { useToast } from '@/modules/core/hooks/use-toast';
 
 interface UserDetailsModalProps {
@@ -104,6 +104,9 @@ export default function UserDetailsModal({ userId, isOpen, onClose }: UserDetail
               </Button>
             </div>
           </DialogTitle>
+          <DialogDescription>
+            View detailed user information, claims, and requirements for calling preparation.
+          </DialogDescription>
         </DialogHeader>
 
         {isLoading && (
