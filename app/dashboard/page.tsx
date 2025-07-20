@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { Card } from '@/modules/core/components/ui/card'
 import { Button } from '@/modules/core/components/ui/button'
+import { api } from '@/lib/trpc/client'
 
 // Types
 interface DashboardMetrics {
@@ -69,9 +70,9 @@ interface AgentStatus {
   name: string;
   email: string;
   status: 'available' | 'on_call' | 'break' | 'offline';
+  callsToday?: number;
+  totalTalkTime?: number;
   currentCallDuration?: number;
-  callsToday: number;
-  totalTalkTime: number;
   lastActivity: string;
 }
 
@@ -81,308 +82,280 @@ interface MetricCardProps {
   change?: string;
   trend?: 'up' | 'down' | 'neutral';
   icon: React.ReactNode;
-  color: 'blue' | 'green' | 'yellow' | 'red' | 'purple';
+  color: 'blue' | 'green' | 'yellow' | 'purple' | 'red';
+  description?: string;
 }
 
-function MetricCard({ title, value, change, trend, icon, color }: MetricCardProps) {
+function MetricCard({ title, value, change, trend, icon, color, description }: MetricCardProps) {
   const colorClasses = {
-    blue: 'bg-blue-50 text-blue-600 border-blue-200',
-    green: 'bg-green-50 text-green-600 border-green-200',
-    yellow: 'bg-yellow-50 text-yellow-600 border-yellow-200',
-    red: 'bg-red-50 text-red-600 border-red-200',
-    purple: 'bg-purple-50 text-purple-600 border-purple-200'
+    blue: 'bg-blue-50 border-blue-200 text-blue-600',
+    green: 'bg-green-50 border-green-200 text-green-600',
+    yellow: 'bg-yellow-50 border-yellow-200 text-yellow-600',
+    purple: 'bg-purple-50 border-purple-200 text-purple-600',
+    red: 'bg-red-50 border-red-200 text-red-600'
   };
 
-  const trendIcon = trend === 'up' ? (
-    <TrendingUp className="h-4 w-4 text-green-500" />
-  ) : trend === 'down' ? (
-    <TrendingDown className="h-4 w-4 text-red-500" />
-  ) : null;
+  const trendIcon = trend === 'up' ? <ArrowUpRight className="h-4 w-4" /> :
+                   trend === 'down' ? <ArrowDownRight className="h-4 w-4" /> : null;
+
+  const trendColor = trend === 'up' ? 'text-green-600' :
+                    trend === 'down' ? 'text-red-600' : 'text-gray-600';
 
   return (
-    <Card className="p-6">
+    <Card className={`p-6 border-2 ${colorClasses[color]}`}>
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{value}</p>
-          {change && (
-            <div className="flex items-center mt-2">
-              {trendIcon}
-              <span className={`text-sm ml-1 ${
-                trend === 'up' ? 'text-green-600' :
-                trend === 'down' ? 'text-red-600' : 'text-gray-600'
-              }`}>
-                {change}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className={`p-3 rounded-lg border ${colorClasses[color]}`}>
-          {icon}
+        <div className="flex items-center space-x-3">
+          <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+            {icon}
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-600">{title}</p>
+            <p className="text-2xl font-bold text-gray-900">{value}</p>
+          </div>
         </div>
       </div>
+      
+      {change && (
+        <div className={`flex items-center mt-2 ${trendColor}`}>
+          {trendIcon}
+          <span className="text-sm font-medium ml-1">{change}</span>
+        </div>
+      )}
+      
+      {description && (
+        <p className="text-xs text-gray-500 mt-2">{description}</p>
+      )}
     </Card>
   );
 }
 
-interface CallOutcomeChartProps {
-  data: Array<{ outcome: string; count: number; percentage: number }>;
+interface OutcomeChartProps {
+  data: Array<{
+    outcome: string;
+    count: number;
+    percentage: number;
+  }>;
 }
 
-function CallOutcomeChart({ data }: CallOutcomeChartProps) {
-  const outcomeColors: Record<string, string> = {
-    contacted: 'bg-green-500',
-    callback_requested: 'bg-blue-500',
-    not_interested: 'bg-red-500',
-    no_answer: 'bg-yellow-500',
-    voicemail: 'bg-purple-500',
-    wrong_number: 'bg-gray-500',
-    busy: 'bg-orange-500'
-  };
-
-  const outcomeLabels: Record<string, string> = {
-    contacted: 'Successfully Contacted',
-    callback_requested: 'Callback Requested',
-    not_interested: 'Not Interested',
-    no_answer: 'No Answer',
-    voicemail: 'Left Voicemail',
-    wrong_number: 'Wrong Number',
-    busy: 'Line Busy'
+function OutcomeChart({ data }: OutcomeChartProps) {
+  const outcomeConfig = {
+    contacted: { label: 'Successfully Contacted', color: 'bg-green-500', icon: <CheckCircle className="h-4 w-4" /> },
+    callback_requested: { label: 'Callback Requested', color: 'bg-blue-500', icon: <Phone className="h-4 w-4" /> },
+    no_answer: { label: 'No Answer', color: 'bg-yellow-500', icon: <AlertTriangle className="h-4 w-4" /> },
+    not_interested: { label: 'Not Interested', color: 'bg-red-500', icon: <XCircle className="h-4 w-4" /> },
+    voicemail: { label: 'Left Voicemail', color: 'bg-purple-500', icon: <MessageSquare className="h-4 w-4" /> }
   };
 
   return (
-    <Card className="p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Call Outcomes</h3>
-      
-      <div className="space-y-4">
-        {data.map((item) => (
-          <div key={item.outcome} className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className={`w-3 h-3 rounded-full ${outcomeColors[item.outcome] || 'bg-gray-400'}`} />
-              <span className="text-sm font-medium text-gray-700">
-                {outcomeLabels[item.outcome] || item.outcome}
-              </span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600">{item.count}</span>
-              <span className="text-sm font-medium text-gray-900">{item.percentage}%</span>
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className="space-y-4">
+      {data.map((item) => {
+        const config = outcomeConfig[item.outcome as keyof typeof outcomeConfig] || {
+          label: item.outcome,
+          color: 'bg-gray-500',
+          icon: <AlertCircle className="h-4 w-4" />
+        };
 
-      {/* Visual Bar Chart */}
-      <div className="mt-6 space-y-2">
-        {data.map((item) => (
-          <div key={item.outcome} className="flex items-center space-x-2">
-            <div className="w-20 text-xs text-gray-600 truncate">
-              {outcomeLabels[item.outcome]?.split(' ')[0] || item.outcome}
+        return (
+          <div key={item.outcome} className="flex items-center justify-between py-2">
+            <div className="flex items-center space-x-3">
+              <div className={`p-1 rounded ${config.color} text-white`}>
+                {config.icon}
+              </div>
+              <span className="text-sm font-medium text-gray-700">{config.label}</span>
             </div>
-            <div className="flex-1 bg-gray-200 rounded-full h-2">
-              <div
-                className={`h-2 rounded-full ${outcomeColors[item.outcome] || 'bg-gray-400'}`}
-                style={{ width: `${item.percentage}%` }}
-              />
-            </div>
-            <div className="w-10 text-xs text-gray-600 text-right">
-              {item.percentage}%
+            <div className="flex items-center space-x-3">
+              <span className="text-sm font-bold text-gray-900">{item.count}</span>
+              <span className="text-sm text-gray-500">{item.percentage}%</span>
             </div>
           </div>
-        ))}
-      </div>
-    </Card>
+        );
+      })}
+    </div>
   );
 }
 
 interface HourlyActivityChartProps {
-  data: Array<{ hour: number; calls: number; averageDuration: number }>;
+  data: Array<{
+    hour: number;
+    calls: number;
+    averageDuration: number;
+  }>;
 }
 
 function HourlyActivityChart({ data }: HourlyActivityChartProps) {
   const maxCalls = Math.max(...data.map(d => d.calls));
-
+  
   return (
-    <Card className="p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Hourly Call Activity</h3>
-      
-      <div className="flex items-end space-x-1 h-40">
-        {data.map((item) => (
-          <div key={item.hour} className="flex-1 flex flex-col items-center">
-            <div
-              className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
-              style={{ 
-                height: `${(item.calls / maxCalls) * 100}%`,
-                minHeight: item.calls > 0 ? '8px' : '2px'
-              }}
-              title={`${item.calls} calls at ${item.hour}:00`}
-            />
-            <div className="text-xs text-gray-600 mt-1">
-              {item.hour.toString().padStart(2, '0')}
-            </div>
-          </div>
-        ))}
+    <div className="space-y-2">
+      <div className="flex justify-between text-xs text-gray-500 mb-4">
+        <span>00</span>
+        <span>06</span>
+        <span>12</span>
+        <span>18</span>
+        <span>23</span>
       </div>
       
-      <div className="mt-4 text-center text-xs text-gray-500">
+      <div className="flex items-end space-x-1 h-32">
+        {data.map((item) => {
+          const height = maxCalls > 0 ? (item.calls / maxCalls) * 100 : 0;
+          const intensity = height > 75 ? 'bg-blue-600' : 
+                           height > 50 ? 'bg-blue-500' : 
+                           height > 25 ? 'bg-blue-400' : 'bg-blue-200';
+          
+          return (
+            <div key={item.hour} className="flex-1 flex flex-col items-center">
+              <div 
+                className={`w-full ${intensity} rounded-t`}
+                style={{ height: `${height}%` }}
+                title={`${String(item.hour).padStart(2, '0')}:00 - ${item.calls} calls`}
+              />
+            </div>
+          );
+        })}
+      </div>
+      
+      <div className="text-center text-xs text-gray-500 mt-2">
         Hours of the day (24-hour format)
       </div>
-    </Card>
+    </div>
   );
 }
 
-interface AgentStatusListProps {
+interface AgentStatusTableProps {
   agents: AgentStatus[];
 }
 
-function AgentStatusList({ agents }: AgentStatusListProps) {
-  const getStatusIcon = (status: string) => {
+function AgentStatusTable({ agents }: AgentStatusTableProps) {
+  const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'available':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
-      case 'on_call':
-        return <Phone className="h-5 w-5 text-blue-500" />;
-      case 'break':
-        return <Clock className="h-5 w-5 text-yellow-500" />;
-      case 'offline':
-        return <XCircle className="h-5 w-5 text-gray-400" />;
-      default:
-        return <XCircle className="h-5 w-5 text-gray-400" />;
+      case 'available': return { label: 'Available', color: 'bg-green-100 text-green-800', dot: 'bg-green-500' };
+      case 'on_call': return { label: 'On Call', color: 'bg-blue-100 text-blue-800', dot: 'bg-blue-500' };
+      case 'break': return { label: 'On Break', color: 'bg-yellow-100 text-yellow-800', dot: 'bg-yellow-500' };
+      case 'offline': return { label: 'Offline', color: 'bg-gray-100 text-gray-800', dot: 'bg-gray-500' };
+      default: return { label: status, color: 'bg-gray-100 text-gray-800', dot: 'bg-gray-500' };
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    return status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
-
-  const formatDuration = (seconds: number) => {
+  const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
   };
 
   return (
-    <Card>
-      <div className="p-6 border-b border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900">Agent Status</h3>
-      </div>
-      
-      <div className="divide-y divide-gray-200">
-        {agents.map((agent) => (
-          <div key={agent.id} className="p-4 hover:bg-gray-50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                {getStatusIcon(agent.status)}
-                <div>
-                  <div className="font-medium text-gray-900">{agent.name}</div>
-                  <div className="text-sm text-gray-600">{agent.email}</div>
-                </div>
-              </div>
-              
-              <div className="text-right">
-                <div className="text-sm font-medium text-gray-900">
-                  {getStatusLabel(agent.status)}
-                </div>
-                {agent.currentCallDuration && (
-                  <div className="text-sm text-blue-600">
-                    Call: {formatDuration(agent.currentCallDuration)}
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-gray-200">
+            <th className="text-left py-3 px-4 font-semibold text-gray-700">Agent</th>
+            <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
+            <th className="text-left py-3 px-4 font-semibold text-gray-700">Calls Today</th>
+            <th className="text-left py-3 px-4 font-semibold text-gray-700">Talk Time</th>
+            <th className="text-left py-3 px-4 font-semibold text-gray-700">Last Activity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {agents.map((agent) => {
+            const statusConfig = getStatusConfig(agent.status);
+            return (
+              <tr key={agent.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="py-3 px-4">
+                  <div>
+                    <div className="font-medium text-gray-900">{agent.name}</div>
+                    <div className="text-sm text-gray-500">{agent.email}</div>
                   </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="mt-3 grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <span className="text-gray-600">Calls Today:</span>
-                <span className="ml-1 font-medium text-gray-900">{agent.callsToday}</span>
-              </div>
-              <div>
-                <span className="text-gray-600">Talk Time:</span>
-                <span className="ml-1 font-medium text-gray-900">
-                  {formatDuration(agent.totalTalkTime)}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-600">Last Active:</span>
-                <span className="ml-1 font-medium text-gray-900">
+                </td>
+                <td className="py-3 px-4">
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-2 h-2 rounded-full ${statusConfig.dot}`}></div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusConfig.color}`}>
+                      {statusConfig.label}
+                    </span>
+                  </div>
+                  {agent.currentCallDuration && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Call: {formatTime(agent.currentCallDuration)}
+                    </div>
+                  )}
+                </td>
+                <td className="py-3 px-4 text-gray-900">{agent.callsToday || 0}</td>
+                <td className="py-3 px-4 text-gray-900">
+                  {agent.totalTalkTime ? formatTime(agent.totalTalkTime) : '0m'}
+                </td>
+                <td className="py-3 px-4 text-gray-500">
                   {new Date(agent.lastActivity).toLocaleTimeString()}
-                </span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 export default function DashboardPage() {
-  // Mock data for development - will be replaced with real tRPC queries
-  const mockMetrics: DashboardMetrics = {
+  // Get real data using tRPC queries
+  const { data: callAnalytics, isLoading: callsLoading } = api.calls.getAnalytics.useQuery({
+    startDate: new Date(new Date().setHours(0, 0, 0, 0)),
+    endDate: new Date()
+  });
+
+  const { data: queueStats, isLoading: queueLoading } = api.queue.getStats.useQuery();
+  
+  const { data: agentsStatus, isLoading: agentsLoading } = api.auth.getAllAgentsStatus.useQuery();
+  
+  const { data: communicationStats, isLoading: commLoading } = api.communications.getDashboardStats.useQuery({
+    startDate: new Date(new Date().setHours(0, 0, 0, 0)),
+    endDate: new Date()
+  });
+
+  // Show loading state
+  if (callsLoading || queueLoading || agentsLoading || commLoading) {
+    return (
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Construct metrics from real data
+  const metrics: DashboardMetrics = {
     callMetrics: {
-      totalCalls: 247,
-      completedCalls: 186,
-      averageDuration: 180,
-      totalTalkTime: 33480,
-      completionRate: 75.3
+      totalCalls: callAnalytics?.totalCalls || 0,
+      completedCalls: callAnalytics?.successfulContacts || 0,
+      averageDuration: callAnalytics?.avgTalkTimeMinutes ? callAnalytics.avgTalkTimeMinutes * 60 : 0,
+      totalTalkTime: (callAnalytics?.avgTalkTimeMinutes || 0) * (callAnalytics?.totalCalls || 0) * 60,
+      completionRate: callAnalytics?.contactRate || 0
     },
     queueMetrics: {
-      currentDepth: 12,
-      averageWaitTime: 145,
-      assignmentRate: 92.1
+      currentDepth: (queueStats?.queue?.pending || 0) + (queueStats?.queue?.assigned || 0),
+      averageWaitTime: queueStats?.averageWaitTime || 0,
+      assignmentRate: 0 // Will calculate when we have the data
     },
     agentMetrics: {
-      totalAgents: 8,
-      onlineAgents: 6,
-      busyAgents: 2,
-      availableAgents: 4
+      totalAgents: agentsStatus?.length || 0,
+      onlineAgents: agentsStatus?.filter(a => a.agent?.isActive)?.length || 0,
+      busyAgents: agentsStatus?.filter(a => a.currentStatus === 'on_call')?.length || 0,
+      availableAgents: agentsStatus?.filter(a => a.currentStatus === 'available')?.length || 0
     },
-    outcomeBreakdown: [
-      { outcome: 'contacted', count: 142, percentage: 57.5 },
-      { outcome: 'callback_requested', count: 44, percentage: 17.8 },
-      { outcome: 'no_answer', count: 38, percentage: 15.4 },
-      { outcome: 'not_interested', count: 15, percentage: 6.1 },
-      { outcome: 'voicemail', count: 8, percentage: 3.2 }
-    ],
-    hourlyData: Array.from({ length: 24 }, (_, i) => ({
-      hour: i,
-      calls: Math.floor(Math.random() * 20) + 5,
-      averageDuration: Math.floor(Math.random() * 60) + 120
-    }))
+    outcomeBreakdown: callAnalytics?.outcomeBreakdown || [],
+    hourlyData: [] // Will need to implement hourly analytics endpoint
   };
 
-  const mockAgents: AgentStatus[] = [
-    {
-      id: 1,
-      name: 'Sarah Johnson',
-      email: 'sarah.j@company.com',
-      status: 'available',
-      callsToday: 23,
-      totalTalkTime: 4680,
-      lastActivity: new Date().toISOString()
-    },
-    {
-      id: 2,
-      name: 'Mike Brown',
-      email: 'mike.b@company.com',
-      status: 'on_call',
-      currentCallDuration: 245,
-      callsToday: 18,
-      totalTalkTime: 3240,
-      lastActivity: new Date().toISOString()
-    },
-    {
-      id: 3,
-      name: 'Emma Wilson',
-      email: 'emma.w@company.com',
-      status: 'break',
-      callsToday: 15,
-      totalTalkTime: 2700,
-      lastActivity: new Date(Date.now() - 300000).toISOString()
-    }
-  ];
-
-  const metrics = mockMetrics;
-  const agents = mockAgents;
+  // Transform agent status data
+  const agents: AgentStatus[] = (agentsStatus || []).map(agentSession => ({
+    id: agentSession.agentId,
+    name: `${agentSession.agent.firstName} ${agentSession.agent.lastName}`,
+    email: agentSession.agent.email,
+    status: agentSession.currentStatus as AgentStatus['status'],
+    callsToday: agentSession.totalCallsToday,
+    totalTalkTime: agentSession.totalTalkTimeSeconds,
+    lastActivity: agentSession.lastStatusChange.toISOString()
+  }));
 
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -404,31 +377,31 @@ export default function DashboardPage() {
         <MetricCard
           title="Total Calls"
           value={metrics.callMetrics.totalCalls}
-          change="+12% vs yesterday"
-          trend="up"
+          change="Real-time data"
+          trend="neutral"
           icon={<Phone className="h-6 w-6" />}
           color="blue"
         />
         <MetricCard
           title="Completion Rate"
-          value={`${metrics.callMetrics.completionRate}%`}
-          change="+5% vs yesterday"
-          trend="up"
+          value={`${metrics.callMetrics.completionRate.toFixed(1)}%`}
+          change="Real-time data"
+          trend="neutral"
           icon={<CheckCircle className="h-6 w-6" />}
           color="green"
         />
         <MetricCard
           title="Queue Depth"
           value={metrics.queueMetrics.currentDepth}
-          change="-3 from 1hr ago"
-          trend="down"
+          change="Current pending"
+          trend="neutral"
           icon={<ListChecks className="h-6 w-6" />}
           color="yellow"
         />
         <MetricCard
           title="Active Agents"
           value={`${metrics.agentMetrics.onlineAgents}/${metrics.agentMetrics.totalAgents}`}
-          change="2 online"
+          change={`${metrics.agentMetrics.availableAgents} available`}
           trend="neutral"
           icon={<Users className="h-6 w-6" />}
           color="purple"
@@ -436,93 +409,134 @@ export default function DashboardPage() {
       </div>
 
       {/* Secondary Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Talk Time</h3>
-          <div className="text-3xl font-bold text-gray-900">
-            {`${Math.floor(metrics.callMetrics.totalTalkTime / 3600)}h ${Math.floor((metrics.callMetrics.totalTalkTime % 3600) / 60)}m`}
-          </div>
-          <p className="text-sm text-gray-600 mt-1">Total talk time today</p>
-        </Card>
-        
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Avg Call Duration</h3>
-          <div className="text-3xl font-bold text-gray-900">
-            {`${Math.floor(metrics.callMetrics.averageDuration / 60)}:${(metrics.callMetrics.averageDuration % 60).toString().padStart(2, '0')}`}
-          </div>
-          <p className="text-sm text-gray-600 mt-1">Average duration per call</p>
-        </Card>
-        
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Queue Wait Time</h3>
-          <div className="text-3xl font-bold text-gray-900">
-            {`${Math.floor(metrics.queueMetrics.averageWaitTime / 60)}:${(metrics.queueMetrics.averageWaitTime % 60).toString().padStart(2, '0')}`}
-          </div>
-          <p className="text-sm text-gray-600 mt-1">Average wait time</p>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <MetricCard
+          title="Talk Time"
+          value={`${Math.floor(metrics.callMetrics.totalTalkTime / 3600)}h ${Math.floor((metrics.callMetrics.totalTalkTime % 3600) / 60)}m`}
+          change="Total talk time today"
+          trend="neutral"
+          icon={<Clock className="h-6 w-6" />}
+          color="blue"
+          description="Total talk time today"
+        />
+        <MetricCard
+          title="Avg Call Duration"
+          value={`${Math.floor(metrics.callMetrics.averageDuration / 60)}:${String(Math.floor(metrics.callMetrics.averageDuration % 60)).padStart(2, '0')}`}
+          change="Average duration per call"
+          trend="neutral"
+          icon={<PhoneCall className="h-6 w-6" />}
+          color="green"
+          description="Average duration per call"
+        />
+        <MetricCard
+          title="Queue Wait Time"
+          value={`${Math.floor(metrics.queueMetrics.averageWaitTime / 60)}:${String(Math.floor(metrics.queueMetrics.averageWaitTime % 60)).padStart(2, '0')}`}
+          change="Average wait time"
+          trend="neutral"
+          icon={<Clock className="h-6 w-6" />}
+          color="yellow"
+          description="Average wait time"
+        />
       </div>
 
-      {/* Charts and Tables */}
+      {/* Charts and Details */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Call Outcomes Chart */}
-        <CallOutcomeChart data={metrics.outcomeBreakdown} />
-        
-        {/* Hourly Activity Chart */}
-        <HourlyActivityChart data={metrics.hourlyData} />
+        {/* Call Outcomes */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Call Outcomes</h3>
+          {metrics.outcomeBreakdown.length > 0 ? (
+            <>
+              <OutcomeChart data={metrics.outcomeBreakdown} />
+              {/* Progress bars */}
+              <div className="mt-6 space-y-2">
+                {metrics.outcomeBreakdown.map((item) => (
+                  <div key={item.outcome} className="flex items-center space-x-3">
+                    <span className="text-sm font-medium text-gray-600 w-20">
+                      {item.outcome === 'contacted' ? 'Successfully' :
+                       item.outcome === 'callback_requested' ? 'Callback' :
+                       item.outcome === 'no_answer' ? 'No' :
+                       item.outcome === 'not_interested' ? 'Not' :
+                       'Left'}
+                    </span>
+                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full ${
+                          item.outcome === 'contacted' ? 'bg-green-500' :
+                          item.outcome === 'callback_requested' ? 'bg-blue-500' :
+                          item.outcome === 'no_answer' ? 'bg-yellow-500' :
+                          item.outcome === 'not_interested' ? 'bg-red-500' :
+                          'bg-purple-500'
+                        }`}
+                        style={{ width: `${item.percentage}%` }}
+                      />
+                    </div>
+                    <span className="text-sm text-gray-500 w-12">{item.percentage.toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center text-gray-500 py-8">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>No call outcome data available</p>
+            </div>
+          )}
+        </Card>
+
+        {/* Hourly Call Activity */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Hourly Call Activity</h3>
+          {metrics.hourlyData.length > 0 ? (
+            <HourlyActivityChart data={metrics.hourlyData} />
+          ) : (
+            <div className="text-center text-gray-500 py-8">
+              <BarChart3 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>Hourly activity data coming soon</p>
+            </div>
+          )}
+        </Card>
       </div>
 
-      {/* Agent Status */}
-      <AgentStatusList agents={agents} />
-
-      {/* Performance Alerts */}
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="bg-yellow-50 border-yellow-200 p-6">
-          <div className="flex items-center">
-            <AlertTriangle className="h-6 w-6 text-yellow-600 mr-2" />
-            <h3 className="text-lg font-semibold text-yellow-800">Performance Alerts</h3>
-          </div>
-          <div className="mt-4 space-y-2 text-sm text-yellow-700">
-            {metrics.queueMetrics.currentDepth > 50 && (
-              <div>• Queue depth is high ({metrics.queueMetrics.currentDepth} users waiting)</div>
-            )}
-            {metrics.callMetrics.completionRate < 70 && (
-              <div>• Call completion rate is below target ({metrics.callMetrics.completionRate}%)</div>
-            )}
-            {metrics.queueMetrics.averageWaitTime > 300 && (
-              <div>• Average wait time is high ({Math.floor(metrics.queueMetrics.averageWaitTime / 60)} minutes)</div>
-            )}
-            {metrics.queueMetrics.currentDepth <= 50 && metrics.callMetrics.completionRate >= 70 && (
-              <div>• No performance issues detected</div>
-            )}
-          </div>
-        </Card>
+      {/* Agent Status Table */}
+      <Card className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-lg font-semibold text-gray-900">Agent Status</h3>
+          <Button variant="outline" size="sm">
+            <Link2 className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
         
-        <Card className="bg-blue-50 border-blue-200 p-6">
-          <div className="flex items-center">
-            <TrendingUp className="h-6 w-6 text-blue-600 mr-2" />
-            <h3 className="text-lg font-semibold text-blue-800">Quick Actions</h3>
+        {agents.length > 0 ? (
+          <AgentStatusTable agents={agents} />
+        ) : (
+          <div className="text-center text-gray-500 py-8">
+            <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+            <p>No agent data available</p>
           </div>
-          <div className="mt-4 space-y-2">
-            <Link 
-              href="/queue/unsigned" 
-              className="block w-full text-left px-3 py-2 bg-white border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
-            >
-              🔄 View Call Queue
-            </Link>
-            <Link 
-              href="/calls/history" 
-              className="block w-full text-left px-3 py-2 bg-white border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
-            >
-              📊 View Call History
-            </Link>
-            <Link 
-              href="/sms" 
-              className="block w-full text-left px-3 py-2 bg-white border border-blue-200 rounded text-sm text-blue-700 hover:bg-blue-100"
-            >
-              💬 SMS Conversations
-            </Link>
-          </div>
-        </Card>
+        )}
+      </Card>
+
+      {/* Quick Actions */}
+      <div className="mt-8 flex justify-center space-x-4">
+        <Link href="/queue/unsigned">
+          <Button className="bg-blue-600 hover:bg-blue-700">
+            <ListChecks className="h-4 w-4 mr-2" />
+            View Unsigned Queue
+          </Button>
+        </Link>
+        <Link href="/queue/requirements">
+          <Button variant="outline">
+            <Calendar className="h-4 w-4 mr-2" />
+            View Requirements Queue
+          </Button>
+        </Link>
+        <Link href="/calls/history">
+          <Button variant="outline">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            View Call Analytics
+          </Button>
+        </Link>
       </div>
     </div>
   );

@@ -63,28 +63,21 @@ export class SMSService {
 
   private async initializeTwilio(): Promise<void> {
     try {
-      // In production, this would initialize the real Twilio client
-      // const twilio = require('twilio');
-      // this.twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      // Check if we have Twilio credentials
+      if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || 
+          process.env.TWILIO_ACCOUNT_SID?.startsWith('your-') || 
+          process.env.TWILIO_AUTH_TOKEN?.startsWith('your-')) {
+        
+        logger.warn('Twilio credentials not configured, SMS functionality will be limited');
+        this.twilioClient = null;
+        return;
+      }
+
+      // Initialize real Twilio client
+      const twilio = require('twilio');
+      this.twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
       
-      // For development, we'll use a mock client
-      this.twilioClient = {
-        messages: {
-          create: async (options) => {
-            logger.info('Mock SMS sent', {
-              to: options.to,
-              from: options.from,
-              body: options.body
-            });
-            return {
-              sid: `SM${Date.now()}${Math.random().toString(36).substr(2, 9)}`,
-              status: 'queued'
-            };
-          }
-        }
-      };
-      
-      logger.info('SMS service initialized', { 
+      logger.info('SMS service initialized with real Twilio client', { 
         fromNumber: this.fromNumber,
         mode: process.env.NODE_ENV === 'production' ? 'production' : 'development'
       });
@@ -681,46 +674,19 @@ export class SMSService {
   }
 
   private async getUserData(userId: number) {
-    // If userService is available, use it, otherwise use mock data
-    if (this.dependencies.userService) {
-      try {
+    try {
+      // Always try to use UserService for real data
+      if (this.dependencies.userService) {
+        // Use the existing getUserData method if available
         return await this.dependencies.userService.getUserData(userId);
-      } catch (error) {
-        logger.warn('Failed to get user data from service, using mock data', { userId, error });
       }
+      
+      // If UserService is not available, throw error
+      throw new Error(`UserService not available for user ${userId}`);
+      
+    } catch (error) {
+      logger.error('Failed to get user data', { userId, error });
+      throw error;
     }
-
-    // Mock user data for development
-    const mockUsers: Record<number, any> = {
-      12345: {
-        id: 12345,
-        firstName: 'John',
-        lastName: 'Smith',
-        email: 'john.smith@email.com',
-        phoneNumber: '+447700123456'
-      },
-      23456: {
-        id: 23456,
-        firstName: 'Sarah',
-        lastName: 'Johnson',
-        email: 'sarah.j@email.com',
-        phoneNumber: '+447700234567'
-      },
-      34567: {
-        id: 34567,
-        firstName: 'Michael',
-        lastName: 'Brown',
-        email: 'mike.brown@email.com',
-        phoneNumber: '+447700345678'
-      }
-    };
-
-    return mockUsers[userId] || {
-      id: userId,
-      firstName: 'Unknown',
-      lastName: 'User',
-      email: `user${userId}@email.com`,
-      phoneNumber: '+447700000000'
-    };
   }
 } 

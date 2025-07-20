@@ -388,19 +388,19 @@ export class MagicLinkService {
     });
 
     // Recent activity
-    const recentActivity = activities
+    const recentActivity = await Promise.all(activities
       .slice(0, 10)
-      .map((activity: any) => ({
+      .map(async (activity: any) => ({
         id: activity.id,
         userId: Number(activity.userId),
-        userName: this.getMockUserName(Number(activity.userId)),
+        userName: await this.getUserName(Number(activity.userId)),
         linkType: activity.linkType as MagicLinkType,
         sentAt: activity.sentAt,
         accessedAt: activity.accessedAt,
         agentName: activity.sentByAgent ? 
           `${activity.sentByAgent.firstName} ${activity.sentByAgent.lastName}` : 
           'System'
-      }));
+      })));
 
     return {
       totalSent,
@@ -617,15 +617,17 @@ export class MagicLinkService {
     };
   }
 
-  private getMockUserName(userId: number): string {
-    const mockUsers: Record<number, string> = {
-      12345: 'John Smith',
-      23456: 'Sarah Johnson',
-      34567: 'Michael Brown',
-      45678: 'Emma Wilson',
-      56789: 'David Taylor'
-    };
-
-    return mockUsers[userId] || `User ${userId}`;
+  private async getUserName(userId: number): Promise<string> {
+    try {
+      if (this.dependencies.userService) {
+        const userData = await this.dependencies.userService.getUserData(userId);
+        return `${userData.firstName} ${userData.lastName}`;
+      }
+      
+      return `User ${userId}`;
+    } catch (error) {
+      logger.warn('Failed to get user name', { userId, error });
+      return `User ${userId}`;
+    }
   }
 } 

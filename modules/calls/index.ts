@@ -1,8 +1,8 @@
 // Calls Module Exports
 // Services, types, components, and hooks for call management
 
-// Services (server-side only - do not import in client components)
-// export { CallService } from './services/call.service';
+// Services
+export { CallService } from './services/call.service';
 
 // Types
 export type {

@@ -411,39 +411,7 @@ export class QueueService {
     }
   }
 
-  /**
-   * Get users eligible for calling based on business rules
-   */
-  private async getEligibleUsers(): Promise<UserEligibilityFactors[]> {
-    // For now, we'll simulate user data since we don't have the replica connection yet
-    // In production, this would query the MySQL replica for users with pending requirements
-    
-    const mockUsers: UserEligibilityFactors[] = [
-      {
-              userId: BigInt(12345),
-      claimId: BigInt(456),
-      daysSinceLastContact: 3,
-      pendingRequirements: 2,
-      lastOutcome: 'no_answer',
-      totalAttempts: 1,
-      preferredCallTime: [9, 17],
-      lastCallAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-      hasSignature: true // Mock data - has signature but needs documents
-      },
-      {
-        userId: BigInt(12346),
-        claimId: BigInt(457),
-        daysSinceLastContact: 7,
-        pendingRequirements: 1,
-        lastOutcome: 'callback_requested',
-        totalAttempts: 2,
-        scheduledCallback: new Date(Date.now() + 2 * 60 * 60 * 1000),
-        hasSignature: false // Mock data - missing signature
-      }
-    ];
-    
-    return mockUsers;
-  }
+
 
   /**
    * Update user call scores in bulk for performance

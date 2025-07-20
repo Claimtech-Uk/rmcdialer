@@ -19,10 +19,12 @@ import {
   InitiateCallRequest,
   InitiateCallResponse
 } from '../types/call.types';
+import { UserService } from '../../users/services/user.service';
 
 // Dependencies that will be injected
 interface CallServiceDependencies {
   prisma: PrismaClient;
+  userService?: UserService;
   logger: {
     info: (message: string, meta?: any) => void;
     error: (message: string, error?: any) => void;
@@ -31,7 +33,12 @@ interface CallServiceDependencies {
 }
 
 export class CallService {
-  constructor(private deps: CallServiceDependencies) {}
+  private userService: UserService;
+
+  constructor(private deps: CallServiceDependencies) {
+    // Initialize UserService if not provided
+    this.userService = deps.userService || new UserService();
+  }
 
   /**
    * Initiate a new call session
@@ -461,23 +468,55 @@ export class CallService {
    * Private helper methods
    */
   private async getUserCallContext(userId: number): Promise<UserCallContext> {
-    // In production, this would query the MySQL replica database
-    // For now, using mock data that matches the schema
-    const mockUser = this.getMockUserData(userId);
-    
-    return {
-      userId: mockUser.id,
-      firstName: mockUser.firstName,
-      lastName: mockUser.lastName,
-      email: mockUser.email,
-      phoneNumber: mockUser.phoneNumber,
-      claims: mockUser.claims || [],
-      callScore: {
-        currentScore: 50, // Mock score
-        totalAttempts: 1,
-        lastOutcome: 'no_answer'
+    try {
+      // Use UserService to get real user data
+      const userServiceContext = await this.userService.getUserCallContext(userId);
+      
+      if (userServiceContext) {
+        // Map from UserService context to CallService context structure
+        return {
+          userId: userServiceContext.user.id,
+          firstName: userServiceContext.user.firstName || 'Unknown',
+          lastName: userServiceContext.user.lastName || 'User',
+          email: userServiceContext.user.email || `user${userId}@unknown.com`,
+          phoneNumber: userServiceContext.user.phoneNumber || '+44000000000',
+          address: userServiceContext.user.address ? {
+            fullAddress: userServiceContext.user.address.fullAddress || '',
+            postCode: userServiceContext.user.address.postCode || '',
+            county: userServiceContext.user.address.county || ''
+          } : undefined,
+          claims: userServiceContext.claims.map(claim => ({
+            id: claim.id,
+            type: claim.type || 'unknown',
+            status: claim.status || 'unknown',
+            lender: claim.lender || 'unknown',
+            value: 0, // Would need to add this to the users module if needed
+            requirements: claim.requirements.map(req => ({
+              id: req.id,
+              type: req.type || 'unknown',
+              status: req.status || 'unknown',
+              reason: req.reason || 'No reason provided'
+            }))
+          })),
+          callScore: userServiceContext.callScore ? {
+            currentScore: userServiceContext.callScore.currentScore,
+            totalAttempts: userServiceContext.callScore.totalAttempts,
+            lastOutcome: userServiceContext.callScore.lastOutcome || 'no_attempt'
+          } : {
+            currentScore: 50,
+            totalAttempts: 0,
+            lastOutcome: 'no_attempt'
+          }
+        };
       }
-    };
+      
+      // Fallback if user not found
+      throw new Error(`User ${userId} not found`);
+      
+    } catch (error) {
+      this.deps.logger.error(`Failed to get user context for ${userId}:`, error);
+      throw error;
+    }
   }
 
   private getDefaultDelayHours(outcomeType: string): number {
@@ -542,55 +581,6 @@ export class CallService {
     const now = new Date();
     const delayHours = this.getDefaultDelayHours(outcomeType);
     return new Date(now.getTime() + delayHours * 60 * 60 * 1000);
-  }
-
-  private getMockUserData(userId: number) {
-    const mockUsers: Record<number, any> = {
-      12345: {
-        id: 12345,
-        firstName: 'John',
-        lastName: 'Smith',
-        email: 'john.smith@email.com',
-        phoneNumber: '+447700123456',
-        claims: [{
-          id: 67890,
-          type: 'VEHICLE',
-          status: 'documents_needed',
-          lender: 'Santander',
-          value: 15000,
-          requirements: [
-            { id: 'req1', type: 'ID_DOCUMENT', status: 'PENDING', reason: 'Identity verification required' },
-            { id: 'req2', type: 'BANK_STATEMENTS', status: 'PENDING', reason: '3 months bank statements needed' }
-          ]
-        }]
-      },
-      12346: {
-        id: 12346,
-        firstName: 'Sarah',
-        lastName: 'Johnson',
-        email: 'sarah.johnson@email.com',
-        phoneNumber: '+447700234567',
-        claims: [{
-          id: 78901,
-          type: 'CREDIT_CARD',
-          status: 'documents_needed',
-          lender: 'Barclaycard',
-          value: 8000,
-          requirements: [
-            { id: 'req3', type: 'CREDIT_STATEMENTS', status: 'PENDING', reason: 'Credit card statements required' }
-          ]
-        }]
-      }
-    };
-
-    return mockUsers[userId] || {
-      id: userId,
-      firstName: 'Unknown',
-      lastName: 'User',
-      email: `user${userId}@email.com`,
-      phoneNumber: '+447700000000',
-      claims: []
-    };
   }
 
   /**

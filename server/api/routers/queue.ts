@@ -122,8 +122,8 @@ export const queueRouter = createTRPCRouter({
         lastRefresh: new Date().toISOString(),
         totalAgents: 5,
         activeAgents: 3,
-        averageWaitTime: 0, // Mock data - would calculate from queue analytics
-        topPriorityScore: 0 // Mock data - would get from first queue entry
+        averageWaitTime: 0, // TODO: Calculate from queue analytics
+        topPriorityScore: 0 // TODO: Get from first queue entry
       };
     })
 }); 
