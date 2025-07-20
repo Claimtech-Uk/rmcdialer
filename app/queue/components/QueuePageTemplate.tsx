@@ -76,6 +76,7 @@ interface QueuePageTemplateProps {
 }
 
 export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps) {
+  console.log('QueuePageTemplate rendering with queueType:', queueType);
   const { toast } = useToast();
   const router = useRouter();
   const config = queueConfigs[queueType];
@@ -142,6 +143,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
   });
 
   const handleCallNextValidUser = async () => {
+    console.log('CALL NEXT VALID USER CLICKED - queueType:', queueType);
     try {
       await getNextUserMutation.mutateAsync({ queueType });
     } catch (error) {
@@ -489,6 +491,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         size="default"
                         className={`w-full justify-start ${getButtonClasses()} text-white shadow-lg h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0`}
                         onClick={(e) => {
+                          console.log('CALL NOW CLICKED - USER ID:', user.id);
                           e.stopPropagation(); // Prevent card click
                           // Navigate to user detail page for calling
                           router.push(`/users/${user.id}`);
