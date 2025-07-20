@@ -20,7 +20,7 @@ import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { useToast } from '@/modules/core/hooks/use-toast';
 import { QueueType } from '@/modules/queue/types/queue.types';
 import { getFriendlyLenderName, getShortLenderName } from '@/lib/utils/lender-names';
-import UserDetailsModal from './UserDetailsModal';
+// UserDetailsModal import removed - now navigating directly to user detail pages
 import InPageCallInterface from './InPageCallInterface';
 
 interface QueueConfig {
@@ -88,9 +88,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
     page: 1
   });
 
-  // Modal state for user details
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Modal state removed - now navigating directly to user detail pages
 
   // Call state for in-page calling
   const [activeCall, setActiveCall] = useState<{
@@ -101,15 +99,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
     startTime?: Date;
   } | null>(null);
 
-  const openUserModal = (userId: number) => {
-    setSelectedUserId(userId);
-    setIsModalOpen(true);
-  };
-
-  const closeUserModal = () => {
-    setSelectedUserId(null);
-    setIsModalOpen(false);
-  };
+  // Modal functions removed - now navigating directly to user detail pages
 
   // Pre-call validation: Get next valid user for calling
   const getNextUserMutation = api.queue.getNextUserForCall.useMutation({
@@ -494,12 +484,24 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                           console.log('VIEW DETAILS CLICKED - USER KEYS:', Object.keys(user));
                           
                           const userId = user.id;
-                          console.log('Attempting to open modal for user ID:', userId);
+                          const targetUrl = `/users/${userId}`;
+                          
+                          console.log('Attempting navigation to user details page:', targetUrl);
                           
                           if (userId) {
-                            console.log('User ID is valid, calling openUserModal');
-                            openUserModal(userId);
-                            console.log('openUserModal called successfully');
+                            console.log('User ID is valid, navigating to user detail page');
+                            try {
+                              router.push(targetUrl as any);
+                              console.log('router.push called successfully for user details');
+                              
+                              setTimeout(() => {
+                                console.log('Current window location after navigation attempt:', window.location.href);
+                              }, 100);
+                              
+                            } catch (error) {
+                              console.error('Error during user details navigation:', error);
+                              alert(`Navigation error: ${error}`);
+                            }
                           } else {
                             console.error('User ID is undefined or falsy:', userId);
                             alert('Error: User ID is undefined');
@@ -559,12 +561,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
         </CardContent>
       </Card>
 
-      {/* User Details Modal */}
-      <UserDetailsModal 
-        userId={selectedUserId}
-        isOpen={isModalOpen}
-        onClose={closeUserModal}
-      />
+      {/* User Details Modal removed - now navigating directly to user detail pages */}
 
       {/* In-Page Call Interface */}
       {activeCall && (
