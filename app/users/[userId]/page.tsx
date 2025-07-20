@@ -13,13 +13,18 @@ import {
   AlertTriangle,
   Clock,
   Building,
-  Shield
+  Shield,
+  MessageSquare,
+  History,
+  Link2,
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
 import { Badge } from '@/modules/core/components/ui/badge';
 import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { useToast } from '@/modules/core/hooks/use-toast';
+import { CallHistoryTable } from '@/modules/calls/components/CallHistoryTable';
 
 export default function UserDetailPage() {
   const params = useParams();
@@ -45,6 +50,33 @@ export default function UserDetailPage() {
     { enabled: !!userId && !isNaN(parseInt(userId)) }
   );
 
+  // Fetch call history for this user
+  const { data: callHistoryResponse, isLoading: callHistoryLoading } = api.calls.getCallHistoryTable.useQuery(
+    { 
+      userId: parseInt(userId),
+      limit: 50,
+      page: 1
+    },
+    { enabled: !!userId && !isNaN(parseInt(userId)) }
+  );
+
+  // Fetch SMS conversations for this user
+  const { data: smsConversationsResponse, isLoading: smsLoading } = api.communications.sms.getConversations.useQuery(
+    { 
+      userId: parseInt(userId),
+      limit: 20,
+      page: 1,
+      status: 'active'
+    },
+    { enabled: !!userId && !isNaN(parseInt(userId)) }
+  );
+
+  // Fetch magic link history for this user
+  const { data: magicLinkHistoryResponse, isLoading: magicLinkLoading } = api.communications.magicLinks.getUserHistory.useQuery(
+    { userId: parseInt(userId) },
+    { enabled: !!userId && !isNaN(parseInt(userId)) }
+  );
+
   if (isLoading) {
     return (
       <div className="p-6 max-w-6xl mx-auto">
@@ -52,11 +84,184 @@ export default function UserDetailPage() {
           <div className="text-center">
             <User className="h-8 w-8 animate-pulse text-blue-600 mx-auto mb-4" />
             <p className="text-gray-600">Loading user details...</p>
-          </div>
+                  </div>
+
+        {/* Dialer History Section */}
+        <div className="space-y-6">
+          {/* Call History */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Phone className="w-5 h-5" />
+                Call History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {callHistoryLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-center">
+                    <History className="h-8 w-8 animate-pulse text-blue-600 mx-auto mb-4" />
+                    <p className="text-gray-600">Loading call history...</p>
+                  </div>
+                </div>
+              ) : callHistoryResponse?.calls?.length ? (
+                <CallHistoryTable 
+                  userId={parseInt(userId)}
+                  calls={callHistoryResponse.calls}
+                  isLoading={callHistoryLoading}
+                  showUserInfo={false}
+                />
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Phone className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No call history found for this user</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* SMS History */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="w-5 h-5" />
+                SMS Conversations
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {smsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-center">
+                    <MessageSquare className="h-8 w-8 animate-pulse text-blue-600 mx-auto mb-4" />
+                    <p className="text-gray-600">Loading SMS history...</p>
+                  </div>
+                </div>
+              ) : smsConversationsResponse?.data?.length ? (
+                <div className="space-y-4">
+                  {smsConversationsResponse.data.map((conversation: any) => (
+                    <div key={conversation.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4 text-blue-600" />
+                          <span className="font-medium">{conversation.phoneNumber}</span>
+                          <Badge 
+                            variant={conversation.status === 'active' ? 'default' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {conversation.status}
+                          </Badge>
+                        </div>
+                        <span className="text-sm text-gray-500">
+                          {conversation.lastMessageAt ? 
+                            new Date(conversation.lastMessageAt).toLocaleDateString() : 
+                            'No messages'
+                          }
+                        </span>
+                      </div>
+                      
+                      {conversation.lastMessage && (
+                        <div className="bg-gray-50 rounded p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-medium text-gray-600">
+                              {conversation.lastMessage.direction === 'inbound' ? 'Received' : 'Sent'}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {new Date(conversation.lastMessage.sentAt).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-sm">{conversation.lastMessage.message}</p>
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center justify-between text-sm text-gray-600">
+                        <span>{conversation.messageCount || 0} messages</span>
+                        {conversation.assignedAgentId && (
+                          <span>Agent: {conversation.assignedAgentId}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No SMS conversations found for this user</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Magic Link History */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Link2 className="w-5 h-5" />
+                Magic Link History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {magicLinkLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-center">
+                    <Link2 className="h-8 w-8 animate-pulse text-blue-600 mx-auto mb-4" />
+                    <p className="text-gray-600">Loading magic link history...</p>
+                  </div>
+                </div>
+              ) : magicLinkHistoryResponse?.data?.length ? (
+                <div className="space-y-3">
+                  {magicLinkHistoryResponse.data.map((link: any) => (
+                    <div key={link.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Link2 className="h-4 w-4 text-blue-600" />
+                          <span className="font-medium capitalize">{link.type}</span>
+                          <Badge 
+                            variant={link.status === 'active' ? 'default' : 
+                                   link.status === 'used' ? 'secondary' : 'destructive'}
+                            className="text-xs"
+                          >
+                            {link.status}
+                          </Badge>
+                        </div>
+                        <span className="text-sm text-gray-500">
+                          {new Date(link.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-600">Delivery:</span>
+                          <span className="ml-2 capitalize">{link.deliveryMethod}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Expires:</span>
+                          <span className="ml-2">
+                            {link.expiresAt ? new Date(link.expiresAt).toLocaleDateString() : 'Never'}
+                          </span>
+                        </div>
+                        {link.accessedAt && (
+                          <div className="col-span-2">
+                            <span className="text-gray-600">Last accessed:</span>
+                            <span className="ml-2">{new Date(link.accessedAt).toLocaleString()}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Link2 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No magic links sent to this user</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+} 
 
   if (error || !userDetails) {
     return (
