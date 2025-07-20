@@ -226,13 +226,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Debug the API response structure
-  console.log('QUEUE DEBUG - usersResult:', usersResult);
-
   const users = (usersResult as any)?.data || [];
-  console.log('QUEUE DEBUG - final users array:', users);
-  console.log('QUEUE DEBUG - first user object:', users[0]);
-  console.log('QUEUE DEBUG - user object keys:', users[0] ? Object.keys(users[0]) : 'no user');
   
   const stats = statsData?.queue || { pending: 0, assigned: 0, completedToday: 0 };
 
@@ -416,8 +410,6 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                 // Extract user data from UserCallContext structure
                 const user = userContext.user || userContext;
                 const claims = userContext.claims || [];
-                
-                console.log('RENDERING USER:', { userContext, user, claims });
                 
                 return (
                 <div 
