@@ -16,7 +16,6 @@ import {
   Shield,
   MessageSquare,
   History,
-  Link2,
   BarChart3
 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
@@ -68,12 +67,6 @@ export default function UserDetailPage() {
       page: 1,
       status: 'active'
     },
-    { enabled: !!userId && !isNaN(parseInt(userId)) }
-  );
-
-  // Fetch magic link history for this user
-  const { data: magicLinkHistoryResponse, isLoading: magicLinkLoading } = api.communications.magicLinks.getUserHistory.useQuery(
-    { userId: parseInt(userId) },
     { enabled: !!userId && !isNaN(parseInt(userId)) }
   );
 
@@ -398,72 +391,126 @@ export default function UserDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Magic Link History */}
+          {/* Claims Overview */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Link2 className="w-5 h-5" />
-                Magic Link History
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  Claims ({userDetails.claims.length})
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {magicLinkLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="text-center">
-                    <Link2 className="h-8 w-8 animate-pulse text-blue-600 mx-auto mb-4" />
-                    <p className="text-gray-600">Loading magic link history...</p>
-                  </div>
+              {userDetails.claims.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">No claims found</p>
                 </div>
-              ) : (magicLinkHistoryResponse as any)?.data?.length ? (
-                <div className="space-y-3">
-                  {(magicLinkHistoryResponse as any).data.map((link: any) => (
-                    <div key={link.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Link2 className="h-4 w-4 text-blue-600" />
-                          <span className="font-medium capitalize">{link.type}</span>
-                          <Badge 
-                            variant={link.status === 'active' ? 'default' : 
-                                   link.status === 'used' ? 'secondary' : 'destructive'}
-                            className="text-xs"
-                          >
-                            {link.status}
-                          </Badge>
+              ) : (
+                <div className="space-y-4">
+                  {userDetails.claims.map((claim: any) => (
+                    <div key={claim.id} className="border rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="font-semibold">
+                              {claim.type} Claim
+                            </h3>
+                            <Badge className={getStatusColor(claim.status)}>
+                              {claim.status}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <strong>Lender:</strong> {claim.lender}
+                          </div>
+                          {claim.solicitor && (
+                            <div className="text-sm text-gray-600">
+                              <strong>Solicitor:</strong> {claim.solicitor}
+                            </div>
+                          )}
                         </div>
-                        <span className="text-sm text-gray-500">
-                          {new Date(link.createdAt).toLocaleDateString()}
-                        </span>
+                        <div className="text-right text-sm text-gray-500">
+                          <div>Created: {claim.createdAt ? new Date(claim.createdAt).toLocaleDateString() : 'Unknown'}</div>
+                          {claim.lastUpdated && (
+                            <div>Updated: {new Date(claim.lastUpdated).toLocaleDateString()}</div>
+                          )}
+                        </div>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">Delivery:</span>
-                          <span className="ml-2 capitalize">{link.deliveryMethod}</span>
+                      {/* Requirements */}
+                      {claim.requirements && claim.requirements.length > 0 && (
+                        <div className="mt-3 pt-3 border-t">
+                          <h4 className="font-medium mb-2 flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4" />
+                            Requirements ({claim.requirements.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {claim.requirements.map((req: any) => (
+                              <div key={req.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                                <div>
+                                  <div className="font-medium text-sm">{req.type}</div>
+                                  {req.reason && (
+                                    <div className="text-xs text-gray-600">{req.reason}</div>
+                                  )}
+                                  {req.rejectionReason && (
+                                    <div className="text-xs text-red-600">
+                                      <strong>Rejected:</strong> {req.rejectionReason}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge 
+                                    variant={req.status === 'PENDING' ? 'destructive' : 'default'}
+                                    className="text-xs"
+                                  >
+                                    {req.status}
+                                  </Badge>
+                                  <div className="text-xs text-gray-500">
+                                    {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : 'Unknown'}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-gray-600">Expires:</span>
-                          <span className="ml-2">
-                            {link.expiresAt ? new Date(link.expiresAt).toLocaleDateString() : 'Never'}
-                          </span>
-                        </div>
-                        {link.accessedAt && (
-                          <div className="col-span-2">
-                            <span className="text-gray-600">Last accessed:</span>
-                            <span className="ml-2">{new Date(link.accessedAt).toLocaleString()}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Recent Activity */}
+          {userDetails.activityLogs && userDetails.activityLogs.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="w-5 h-5" />
+                  Recent Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {userDetails.activityLogs.slice(0, 5).map((log: any) => (
+                    <div key={log.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">{log.action}</div>
+                        <div className="text-sm text-gray-600">{log.message}</div>
+                        {log.createdAt && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(log.createdAt).toLocaleString()}
                           </div>
                         )}
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Link2 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p>No magic links sent to this user</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
