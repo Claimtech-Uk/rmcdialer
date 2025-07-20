@@ -122,7 +122,6 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
           description: `Opening call interface for ${userContext.user.firstName} ${userContext.user.lastName}`,
         });
         
-        console.log('Call Next Valid User - navigating to user:', userId);
         // Navigate to user detail page for calling
         router.push(`/users/${userId}`);
       } else {
@@ -491,7 +490,6 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         className={`w-full justify-start ${getButtonClasses()} text-white shadow-lg h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0`}
                         onClick={(e) => {
                           e.stopPropagation(); // Prevent card click
-                          console.log('Call Now clicked for user:', user.id);
                           // Navigate to user detail page for calling
                           router.push(`/users/${user.id}`);
                         }}
