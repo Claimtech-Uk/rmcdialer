@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/trpc/client';
 import { 
   Phone, 
@@ -76,6 +77,7 @@ interface QueuePageTemplateProps {
 
 export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps) {
   const { toast } = useToast();
+  const router = useRouter();
   const config = queueConfigs[queueType];
   const IconComponent = config.icon;
   
@@ -112,19 +114,16 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
   const getNextUserMutation = api.queue.getNextUserForCall.useMutation({
     onSuccess: (result) => {
       if (result) {
-        // Start call with validated user
+        // Navigate to calls page for the validated user
         const { userId, userContext } = result;
-        startCall(
-          userId, 
-          userContext.user.firstName, 
-          userContext.user.lastName, 
-          userContext.user.phoneNumber
-        );
         
         toast({
           title: "✅ Valid user found",
-          description: `Starting call with ${userContext.user.firstName} ${userContext.user.lastName}`,
+          description: `Opening call interface for ${userContext.user.firstName} ${userContext.user.lastName}`,
         });
+        
+        // Navigate to user detail page for calling
+        router.push(`/users/${userId}`);
       } else {
         toast({
           title: "No valid users available",
@@ -491,8 +490,8 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         className={`w-full justify-start ${getButtonClasses()} text-white shadow-lg h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0`}
                         onClick={(e) => {
                           e.stopPropagation(); // Prevent card click
-                          // Start in-page call
-                          startCall(user.id, user.firstName, user.lastName, user.phoneNumber);
+                          // Navigate to user detail page for calling
+                          router.push(`/users/${user.id}`);
                         }}
                       >
                         <Phone className="w-4 h-4 mr-3" />
