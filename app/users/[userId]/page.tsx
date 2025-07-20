@@ -16,7 +16,8 @@ import {
   Shield,
   MessageSquare,
   History,
-  BarChart3
+  BarChart3,
+  Send
 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
@@ -69,6 +70,80 @@ export default function UserDetailPage() {
     },
     { enabled: !!userId && !isNaN(parseInt(userId)) }
   );
+
+  // Fetch magic link history for this user
+  const { data: magicLinkHistoryResponse, isLoading: magicLinkLoading } = api.communications.magicLinks.getUserHistory.useQuery(
+    { userId: parseInt(userId) },
+    { enabled: !!userId && !isNaN(parseInt(userId)) }
+  );
+
+  // Call initiation mutation
+  const initiateCallMutation = api.calls.initiateCall.useMutation({
+    onSuccess: (result) => {
+      console.log('Call initiated successfully:', result);
+      router.push(`/calls/${result.callSession.id}`);
+    },
+    onError: (error) => {
+      console.error('Failed to initiate call:', error);
+      toast({ 
+        title: "Call Failed", 
+        description: error.message || "Failed to initiate call",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Magic link sending mutation
+  const sendMagicLinkMutation = api.communications.sendMagicLinkSMS.useMutation({
+    onSuccess: () => {
+      toast({ 
+        title: "Link Sent!", 
+        description: "Magic link has been sent to the user via SMS",
+      });
+    },
+    onError: (error) => {
+      console.error('Failed to send magic link:', error);
+      toast({ 
+        title: "Send Failed", 
+        description: error.message || "Failed to send magic link",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const handleStartCall = () => {
+    if (!user.phoneNumber) {
+      toast({ 
+        title: "No Phone Number", 
+        description: "User doesn't have a phone number",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    initiateCallMutation.mutate({
+      userId: parseInt(userId),
+      phoneNumber: user.phoneNumber,
+      direction: 'outbound'
+    });
+  };
+
+  const handleSendLink = () => {
+    if (!user.phoneNumber) {
+      toast({ 
+        title: "No Phone Number", 
+        description: "User doesn't have a phone number",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    sendMagicLinkMutation.mutate({
+      userId: parseInt(userId),
+      phoneNumber: user.phoneNumber,
+      linkType: 'claimPortal'
+    });
+  };
 
   if (isLoading) {
     return (
@@ -150,11 +225,20 @@ export default function UserDetailPage() {
             {user.phoneNumber}
           </Button>
           <Button 
-            onClick={() => router.push(`/calls/${user.id}`)}
+            onClick={handleStartCall}
+            disabled={initiateCallMutation.isPending}
             className="bg-blue-600 hover:bg-blue-700"
           >
             <Phone className="w-4 h-4 mr-2" />
-            Start Call
+            {initiateCallMutation.isPending ? 'Starting Call...' : 'Start Call'}
+          </Button>
+          <Button 
+            onClick={handleSendLink}
+            disabled={sendMagicLinkMutation.isPending}
+            className="bg-purple-600 hover:bg-purple-700"
+          >
+            <Send className="w-4 h-4 mr-2" />
+            {sendMagicLinkMutation.isPending ? 'Sending...' : 'Send Link'}
           </Button>
         </div>
       </div>
