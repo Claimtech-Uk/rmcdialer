@@ -48,7 +48,7 @@ async function cleanupMockData() {
 
       console.log('📝 Cleaning up call outcomes...');
       const deletedOutcomes = await prisma.callOutcome.deleteMany({
-        where: { agentId: { in: testAgentIds } }
+        where: { recordedByAgentId: { in: testAgentIds } }
       });
       console.log(`   Deleted ${deletedOutcomes.count} call outcomes`);
 
