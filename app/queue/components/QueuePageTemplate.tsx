@@ -144,6 +144,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
 
   const handleCallNextValidUser = async () => {
     console.log('CALL NEXT VALID USER CLICKED - queueType:', queueType);
+    alert(`Finding next valid user for ${queueType}`);
     try {
       await getNextUserMutation.mutateAsync({ queueType });
     } catch (error) {
@@ -407,11 +408,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
               {users.map((user: any) => (
                 <div 
                   key={user.id} 
-                  className={`flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 ${getColorClasses('hover')} transition-colors cursor-pointer`}
-                  onClick={() => {
-                    // Open user details modal instead of navigating
-                    openUserModal(user.id);
-                  }}
+                  className={`flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 ${getColorClasses('hover')} transition-colors`}
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
@@ -477,9 +474,9 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         size="default"
                         variant="outline"
                         className={`w-full justify-start ${getSecondaryButtonClasses()} h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-md border-2`}
-                        onClick={(e) => {
-                          e.stopPropagation(); // Prevent card click
-                          // Open user details modal
+                        onClick={() => {
+                          console.log('VIEW DETAILS CLICKED - USER ID:', user.id);
+                          alert(`Opening details for user ${user.id}`);
                           openUserModal(user.id);
                         }}
                       >
@@ -490,10 +487,9 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                       <Button 
                         size="default"
                         className={`w-full justify-start ${getButtonClasses()} text-white shadow-lg h-11 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0`}
-                        onClick={(e) => {
+                        onClick={() => {
                           console.log('CALL NOW CLICKED - USER ID:', user.id);
-                          e.stopPropagation(); // Prevent card click
-                          // Navigate to user detail page for calling
+                          alert(`Navigating to user ${user.id}`);
                           router.push(`/users/${user.id}`);
                         }}
                       >
