@@ -136,9 +136,9 @@ export default function UserDetailPage() {
                     <p className="text-gray-600">Loading SMS history...</p>
                   </div>
                 </div>
-              ) : smsConversationsResponse?.data?.length ? (
+              ) : (smsConversationsResponse as any)?.data?.length ? (
                 <div className="space-y-4">
-                  {smsConversationsResponse.data.map((conversation: any) => (
+                  {(smsConversationsResponse as any).data.map((conversation: any) => (
                     <div key={conversation.id} className="border rounded-lg p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -207,9 +207,9 @@ export default function UserDetailPage() {
                     <p className="text-gray-600">Loading magic link history...</p>
                   </div>
                 </div>
-              ) : magicLinkHistoryResponse?.data?.length ? (
+              ) : (magicLinkHistoryResponse as any)?.data?.length ? (
                 <div className="space-y-3">
-                  {magicLinkHistoryResponse.data.map((link: any) => (
+                  {(magicLinkHistoryResponse as any).data.map((link: any) => (
                     <div key={link.id} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
