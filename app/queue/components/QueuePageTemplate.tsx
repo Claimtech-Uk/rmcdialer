@@ -18,6 +18,7 @@ import { Badge } from '@/modules/core/components/ui/badge';
 import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { useToast } from '@/modules/core/hooks/use-toast';
 import { QueueType } from '@/modules/queue/types/queue.types';
+import { getFriendlyLenderName, getShortLenderName } from '@/lib/utils/lender-names';
 import UserDetailsModal from './UserDetailsModal';
 import InPageCallInterface from './InPageCallInterface';
 
@@ -445,10 +446,10 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                             ))
                           ).slice(0, 3)
                         ) : (
-                          // Show claims for other queues  
+                          // Show claims for other queues with friendly lender names
                           user.claims.map((claim: any, index: number) => (
                             <Badge key={claim.id} variant="outline" className="text-xs">
-                              {claim.type} Claim • {claim.lender}
+                              {claim.type} Claim • {getShortLenderName(claim.lender)}
                             </Badge>
                           ))
                         )}
