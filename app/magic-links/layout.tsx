@@ -9,7 +9,8 @@ import {
   BarChart3, 
   LogOut, 
   User,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Shield
 } from 'lucide-react';
 import { api } from '@/lib/trpc/client';
 import { Button } from '@/modules/core/components/ui/button';
@@ -56,12 +57,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: MessageSquare, 
       roles: ['agent', 'supervisor', 'admin']
     },
-    { 
-      name: 'Magic Links', 
-      href: '/magic-links', 
-      icon: LinkIcon, 
-      roles: ['agent', 'supervisor', 'admin']
-    },
+
     { 
       name: 'Call History', 
       href: '/calls/history', 
@@ -73,6 +69,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       href: '/', 
       icon: BarChart3, 
       roles: ['supervisor', 'admin']
+    },
+    { 
+      name: 'Admin Panel', 
+      href: '/admin/agents', 
+      icon: Shield, 
+      roles: ['admin']
     },
   ].filter(item => session?.agent?.role && item.roles.includes(session.agent.role));
 

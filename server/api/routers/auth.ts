@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createTRPCRouter, publicProcedure, protectedProcedure } from '@/lib/trpc/server'
 import { TRPCError } from '@trpc/server'
-import { AuthService, type LoginRequest, type AgentStatusUpdate } from '@/modules/auth'
+import { AuthService, type LoginRequest, type AgentStatusUpdate, type CreateAgentRequest } from '@/modules/auth'
 import { prisma } from '@/lib/db'
 
 // Create logger instance (in production this would come from a shared logger service)
@@ -28,6 +28,44 @@ const StatusUpdateSchema = z.object({
 const PerformanceQuerySchema = z.object({
   startDate: z.date().optional(),
   endDate: z.date().optional()
+})
+
+// Agent Management Schemas
+const CreateAgentSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  role: z.enum(['agent', 'supervisor', 'admin']),
+  isAiAgent: z.boolean().default(false)
+})
+
+const UpdateAgentSchema = z.object({
+  id: z.number(),
+  email: z.string().email().optional(),
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  role: z.enum(['agent', 'supervisor', 'admin']).optional(),
+  isActive: z.boolean().optional(),
+  isAiAgent: z.boolean().optional(),
+  twilioWorkerSid: z.string().nullable().optional()
+})
+
+const DeleteAgentSchema = z.object({
+  id: z.number()
+})
+
+const GetAgentsSchema = z.object({
+  page: z.number().min(1).default(1),
+  limit: z.number().min(1).max(100).default(20),
+  role: z.enum(['agent', 'supervisor', 'admin']).optional(),
+  isActive: z.boolean().optional(),
+  search: z.string().optional()
+})
+
+const ResetPasswordSchema = z.object({
+  id: z.number(),
+  newPassword: z.string().min(8)
 })
 
 export const authRouter = createTRPCRouter({
@@ -185,6 +223,207 @@ export const authRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to cleanup inactive agents'
+        })
+      }
+    }),
+
+  // ===============================================
+  // AGENT MANAGEMENT ENDPOINTS (Admin Only)
+  // ===============================================
+
+  // Create new agent (admin only)
+  createAgent: protectedProcedure
+    .input(CreateAgentSchema)
+    .mutation(async ({ input, ctx }) => {
+      // Check permissions - only admin can create agents
+      if (ctx.agent.role !== 'admin') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only admin can create agents'
+        })
+      }
+
+      try {
+        const agent = await authService.createAgent(input)
+        logger.info('Agent created', { 
+          createdById: ctx.agent.id, 
+          newAgentEmail: input.email,
+          newAgentRole: input.role 
+        })
+        return agent
+      } catch (error: any) {
+        logger.error('Failed to create agent', { 
+          error: error.message, 
+          email: input.email 
+        })
+        
+        // Handle unique constraint errors
+        if (error.message.includes('email') || error.code === 'P2002') {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'An agent with this email already exists'
+          })
+        }
+
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to create agent'
+        })
+      }
+    }),
+
+  // Update agent (admin only)
+  updateAgent: protectedProcedure
+    .input(UpdateAgentSchema)
+    .mutation(async ({ input, ctx }) => {
+      // Check permissions - only admin can update agents
+      if (ctx.agent.role !== 'admin') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only admin can update agents'
+        })
+      }
+
+      try {
+        const agent = await authService.updateAgent(input.id, input)
+        logger.info('Agent updated', { 
+          updatedById: ctx.agent.id, 
+          agentId: input.id 
+        })
+        return agent
+      } catch (error: any) {
+        logger.error('Failed to update agent', { 
+          error: error.message, 
+          agentId: input.id 
+        })
+
+        if (error.message.includes('not found')) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Agent not found'
+          })
+        }
+
+        if (error.message.includes('email') || error.code === 'P2002') {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'An agent with this email already exists'
+          })
+        }
+
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to update agent'
+        })
+      }
+    }),
+
+  // Delete agent (admin only)
+  deleteAgent: protectedProcedure
+    .input(DeleteAgentSchema)
+    .mutation(async ({ input, ctx }) => {
+      // Check permissions - only admin can delete agents
+      if (ctx.agent.role !== 'admin') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only admin can delete agents'
+        })
+      }
+
+      // Prevent self-deletion
+      if (input.id === ctx.agent.id) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot delete your own account'
+        })
+      }
+
+      try {
+        await authService.deleteAgent(input.id)
+        logger.info('Agent deleted', { 
+          deletedById: ctx.agent.id, 
+          agentId: input.id 
+        })
+        return { success: true }
+      } catch (error: any) {
+        logger.error('Failed to delete agent', { 
+          error: error.message, 
+          agentId: input.id 
+        })
+
+        if (error.message.includes('not found')) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Agent not found'
+          })
+        }
+
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to delete agent'
+        })
+      }
+    }),
+
+  // Get all agents with filtering (admin/supervisor)
+  getAllAgents: protectedProcedure
+    .input(GetAgentsSchema)
+    .query(async ({ input, ctx }) => {
+      // Check permissions
+      const permissions = authService.getAgentPermissions(ctx.agent.role)
+      if (!permissions.canManageAgents && !permissions.canViewSupervisorDashboard) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Insufficient permissions to view agents'
+        })
+      }
+
+      try {
+        const result = await authService.getAllAgents(input)
+        return result
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get agents'
+        })
+      }
+    }),
+
+  // Reset agent password (admin only)
+  resetAgentPassword: protectedProcedure
+    .input(ResetPasswordSchema)
+    .mutation(async ({ input, ctx }) => {
+      // Check permissions - only admin can reset passwords
+      if (ctx.agent.role !== 'admin') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only admin can reset passwords'
+        })
+      }
+
+      try {
+        await authService.resetAgentPassword(input.id, input.newPassword)
+        logger.info('Agent password reset', { 
+          resetById: ctx.agent.id, 
+          agentId: input.id 
+        })
+        return { success: true }
+      } catch (error: any) {
+        logger.error('Failed to reset agent password', { 
+          error: error.message, 
+          agentId: input.id 
+        })
+
+        if (error.message.includes('not found')) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Agent not found'
+          })
+        }
+
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to reset password'
         })
       }
     })

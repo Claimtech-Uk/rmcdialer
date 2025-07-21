@@ -450,6 +450,238 @@ export class AuthService {
     }
   }
 
+  // ===============================================
+  // AGENT MANAGEMENT METHODS (Admin Only)
+  // ===============================================
+
+  /**
+   * Create a new agent (admin only)
+   */
+  async createAgent(data: CreateAgentRequest): Promise<AgentProfile> {
+    try {
+      // Hash the password
+      const saltRounds = 12;
+      const passwordHash = await bcrypt.hash(data.password, saltRounds);
+
+      // Create the agent
+      const agent = await this.deps.prisma.agent.create({
+        data: {
+          email: data.email,
+          passwordHash,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          role: data.role,
+          isAiAgent: data.isAiAgent || false,
+          isActive: true
+        }
+      });
+
+      this.deps.logger.info('Agent created successfully', {
+        agentId: agent.id,
+        email: agent.email,
+        role: agent.role
+      });
+
+      return this.mapToAgentProfile(agent);
+    } catch (error: any) {
+      this.deps.logger.error('Failed to create agent', { error, email: data.email });
+      throw error;
+    }
+  }
+
+  /**
+   * Update an agent (admin only)
+   */
+  async updateAgent(agentId: number, data: Partial<AgentProfile>): Promise<AgentProfile> {
+    try {
+      // First check if agent exists
+      const existingAgent = await this.deps.prisma.agent.findUnique({
+        where: { id: agentId }
+      });
+
+      if (!existingAgent) {
+        throw new Error('Agent not found');
+      }
+
+      // Update the agent
+      const agent = await this.deps.prisma.agent.update({
+        where: { id: agentId },
+        data: {
+          ...(data.email && { email: data.email }),
+          ...(data.firstName && { firstName: data.firstName }),
+          ...(data.lastName && { lastName: data.lastName }),
+          ...(data.role && { role: data.role }),
+          ...(data.isActive !== undefined && { isActive: data.isActive }),
+          ...(data.isAiAgent !== undefined && { isAiAgent: data.isAiAgent }),
+          ...(data.twilioWorkerSid !== undefined && { twilioWorkerSid: data.twilioWorkerSid })
+        }
+      });
+
+      this.deps.logger.info('Agent updated successfully', {
+        agentId: agent.id,
+        updatedFields: Object.keys(data)
+      });
+
+      return this.mapToAgentProfile(agent);
+    } catch (error: any) {
+      this.deps.logger.error('Failed to update agent', { error, agentId });
+      throw error;
+    }
+  }
+
+  /**
+   * Delete an agent (admin only)
+   */
+  async deleteAgent(agentId: number): Promise<void> {
+    try {
+      // First check if agent exists
+      const existingAgent = await this.deps.prisma.agent.findUnique({
+        where: { id: agentId }
+      });
+
+      if (!existingAgent) {
+        throw new Error('Agent not found');
+      }
+
+      // For safety, we'll deactivate instead of hard delete to preserve audit trail
+      // In production, you might want to soft delete or transfer ownership of related records
+      await this.deps.prisma.agent.update({
+        where: { id: agentId },
+        data: {
+          isActive: false,
+          email: `deleted_${Date.now()}_${existingAgent.email}` // Prevent email conflicts
+        }
+      });
+
+      // Also logout any active sessions
+      await this.deps.prisma.agentSession.updateMany({
+        where: { agentId },
+        data: {
+          status: 'offline',
+          logoutAt: new Date()
+        }
+      });
+
+      this.deps.logger.info('Agent deleted (deactivated) successfully', {
+        agentId,
+        originalEmail: existingAgent.email
+      });
+    } catch (error: any) {
+      this.deps.logger.error('Failed to delete agent', { error, agentId });
+      throw error;
+    }
+  }
+
+  /**
+   * Get all agents with filtering and pagination
+   */
+  async getAllAgents(filters: {
+    page?: number;
+    limit?: number;
+    role?: string;
+    isActive?: boolean;
+    search?: string;
+  }): Promise<{
+    agents: AgentProfile[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    try {
+      const { 
+        page = 1, 
+        limit = 20, 
+        role, 
+        isActive, 
+        search 
+      } = filters;
+
+      const skip = (page - 1) * limit;
+
+      // Build where clause
+      const where: any = {};
+      
+      if (role) {
+        where.role = role;
+      }
+      
+      if (isActive !== undefined) {
+        where.isActive = isActive;
+      }
+      
+      if (search) {
+        where.OR = [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } }
+        ];
+      }
+
+      // Get agents and total count
+      const [agents, total] = await Promise.all([
+        this.deps.prisma.agent.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' }
+        }),
+        this.deps.prisma.agent.count({ where })
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        agents: agents.map(this.mapToAgentProfile),
+        total,
+        page,
+        limit,
+        totalPages
+      };
+    } catch (error: any) {
+      this.deps.logger.error('Failed to get all agents', { error, filters });
+      throw error;
+    }
+  }
+
+  /**
+   * Reset agent password (admin only)
+   */
+  async resetAgentPassword(agentId: number, newPassword: string): Promise<void> {
+    try {
+      // First check if agent exists
+      const existingAgent = await this.deps.prisma.agent.findUnique({
+        where: { id: agentId }
+      });
+
+      if (!existingAgent) {
+        throw new Error('Agent not found');
+      }
+
+      // Hash the new password
+      const saltRounds = 12;
+      const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+
+      // Update the password
+      await this.deps.prisma.agent.update({
+        where: { id: agentId },
+        data: { passwordHash }
+      });
+
+      this.deps.logger.info('Agent password reset successfully', {
+        agentId,
+        email: existingAgent.email
+      });
+    } catch (error: any) {
+      this.deps.logger.error('Failed to reset agent password', { error, agentId });
+      throw error;
+    }
+  }
+
+  // ===============================================
+  // PRIVATE HELPER METHODS
+  // ===============================================
+
   /**
    * Generate JWT token for agent
    */

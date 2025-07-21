@@ -18,6 +18,7 @@ import {
   Phone,
   Calendar,
   Settings,
+  Shield,
   Users
 } from 'lucide-react';
 import { api } from '@/lib/trpc/client';
@@ -87,13 +88,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       roles: ['agent', 'supervisor', 'admin'],
       description: 'SMS conversations'
     },
-    { 
-      name: 'Magic Links', 
-      href: '/magic-links', 
-      icon: LinkIcon, 
-      roles: ['agent', 'supervisor', 'admin'],
-      description: 'Secure links sent to users'
-    },
+
     { 
       name: 'Call History', 
       href: '/calls/history', 
@@ -107,6 +102,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: BarChart3, 
       roles: ['supervisor', 'admin'],
       description: 'Analytics and reports'
+    },
+    { 
+      name: 'Admin Panel', 
+      href: '/admin/agents', 
+      icon: Shield, 
+      roles: ['admin'],
+      description: 'System administration'
     },
   ].filter(item => session?.agent?.role && item.roles.includes(session.agent.role));
 
@@ -256,13 +258,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                       )}
 
                       {agent.role === 'admin' && (
-                        <button
+                        <Link
+                          href={"/admin/agents" as any}
                           className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                           onClick={() => setUserDropdownOpen(false)}
                         >
-                          <Settings className="w-4 h-4 mr-3" />
-                          Settings
-                        </button>
+                          <Shield className="w-4 h-4 mr-3" />
+                          Admin Panel
+                        </Link>
                       )}
 
                       {/* Logout */}
