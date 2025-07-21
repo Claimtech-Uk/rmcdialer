@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '@/lib/trpc/server';
 import { AuthService } from '@/modules/auth';
 import { SMSService, MagicLinkService } from '@/modules/communications';
+import { UserService } from '@/modules/users';
 import { prisma } from '@/lib/db';
 import { logger } from '@/modules/core';
 import type { 
@@ -17,6 +18,7 @@ import type {
 
 // Create service instances with dependency injection
 const authService = new AuthService({ prisma, logger });
+const userService = new UserService();
 
 // Create simplified auth interface for communications services
 const authForComms = {
@@ -27,7 +29,27 @@ const authForComms = {
   }
 };
 
-const smsService = new SMSService({ authService: authForComms });
+// Create user service adapter to match SMS service interface
+const userServiceAdapter = {
+  async getUserData(userId: number) {
+    const context = await userService.getUserCallContext(userId);
+    if (!context) {
+      throw new Error(`User ${userId} not found`);
+    }
+    return {
+      id: context.user.id,
+      firstName: context.user.firstName || 'Unknown',
+      lastName: context.user.lastName || 'User',
+      email: context.user.email || '',
+      phoneNumber: context.user.phoneNumber || ''
+    };
+  }
+};
+
+const smsService = new SMSService({ 
+  authService: authForComms,
+  userService: userServiceAdapter
+});
 const magicLinkService = new MagicLinkService({ authService: authForComms });
 
 // -----------------------------------------------------------------------------

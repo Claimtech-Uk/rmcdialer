@@ -4,6 +4,7 @@
 // Handles SMS messaging, conversations, auto-responses, and Twilio integration
 
 import { prisma } from '@/lib/db';
+import { replicaDb } from '@/lib/mysql';
 import { logger } from '@/modules/core';
 import type {
   SendSMSOptions,
@@ -600,6 +601,40 @@ export class SMSService {
   // Private Helper Methods
   // -----------------------------------------------------------------------------
 
+  private async searchUserByPhoneNumber(phoneNumber: string): Promise<{ id: number; firstName: string; lastName: string } | null> {
+    try {
+      // Clean phone number for matching (remove spaces, dashes, etc.)
+      const cleanPhoneNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
+      
+      // Search for user with this phone number in the replica database
+      const user = await replicaDb.user.findFirst({
+        where: {
+          phone_number: {
+            contains: cleanPhoneNumber.slice(-10) // Match last 10 digits for flexibility
+          }
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          phone_number: true
+        }
+      });
+
+      if (!user) return null;
+
+      return {
+        id: Number(user.id),
+        firstName: user.first_name || 'Unknown',
+        lastName: user.last_name || 'User'
+      };
+
+    } catch (error) {
+      logger.error('Failed to search user by phone number:', { phoneNumber, error });
+      return null;
+    }
+  }
+
   private transformConversation(conversation: any): SMSConversation {
     return {
       ...conversation,
@@ -618,12 +653,29 @@ export class SMSService {
       where: { phoneNumber }
     });
 
+    // If no existing conversation, try to find user by phone number
+    let matchedUserId = userId;
+    if (!matchedUserId && !conversation) {
+      await this.searchUserByPhoneNumber(phoneNumber).then((user: { id: number; firstName: string; lastName: string } | null) => {
+        if (user) {
+          matchedUserId = user.id;
+          logger.info('Matched SMS to existing user', {
+            phoneNumber,
+            userId: user.id,
+            userName: `${user.firstName} ${user.lastName}`
+          });
+        }
+      }).catch((error: any) => {
+        logger.warn('Failed to search for user by phone number', { phoneNumber, error });
+      });
+    }
+
     if (!conversation) {
-      // Create new conversation
+      // Create new conversation with matched user ID
       conversation = await prisma.smsConversation.create({
         data: {
           phoneNumber,
-          userId,
+          userId: matchedUserId,
           status: 'active',
           lastMessageAt: new Date()
         }
@@ -632,13 +684,20 @@ export class SMSService {
       logger.info('New SMS conversation created', {
         conversationId: conversation.id,
         phoneNumber,
-        userId
+        userId: matchedUserId,
+        userMatched: !!matchedUserId
       });
-    } else if (userId && !conversation.userId) {
-      // Update conversation with user ID if we have it
+    } else if (matchedUserId && !conversation.userId) {
+      // Update conversation with user ID if we found a match
       conversation = await prisma.smsConversation.update({
         where: { id: conversation.id },
-        data: { userId }
+        data: { userId: matchedUserId }
+      });
+
+      logger.info('SMS conversation linked to user', {
+        conversationId: conversation.id,
+        phoneNumber,
+        userId: matchedUserId
       });
     }
 

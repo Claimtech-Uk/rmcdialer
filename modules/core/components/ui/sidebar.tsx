@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/trpc/client';
@@ -14,16 +15,19 @@ import {
   Home,
   Database,
   Activity,
+  Phone,
+  MessageSquare,
+  PenTool,
+  FileText,
   Menu,
   X
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
 
-interface AdminLayoutProps {
+interface SidebarProps {
   children: React.ReactNode;
 }
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
+export default function Sidebar({ children }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -59,26 +63,64 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     );
   }
 
-  // Redirect if not authenticated or not admin
-  if (!session?.agent || session.agent.role !== 'admin') {
-    router.push('/dashboard');
+  // Redirect if not authenticated
+  if (!session?.agent) {
+    router.push('/login');
     return null;
   }
 
   const agent = session.agent;
+  const isAdmin = agent.role === 'admin';
+  const isSupervisor = agent.role === 'supervisor' || agent.role === 'admin';
 
-  // Define main navigation items (return to app)
+  // Define main navigation items with role-based access
   const mainNavigation = [
     { 
-      name: 'Return to App', 
-      href: '/dashboard', 
-      icon: Home,
-      description: 'Go back to main application'
+      name: 'Unsigned', 
+      href: '/queue/unsigned', 
+      icon: PenTool, 
+      roles: ['agent', 'supervisor', 'admin'],
+      description: 'Users needing signatures'
     },
-  ];
+    { 
+      name: 'Requirements', 
+      href: '/queue/requirements', 
+      icon: FileText, 
+      roles: ['agent', 'supervisor', 'admin'],
+      description: 'Users with pending documents'
+    },
+    { 
+      name: 'Calls', 
+      href: '/calls', 
+      icon: Phone, 
+      roles: ['agent', 'supervisor', 'admin'],
+      description: 'Active and recent calls'
+    },
+    { 
+      name: 'Call History', 
+      href: '/calls/history', 
+      icon: Phone, 
+      roles: ['agent', 'supervisor', 'admin'],
+      description: 'Call records and analytics'
+    },
+    { 
+      name: 'SMS', 
+      href: '/sms', 
+      icon: MessageSquare, 
+      roles: ['agent', 'supervisor', 'admin'],
+      description: 'SMS conversations'
+    },
+    { 
+      name: 'Dashboard', 
+      href: '/dashboard', 
+      icon: BarChart3, 
+      roles: ['supervisor', 'admin'],
+      description: 'Analytics and reports'
+    },
+  ].filter(item => agent.role && item.roles.includes(agent.role));
 
   // Define admin navigation items
-  const adminNavigation = [
+  const adminNavigation = isAdmin ? [
     { 
       name: 'Agent Management', 
       href: '/admin/agents', 
@@ -109,7 +151,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       icon: Settings,
       description: 'System configuration'
     },
-  ];
+  ] : [];
 
   const NavContent = () => (
     <>
@@ -117,20 +159,23 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
-            <Shield className="w-5 h-5 text-white" />
+            <Phone className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-gray-900">Admin Panel</h1>
-            <p className="text-sm text-gray-500">RMC Dialler</p>
+            <h1 className="text-lg font-semibold text-gray-900">RMC Dialler</h1>
+            <p className="text-sm text-gray-500">Call Management System</p>
           </div>
         </div>
       </div>
 
-      {/* Navigation */}
+      {/* Main Navigation */}
       <div className="flex-1 px-6 py-6">
         <div className="space-y-8">
-          {/* Return to App */}
+          {/* Main Features */}
           <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+              Main Features
+            </h3>
             <nav className="space-y-1">
               {mainNavigation.map((item) => {
                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -158,42 +203,44 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
 
           {/* Admin Features */}
-          <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              Administration
-            </h3>
-            <nav className="space-y-1">
-              {adminNavigation.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-                return (
-                  <Link key={item.name} href={item.href as any}>
-                    <div className={`
-                      flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors
-                      ${isActive 
-                        ? 'bg-red-600 text-white' 
-                        : 'text-gray-700 hover:bg-gray-100'
-                      }
-                    `}>
-                      <item.icon className="w-4 h-4 mr-3 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="truncate">{item.name}</div>
-                        <div className={`text-xs truncate ${isActive ? 'text-red-100' : 'text-gray-500'}`}>
-                          {item.description}
+          {adminNavigation.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                Administration
+              </h3>
+              <nav className="space-y-1">
+                {adminNavigation.map((item) => {
+                  const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                  return (
+                    <Link key={item.name} href={item.href as any}>
+                      <div className={`
+                        flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                        ${isActive 
+                          ? 'bg-red-600 text-white' 
+                          : 'text-gray-700 hover:bg-gray-100'
+                        }
+                      `}>
+                        <item.icon className="w-4 h-4 mr-3 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="truncate">{item.name}</div>
+                          <div className={`text-xs truncate ${isActive ? 'text-red-100' : 'text-gray-500'}`}>
+                            {item.description}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          )}
         </div>
       </div>
 
       {/* User Profile Section */}
       <div className="p-6 border-t border-gray-200">
         <div className="flex items-center space-x-3 mb-4">
-          <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center">
+          <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
             <User className="w-4 h-4 text-white" />
           </div>
           <div className="flex-1 min-w-0">
@@ -203,8 +250,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <div className="text-xs text-gray-500 truncate">
               {agent.email}
             </div>
-            <div className="text-xs text-red-600 font-medium">
-              Administrator
+            <div className={`text-xs font-medium capitalize ${
+              agent.role === 'admin' ? 'text-red-600' : 
+              agent.role === 'supervisor' ? 'text-blue-600' : 'text-green-600'
+            }`}>
+              {agent.role}
             </div>
           </div>
         </div>
@@ -231,7 +281,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   );
 
   // Get current page title
-  const currentPage = adminNavigation.find(
+  const currentPage = [...mainNavigation, ...adminNavigation].find(
     item => pathname === item.href || pathname.startsWith(item.href + '/')
   );
 
@@ -274,13 +324,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         <div className="lg:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-2 flex items-center justify-between">
           <button
             onClick={() => setIsMobileMenuOpen(true)}
-            className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-500"
+            className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
           >
             <Menu className="h-6 w-6" />
           </button>
           
           <h1 className="text-lg font-semibold text-gray-900">
-            {currentPage?.name || 'Admin Panel'}
+            {currentPage?.name || 'RMC Dialler'}
           </h1>
           
           <div className="w-10" /> {/* Spacer for centering */}
@@ -291,10 +341,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-semibold text-gray-900">
-                {currentPage?.name || 'Admin Panel'}
+                {currentPage?.name || 'Dashboard'}
               </h2>
               <p className="text-sm text-gray-600 mt-1">
-                {currentPage?.description || 'Administration interface'}
+                {currentPage?.description || 'Welcome to RMC Dialler'}
               </p>
             </div>
             
