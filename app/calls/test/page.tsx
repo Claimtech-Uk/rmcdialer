@@ -6,6 +6,7 @@ import { CallInterface } from '@/modules/calls';
 import { api } from '@/lib/trpc/client';
 import type { UserCallContext } from '@/modules/users';
 import type { CallOutcomeOptions, UserCallContext as CallUserContext } from '@/modules/calls';
+import { Button } from '@/modules/core/components/ui/button';
 
 // Format duration from seconds to MM:SS
 function formatDuration(seconds: number): string {
@@ -187,13 +188,15 @@ export default function TestCallPage() {
           {/* Main Call Button */}
           <div className="flex justify-center mb-6">
             {!isInCall ? (
-              <button
+              <Button
                 onClick={handleMakeCall}
                 disabled={!isReady || !phoneNumber}
-                className={`px-8 py-4 rounded-full text-white font-medium transition-all ${
+                size="xl"
+                responsive="nowrap"
+                className={`rounded-full transition-all ${
                   isReady && phoneNumber
-                    ? 'bg-green-500 hover:bg-green-600 shadow-lg hover:shadow-xl'
-                    : 'bg-gray-400 cursor-not-allowed'
+                    ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl'
+                    : 'bg-slate-400 cursor-not-allowed text-white'
                 }`}
               >
                 <span className="flex items-center gap-2">
@@ -202,11 +205,13 @@ export default function TestCallPage() {
                   </svg>
                   Make Call
                 </span>
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 onClick={hangUp}
-                className="px-8 py-4 rounded-full bg-red-500 hover:bg-red-600 text-white font-medium shadow-lg hover:shadow-xl transition-all"
+                size="xl"
+                responsive="nowrap"
+                className="rounded-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg hover:shadow-xl transition-all"
               >
                 <span className="flex items-center gap-2">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -214,7 +219,7 @@ export default function TestCallPage() {
                   </svg>
                   Hang Up
                 </span>
-              </button>
+              </Button>
             )}
           </div>
           

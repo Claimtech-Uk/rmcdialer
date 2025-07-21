@@ -197,7 +197,7 @@ export default function UserDetailPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center gap-4">
             <Button 
               variant="outline" 
@@ -225,31 +225,39 @@ export default function UserDetailPage() {
             </div>
           </div>
           
-          <div className="flex gap-3">
+          {/* Action buttons with improved responsive layout */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
             <Button 
               variant="outline"
+              size="default"
+              responsive="truncate"
               onClick={() => {
                 navigator.clipboard.writeText(user.phoneNumber || '');
                 toast({ title: "Phone number copied to clipboard" });
               }}
-              className="border-2 border-slate-300 hover:bg-slate-100 hover:border-slate-400 shadow-md hover:shadow-lg transition-all duration-200"
+              className="border-2 border-slate-300 hover:bg-slate-100 hover:border-slate-400 shadow-md hover:shadow-lg transition-all duration-200 max-w-[200px]"
+              title={user.phoneNumber || 'No phone number'}
             >
-              <Phone className="w-4 h-4 mr-2" />
-              {user.phoneNumber}
+              <Phone className="w-4 h-4 mr-2 flex-shrink-0" />
+              <span className="overflow-hidden text-ellipsis">{user.phoneNumber}</span>
             </Button>
             <Button 
               onClick={handleStartCall}
+              size="default"
+              responsive="nowrap"
               className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 shadow-lg hover:shadow-xl transition-all duration-200 text-white"
             >
-              <Phone className="w-4 h-4 mr-2" />
+              <Phone className="w-4 h-4 mr-2 flex-shrink-0" />
               Start Call
             </Button>
             <Button 
               onClick={handleSendLink}
               disabled={sendMagicLinkMutation.isPending}
+              size="default"
+              responsive="nowrap"
               className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl transition-all duration-200 text-white"
             >
-              <Send className="w-4 h-4 mr-2" />
+              <Send className="w-4 h-4 mr-2 flex-shrink-0" />
               {sendMagicLinkMutation.isPending ? 'Sending...' : 'Send Link'}
             </Button>
           </div>

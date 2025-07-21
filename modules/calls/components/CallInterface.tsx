@@ -542,8 +542,9 @@ export function CallInterface({
                   <Button
                     onClick={handleMakeCall}
                     disabled={!isReady}
-                    size="lg"
-                    className="bg-green-500 hover:bg-green-600 text-white px-8 py-4 rounded-full"
+                    size="xl"
+                    responsive="nowrap"
+                    className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
                   >
                     <Phone className="w-6 h-6 mr-2" />
                     Call {userContext.firstName}
@@ -551,8 +552,9 @@ export function CallInterface({
                 ) : (
                   <Button
                     onClick={handleCallEnd}
-                    size="lg"
-                    className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-full"
+                    size="xl"
+                    responsive="nowrap"
+                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
                   >
                     <PhoneOff className="w-6 h-6 mr-2" />
                     End Call & Add Notes

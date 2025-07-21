@@ -523,28 +523,36 @@ export default function DashboardPage() {
         </Card>
 
         {/* Quick Actions */}
-        <div className="flex justify-center space-x-4">
+        <div className="flex flex-col sm:flex-row justify-center gap-4">
           <Link href="/queue/unsigned">
-            <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200">
-              <ListChecks className="h-4 w-4 mr-2" />
+            <Button 
+              size="default"
+              responsive="nowrap"
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200 w-full sm:w-auto"
+            >
+              <ListChecks className="h-4 w-4 mr-2 flex-shrink-0" />
               View Unsigned Queue
             </Button>
           </Link>
           <Link href="/queue/requirements">
             <Button 
               variant="outline"
-              className="border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 shadow-md"
+              size="default"
+              responsive="nowrap"
+              className="border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 shadow-md w-full sm:w-auto"
             >
-              <Calendar className="h-4 w-4 mr-2" />
+              <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
               View Requirements Queue
             </Button>
           </Link>
           <Link href="/calls/history">
             <Button 
               variant="outline"
-              className="border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 shadow-md"
+              size="default"
+              responsive="nowrap"
+              className="border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 shadow-md w-full sm:w-auto"
             >
-              <BarChart3 className="h-4 w-4 mr-2" />
+              <BarChart3 className="h-4 w-4 mr-2 flex-shrink-0" />
               View Call Analytics
             </Button>
           </Link>

@@ -16,7 +16,9 @@ import {
   Activity,
   Settings,
   TrendingUp,
-  Target
+  Target,
+  UserX,
+  CircleSlash
 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
@@ -41,15 +43,15 @@ function StatusControls({ currentStatus, onStatusChange, isUpdating }: StatusCon
   const statusOptions = [
     { value: 'available', label: 'Available', icon: CheckCircle, color: 'text-emerald-600', gradient: 'bg-gradient-to-r from-emerald-500 to-teal-600' },
     { value: 'break', label: 'On Break', icon: Clock, color: 'text-yellow-600', gradient: 'bg-gradient-to-r from-yellow-500 to-orange-600' },
-    { value: 'offline', label: 'Offline', icon: XCircle, color: 'text-slate-600', gradient: 'bg-gradient-to-r from-slate-500 to-slate-600' }
+    { value: 'busy', label: 'Busy', icon: UserX, color: 'text-red-600', gradient: 'bg-gradient-to-r from-red-500 to-pink-600' },
+    { value: 'offline', label: 'Offline', icon: CircleSlash, color: 'text-slate-600', gradient: 'bg-gradient-to-r from-slate-500 to-slate-600' },
   ];
 
   return (
     <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
       <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
         <CardTitle className="flex items-center gap-2 text-slate-800">
-          <Activity className="w-6 h-6 text-blue-600" />
-          Agent Status
+          <Activity className="w-6 h-6 text-blue-600" /> Agent Status
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6">
@@ -62,16 +64,18 @@ function StatusControls({ currentStatus, onStatusChange, isUpdating }: StatusCon
               <Button
                 key={option.value}
                 variant={isSelected ? "default" : "outline"}
+                size="default"
+                responsive="nowrap"
                 className={`w-full justify-start h-12 transition-all duration-200 ${
                   isSelected 
-                    ? `${option.gradient} text-white shadow-lg hover:shadow-xl` 
+                    ? `${option.gradient} text-white shadow-lg hover:shadow-xl border-0` 
                     : 'border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400'
                 }`}
                 onClick={() => !isUpdating && onStatusChange(option.value)}
                 disabled={isUpdating}
               >
-                <Icon className={`w-5 h-5 mr-3 ${isSelected ? 'text-white' : option.color}`} />
-                {option.label}
+                <Icon className={`w-5 h-5 mr-3 flex-shrink-0 ${isSelected ? 'text-white' : option.color}`} />
+                <span className="flex-1 text-left">{option.label}</span>
                 {isSelected && <Badge className="ml-auto bg-white/20 text-white border-white/30">Current</Badge>}
               </Button>
             );

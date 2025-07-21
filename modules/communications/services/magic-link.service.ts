@@ -576,19 +576,39 @@ export class MagicLinkService {
     message: string, 
     options: SendMagicLinkOptions
   ) {
-    // Integration with SMS service - will be properly connected once both services are complete
-    logger.info('Magic link SMS would be sent via SMS service', {
-      phoneNumber,
-      linkType: options.linkType,
-      userId: options.userId
-    });
+    // Use the actual SMS service to send and track the magic link
+    const { SMSService } = await import('./sms.service');
+    const smsService = new SMSService();
     
-    return {
-      method: 'sms',
-      status: 'sent',
-      messageId: `sms_${Date.now()}`,
-      twilioSid: `SM${Date.now()}${Math.random().toString(36).substr(2, 9)}`
-    };
+    try {
+      const result = await smsService.sendSMS({
+        phoneNumber,
+        message,
+        messageType: 'magic_link',
+        agentId: options.agentId,
+        userId: options.userId,
+        callSessionId: options.callSessionId
+      });
+
+      logger.info('Magic link sent via SMS service', {
+        phoneNumber,
+        linkType: options.linkType,
+        userId: options.userId,
+        messageId: result.messageId,
+        twilioSid: result.twilioSid
+      });
+      
+      return {
+        method: 'sms',
+        status: 'sent',
+        messageId: result.messageId,
+        twilioSid: result.twilioSid
+      };
+      
+    } catch (error) {
+      logger.error('Failed to send magic link via SMS:', error);
+      throw error;
+    }
   }
 
   private async sendViaWhatsApp(

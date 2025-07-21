@@ -258,13 +258,15 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <Button 
               onClick={handleCallNextValidUser}
               disabled={getNextUserMutation.isLoading || isLoading}
+              size="default"
+              responsive="nowrap"
               className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200 text-white"
             >
-              <Phone className={`w-5 h-5 mr-2 ${getNextUserMutation.isLoading ? 'animate-pulse' : ''}`} />
+              <Phone className={`w-5 h-5 mr-2 flex-shrink-0 ${getNextUserMutation.isLoading ? 'animate-pulse' : ''}`} />
               {getNextUserMutation.isLoading ? 'Finding User...' : 'Call Next Valid User'}
             </Button>
             
@@ -272,9 +274,11 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
               onClick={handleRefresh} 
               variant="outline"
               disabled={isLoading}
+              size="default"
+              responsive="nowrap"
               className="border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 mr-2 flex-shrink-0 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh Queue
             </Button>
           </div>
