@@ -5,12 +5,21 @@ export interface TwilioVoiceConfig {
   agentEmail: string;
   onCallStatusChange?: (status: CallStatus) => void;
   onError?: (error: Error) => void;
+  onIncomingCall?: (call: IncomingCallInfo) => void;
 }
 
 export interface CallStatus {
-  state: 'connecting' | 'ready' | 'offline' | 'busy' | 'error' | 'connected' | 'disconnected';
+  state: 'connecting' | 'ready' | 'offline' | 'busy' | 'error' | 'connected' | 'disconnected' | 'ringing' | 'incoming';
   error?: string;
   callSid?: string;
+}
+
+export interface IncomingCallInfo {
+  callSid: string;
+  from: string;
+  to: string;
+  accept: () => void;
+  reject: () => void;
 }
 
 export interface OutgoingCallParams {
@@ -26,6 +35,7 @@ export interface OutgoingCallParams {
 export class TwilioVoiceService {
   private device: Device | null = null;
   private currentCall: Call | null = null;
+  private currentIncomingCall: Call | null = null;
   private config: TwilioVoiceConfig;
   private isInitialized = false;
   private accessToken: string | null = null;
@@ -101,13 +111,6 @@ export class TwilioVoiceService {
     }
   }
 
-  private getErrorMessage(error: any): string {
-    if (typeof error === 'string') return error;
-    if (error && typeof error.message === 'string') return error.message;
-    if (error && typeof error.toString === 'function') return error.toString();
-    return 'Unknown error occurred';
-  }
-
   private setupDeviceEventHandlers(): void {
     if (!this.device) return;
 
@@ -135,11 +138,30 @@ export class TwilioVoiceService {
       });
     });
 
-    // Incoming call event (for future use)
+    // Incoming call event - UPDATED to accept calls
     this.device.on('incoming', (call: Call) => {
-      console.log('📞 Incoming call received');
-      // Handle incoming calls if needed - for now, reject
-      call.reject();
+      console.log('📞 Incoming call received from:', call.parameters?.From || 'Unknown');
+      console.log('📞 Call SID:', call.parameters?.CallSid);
+      
+      this.currentIncomingCall = call;
+      
+      // Set up incoming call event handlers
+      this.setupIncomingCallEventHandlers(call);
+      
+      // Notify the UI about the incoming call
+      const incomingCallInfo: IncomingCallInfo = {
+        callSid: call.parameters?.CallSid || '',
+        from: call.parameters?.From || 'Unknown',
+        to: call.parameters?.To || '',
+        accept: () => this.acceptIncomingCall(),
+        reject: () => this.rejectIncomingCall()
+      };
+      
+      this.config.onIncomingCall?.(incomingCallInfo);
+      this.config.onCallStatusChange?.({ 
+        state: 'incoming',
+        callSid: call.parameters?.CallSid
+      });
     });
 
     // Device offline event
@@ -153,6 +175,74 @@ export class TwilioVoiceService {
       console.log('📱 Twilio Device destroyed');
       this.config.onCallStatusChange?.({ state: 'offline' });
     });
+  }
+
+  /**
+   * Set up event handlers for incoming calls
+   */
+  private setupIncomingCallEventHandlers(call: Call): void {
+    // Call connected
+    call.on('accept', () => {
+      console.log('✅ Incoming call accepted');
+      this.currentCall = call;
+      this.currentIncomingCall = null;
+      this.config.onCallStatusChange?.({
+        state: 'connected',
+        callSid: call.parameters?.CallSid
+      });
+    });
+
+    // Call disconnected
+    call.on('disconnect', () => {
+      console.log('📴 Incoming call disconnected');
+      this.currentCall = null;
+      this.currentIncomingCall = null;
+      this.config.onCallStatusChange?.({ state: 'disconnected' });
+    });
+
+    // Call rejected
+    call.on('reject', () => {
+      console.log('❌ Incoming call rejected');
+      this.currentCall = null;
+      this.currentIncomingCall = null;
+      this.config.onCallStatusChange?.({ state: 'disconnected' });
+    });
+
+    // Call error
+    call.on('error', (error: any) => {
+      console.error('❌ Incoming call error:', error);
+      this.currentCall = null;
+      this.currentIncomingCall = null;
+      this.config.onError?.(error);
+      this.config.onCallStatusChange?.({
+        state: 'error',
+        error: error.message || 'Incoming call error'
+      });
+    });
+  }
+
+  /**
+   * Accept the current incoming call
+   */
+  acceptIncomingCall(): void {
+    if (this.currentIncomingCall) {
+      console.log('✅ Accepting incoming call');
+      this.currentIncomingCall.accept();
+    } else {
+      console.warn('⚠️ No incoming call to accept');
+    }
+  }
+
+  /**
+   * Reject the current incoming call
+   */
+  rejectIncomingCall(): void {
+    if (this.currentIncomingCall) {
+      console.log('❌ Rejecting incoming call');
+      this.currentIncomingCall.reject();
+    } else {
+      console.warn('⚠️ No incoming call to reject');
+    }
   }
 
   /**
@@ -186,7 +276,7 @@ export class TwilioVoiceService {
 
       // Make the call
       this.currentCall = await this.device.connect({ params: callParams });
-      this.setupCallEventHandlers(this.currentCall);
+      this.setupOutgoingCallEventHandlers(this.currentCall);
 
       this.config.onCallStatusChange?.({ state: 'connecting' });
 
@@ -198,12 +288,12 @@ export class TwilioVoiceService {
   }
 
   /**
-   * Set up event handlers for the current call
+   * Set up event handlers for outgoing calls
    */
-  private setupCallEventHandlers(call: Call): void {
+  private setupOutgoingCallEventHandlers(call: Call): void {
     // Call connected
     call.on('accept', () => {
-      console.log('✅ Call connected successfully');
+      console.log('✅ Outgoing call connected successfully');
       this.config.onCallStatusChange?.({
         state: 'connected',
         callSid: call.parameters?.CallSid
@@ -212,14 +302,14 @@ export class TwilioVoiceService {
 
     // Call disconnected
     call.on('disconnect', () => {
-      console.log('📴 Call disconnected');
+      console.log('📴 Outgoing call disconnected');
       this.currentCall = null;
       this.config.onCallStatusChange?.({ state: 'disconnected' });
     });
 
     // Call rejected or failed
     call.on('reject', () => {
-      console.log('❌ Call rejected');
+      console.log('❌ Outgoing call rejected');
       this.currentCall = null;
       this.config.onCallStatusChange?.({
         state: 'error',
@@ -229,7 +319,7 @@ export class TwilioVoiceService {
 
     // Call error
     call.on('error', (error: any) => {
-      console.error('❌ Call error:', error);
+      console.error('❌ Outgoing call error:', error);
       this.currentCall = null;
       this.config.onError?.(error);
       this.config.onCallStatusChange?.({
@@ -240,13 +330,19 @@ export class TwilioVoiceService {
   }
 
   /**
-   * Hang up the current call
+   * Hang up the current call (outgoing or incoming)
    */
   hangUp(): void {
     if (this.currentCall) {
-      console.log('📴 Hanging up call...');
+      console.log('📴 Hanging up current call...');
       this.currentCall.disconnect();
       this.currentCall = null;
+    } else if (this.currentIncomingCall) {
+      console.log('📴 Rejecting incoming call...');
+      this.currentIncomingCall.reject();
+      this.currentIncomingCall = null;
+    } else {
+      console.warn('⚠️ No active call to hang up');
     }
   }
 
@@ -254,8 +350,9 @@ export class TwilioVoiceService {
    * Mute or unmute the current call
    */
   mute(shouldMute: boolean = true): void {
-    if (this.currentCall) {
-      this.currentCall.mute(shouldMute);
+    const activeCall = this.currentCall || this.currentIncomingCall;
+    if (activeCall) {
+      activeCall.mute(shouldMute);
       console.log(`🔇 Call ${shouldMute ? 'muted' : 'unmuted'}`);
     }
   }
@@ -264,10 +361,22 @@ export class TwilioVoiceService {
    * Send DTMF digits during a call
    */
   sendDigits(digits: string): void {
-    if (this.currentCall) {
-      this.currentCall.sendDigits(digits);
+    const activeCall = this.currentCall || this.currentIncomingCall;
+    if (activeCall) {
+      activeCall.sendDigits(digits);
       console.log(`📞 Sent digits: ${digits}`);
     }
+  }
+
+  /**
+   * Get current call status
+   */
+  getCurrentCallStatus(): { hasIncomingCall: boolean; hasActiveCall: boolean; callSid?: string } {
+    return {
+      hasIncomingCall: !!this.currentIncomingCall,
+      hasActiveCall: !!this.currentCall,
+      callSid: this.currentCall?.parameters?.CallSid || this.currentIncomingCall?.parameters?.CallSid
+    };
   }
 
   /**
@@ -275,7 +384,13 @@ export class TwilioVoiceService {
    */
   destroy(): void {
     if (this.currentCall) {
-      this.hangUp();
+      this.currentCall.disconnect();
+      this.currentCall = null;
+    }
+    
+    if (this.currentIncomingCall) {
+      this.currentIncomingCall.reject();
+      this.currentIncomingCall = null;
     }
 
     if (this.device) {
@@ -285,5 +400,15 @@ export class TwilioVoiceService {
 
     this.isInitialized = false;
     console.log('🧹 Twilio Voice Service destroyed');
+  }
+
+  /**
+   * Get a human-readable error message
+   */
+  private getErrorMessage(error: any): string {
+    if (typeof error === 'string') return error;
+    if (error?.message) return error.message;
+    if (error?.description) return error.description;
+    return 'Unknown error occurred';
   }
 } 

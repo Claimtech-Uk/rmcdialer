@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { TwilioVoiceService, CallStatus, OutgoingCallParams } from '../services/twilio-voice.service';
+import { TwilioVoiceService, CallStatus, OutgoingCallParams, IncomingCallInfo } from '../services/twilio-voice.service';
 
 export interface UseTwilioVoiceOptions {
   agentId: string | number;
   agentEmail: string;
   autoConnect?: boolean;
+  onIncomingCall?: (callInfo: IncomingCallInfo) => void;
 }
 
 export interface UseTwilioVoiceReturn {
@@ -14,6 +15,7 @@ export interface UseTwilioVoiceReturn {
   isReady: boolean;
   isConnecting: boolean;
   isInCall: boolean;
+  isIncomingCall: boolean;
   callStatus: CallStatus | null;
   error: string | null;
   
@@ -23,14 +25,17 @@ export interface UseTwilioVoiceReturn {
   hangUp: () => void;
   toggleMute: () => void;
   sendDigits: (digits: string) => void;
+  acceptIncomingCall: () => void;
+  rejectIncomingCall: () => void;
   
   // Call info
   callDuration: number;
   isMuted: boolean;
+  incomingCallInfo: IncomingCallInfo | null;
 }
 
 export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceReturn {
-  const { agentId, agentEmail, autoConnect = true } = options;
+  const { agentId, agentEmail, autoConnect = true, onIncomingCall } = options;
   
   // State
   const [isReady, setIsReady] = useState(false);
@@ -39,15 +44,17 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
   const [error, setError] = useState<string | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  
+  const [incomingCallInfo, setIncomingCallInfo] = useState<IncomingCallInfo | null>(null);
+
   // Refs
   const twilioServiceRef = useRef<TwilioVoiceService | null>(null);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Derived state
-  const isInCall = callStatus?.state === 'connected' || callStatus?.state === 'connecting';
-  
-  // Initialize Twilio Voice Service
+
+  // Computed state
+  const isInCall = callStatus?.state === 'connected';
+  const isIncomingCall = callStatus?.state === 'incoming';
+
+  // Initialize Twilio Voice SDK
   const initialize = useCallback(async () => {
     if (twilioServiceRef.current?.isReady()) {
       console.log('🎧 Twilio Voice already initialized');
@@ -76,15 +83,24 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
             // Start duration timer
             startDurationTimer();
           } else if (status.state === 'disconnected') {
-            // Stop duration timer
+            // Stop duration timer and reset states
             stopDurationTimer();
             setCallDuration(0);
             setIsMuted(false);
+            setIncomingCallInfo(null);
+          } else if (status.state === 'incoming') {
+            // Don't start timer for incoming calls until accepted
+            console.log('📞 Incoming call detected');
           }
         },
         onError: (err) => {
           console.error('❌ Twilio Voice error:', err);
           setError(err.message);
+        },
+        onIncomingCall: (callInfo) => {
+          console.log('📞 Incoming call info received:', callInfo);
+          setIncomingCallInfo(callInfo);
+          onIncomingCall?.(callInfo);
         }
       });
       
@@ -96,7 +112,7 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
       setError(err instanceof Error ? err.message : 'Failed to initialize');
       setIsConnecting(false);
     }
-  }, [agentId, agentEmail]);
+  }, [agentId, agentEmail, onIncomingCall]);
   
   // Make a call
   const makeCall = useCallback(async (params: OutgoingCallParams) => {
@@ -122,6 +138,29 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
     }
     
     twilioServiceRef.current.hangUp();
+  }, []);
+  
+  // Accept incoming call
+  const acceptIncomingCall = useCallback(() => {
+    if (!twilioServiceRef.current) {
+      console.warn('No Twilio Voice service to accept call');
+      return;
+    }
+    
+    console.log('✅ Accepting incoming call via hook');
+    twilioServiceRef.current.acceptIncomingCall();
+  }, []);
+  
+  // Reject incoming call
+  const rejectIncomingCall = useCallback(() => {
+    if (!twilioServiceRef.current) {
+      console.warn('No Twilio Voice service to reject call');
+      return;
+    }
+    
+    console.log('❌ Rejecting incoming call via hook');
+    twilioServiceRef.current.rejectIncomingCall();
+    setIncomingCallInfo(null);
   }, []);
   
   // Toggle mute
@@ -184,12 +223,13 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
       }
     };
   }, [autoConnect, initialize, stopDurationTimer]);
-  
+
   return {
     // State
     isReady,
     isConnecting,
     isInCall,
+    isIncomingCall,
     callStatus,
     error,
     
@@ -199,9 +239,12 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
     hangUp,
     toggleMute,
     sendDigits,
+    acceptIncomingCall,
+    rejectIncomingCall,
     
     // Call info
     callDuration,
-    isMuted
+    isMuted,
+    incomingCallInfo
   };
 } 
