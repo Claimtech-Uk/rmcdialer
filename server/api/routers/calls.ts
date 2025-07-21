@@ -461,6 +461,88 @@ export const callsRouter = createTRPCRouter({
       }
     }),
 
+  // Force end a call session (for stuck calls)
+  forceEndCall: protectedProcedure
+    .input(z.object({
+      sessionId: z.string().uuid(),
+      reason: z.string().optional().default('Force ended by agent')
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        await callService.forceEndCall(input.sessionId, ctx.agent.id, input.reason);
+        return { success: true, message: 'Call session force ended' };
+      } catch (error) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: error instanceof Error ? error.message : 'Failed to force end call'
+        });
+      }
+    }),
+
+  // Get stuck call sessions for debugging
+  getStuckSessions: protectedProcedure
+    .input(z.object({
+      olderThanMinutes: z.number().min(1).max(1440).default(30)
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        // Only allow admin/supervisor to see all stuck sessions
+        if (ctx.agent.role === 'agent') {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Access denied'
+          });
+        }
+
+        const stuckSessions = await callService.getStuckCallSessions(input.olderThanMinutes);
+        return {
+          sessions: stuckSessions,
+          count: stuckSessions.length,
+          olderThanMinutes: input.olderThanMinutes
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get stuck sessions'
+        });
+      }
+    }),
+
+  // Cleanup stuck sessions (admin only)
+  cleanupStuckSessions: protectedProcedure
+    .input(z.object({
+      olderThanMinutes: z.number().min(1).max(1440).default(30)
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        // Only allow admin to run cleanup
+        if (ctx.agent.role !== 'admin') {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Admin access required'
+          });
+        }
+
+        const cleanedCount = await callService.cleanupStuckSessions(input.olderThanMinutes);
+        return {
+          success: true,
+          cleanedCount,
+          message: `Cleaned up ${cleanedCount} stuck call sessions`
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to cleanup stuck sessions'
+        });
+      }
+    }),
+
   // Get call history formatted for table display
   getCallHistoryTable: protectedProcedure
     .input(CallHistoryFiltersSchema)

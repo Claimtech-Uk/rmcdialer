@@ -153,38 +153,131 @@ export class CallService {
   }
 
   /**
-   * Update call session status (e.g., from Twilio webhook)
+   * Force end a call session - handles stuck/incomplete states
+   * This is a cleanup method for when normal call ending flows fail
+   */
+  async forceEndCall(sessionId: string, agentId: number, reason: string = 'Force ended by agent'): Promise<void> {
+    return await this.deps.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Get the call session
+      const callSession = await tx.callSession.findUnique({
+        where: { id: sessionId }
+      });
+
+      if (!callSession) {
+        throw new Error('Call session not found');
+      }
+
+      // Verify agent authorization
+      if (callSession.agentId !== agentId) {
+        throw new Error('Agent not authorized for this call session');
+      }
+
+      // Force update call session to completed
+      await tx.callSession.update({
+        where: { id: sessionId },
+        data: {
+          status: 'completed',
+          endedAt: new Date(),
+          lastOutcomeType: 'failed',
+          lastOutcomeNotes: reason,
+          lastOutcomeAgentId: agentId,
+          lastOutcomeAt: new Date()
+        }
+      });
+
+      // Clear agent session
+      await tx.agentSession.updateMany({
+        where: { 
+          agentId: agentId,
+          currentCallSessionId: sessionId 
+        },
+        data: { 
+          status: 'available',
+          currentCallSessionId: null,
+          lastActivity: new Date()
+        }
+      });
+
+      // Complete queue entry if exists
+      if (callSession.callQueueId) {
+        await tx.callQueue.update({
+          where: { id: callSession.callQueueId },
+          data: { status: 'completed' }
+        });
+      }
+
+      this.deps.logger.info('Call session force ended', {
+        sessionId,
+        agentId,
+        reason
+      });
+    });
+  }
+
+  /**
+   * Enhanced update call status with fallback lookup
    */
   async updateCallStatus(sessionId: string, updateData: CallUpdateOptions): Promise<CallSession> {
-    const session = await this.deps.prisma.callSession.update({
-      where: { id: sessionId },
+    // First try to find by session ID (direct call)
+    let session = await this.deps.prisma.callSession.findUnique({
+      where: { id: sessionId }
+    });
+
+    // If not found and we have a twilioCallSid, try finding by that
+    if (!session && updateData.twilioCallSid) {
+      session = await this.deps.prisma.callSession.findFirst({
+        where: { twilioCallSid: updateData.twilioCallSid }
+      });
+    }
+
+    if (!session) {
+      throw new Error(`Call session not found: ${sessionId}`);
+    }
+
+    const updatedSession = await this.deps.prisma.callSession.update({
+      where: { id: session.id },
       data: {
         status: updateData.status,
-        twilioCallSid: updateData.twilioCallSid,
+        twilioCallSid: updateData.twilioCallSid || session.twilioCallSid,
         connectedAt: updateData.connectedAt,
         endedAt: updateData.endedAt,
         // Calculate duration if call ended
         ...(updateData.endedAt && {
           durationSeconds: Math.floor(
-            (updateData.endedAt.getTime() - new Date().getTime()) / 1000
+            (updateData.endedAt.getTime() - (session.startedAt?.getTime() || new Date().getTime())) / 1000
           )
         }),
         // Calculate talk time if connected and ended
-        ...(updateData.endedAt && updateData.connectedAt && {
+        ...(updateData.endedAt && (updateData.connectedAt || session.connectedAt) && {
           talkTimeSeconds: Math.floor(
-            (updateData.endedAt.getTime() - updateData.connectedAt.getTime()) / 1000
+            (updateData.endedAt.getTime() - (updateData.connectedAt || session.connectedAt)!.getTime()) / 1000
           )
         })
       }
     });
 
+    // Auto-cleanup agent session if call ended
+    if (updateData.status && ['completed', 'failed', 'no_answer'].includes(updateData.status)) {
+      await this.deps.prisma.agentSession.updateMany({
+        where: { 
+          agentId: session.agentId,
+          currentCallSessionId: session.id 
+        },
+        data: { 
+          status: 'available',
+          currentCallSessionId: null,
+          lastActivity: new Date()
+        }
+      });
+    }
+
     this.deps.logger.info('Call status updated', {
-      sessionId,
+      sessionId: session.id,
       status: updateData.status,
       twilioCallSid: updateData.twilioCallSid
     });
 
-    return this.mapToCallSession(session);
+    return this.mapToCallSession(updatedSession);
   }
 
   /**
@@ -531,6 +624,57 @@ export class CallService {
       twilioStatus: CallStatus,
       ourStatus: updateData.status
     });
+  }
+
+  /**
+   * Get all potentially stuck call sessions for cleanup
+   */
+  async getStuckCallSessions(olderThanMinutes: number = 30): Promise<CallSession[]> {
+    const cutoffTime = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+    
+    const stuckSessions = await this.deps.prisma.callSession.findMany({
+      where: {
+        status: { in: ['initiated', 'connecting', 'ringing', 'connected'] },
+        startedAt: { lt: cutoffTime }
+      },
+      include: {
+        agent: {
+          select: {
+            firstName: true,
+            lastName: true
+          }
+        }
+      }
+    });
+
+    return stuckSessions.map(session => this.mapToCallSession(session));
+  }
+
+  /**
+   * Cleanup stuck call sessions (maintenance function)
+   */
+  async cleanupStuckSessions(olderThanMinutes: number = 30): Promise<number> {
+    const stuckSessions = await this.getStuckCallSessions(olderThanMinutes);
+    
+    let cleaned = 0;
+    for (const session of stuckSessions) {
+      try {
+        await this.forceEndCall(session.id, session.agentId, 'Auto-cleanup: stuck session');
+        cleaned++;
+      } catch (error) {
+        this.deps.logger.error('Failed to cleanup stuck session', {
+          sessionId: session.id,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
+    this.deps.logger.info('Cleanup completed', {
+      found: stuckSessions.length,
+      cleaned
+    });
+
+    return cleaned;
   }
 
   /**

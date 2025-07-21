@@ -330,6 +330,40 @@ export function CallInterface({
     }
   });
 
+  // Force end call mutation for stuck sessions
+  const forceEndCallMutation = api.calls.forceEndCall.useMutation({
+    onSuccess: () => {
+      console.log('✅ Call session force ended');
+      setCallSessionId('');
+      setWasInCall(false);
+      setShowOutcomeModal(false);
+      toast({
+        title: "Call Session Ended",
+        description: "Call state has been reset",
+      });
+      refetchCallHistory();
+    },
+    onError: (error: any) => {
+      console.error('❌ Failed to force end call:', error);
+      toast({
+        title: "Error Ending Call",
+        description: error.message || "Please try again",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Update call status mutation - enhanced with better error handling
+  const updateCallStatusMutation = api.calls.updateCallStatus.useMutation({
+    onSuccess: (result: any) => {
+      console.log('✅ Call status updated:', result);
+    },
+    onError: (error: any) => {
+      console.error('❌ Failed to update call status:', error);
+      // Don't show error toast for status updates as they're background operations
+    }
+  });
+
   // Call initiation mutation
   const initiateCallMutation = api.calls.initiateCall.useMutation({
     onSuccess: (result: any) => {
@@ -345,20 +379,10 @@ export function CallInterface({
     onError: (error: any) => {
       console.error('❌ Failed to initiate call:', error);
       toast({
-        title: "Call Initiation Failed", 
-        description: error.message || "Please try again or contact support",
+        title: "Error Creating Call Session",
+        description: error.message || "Failed to initialize call tracking",
         variant: "destructive"
       });
-    }
-  });
-
-  // Call status update mutation
-  const updateCallStatusMutation = api.calls.updateCallStatus.useMutation({
-    onSuccess: (result: any) => {
-      console.log('✅ Call status updated:', result);
-    },
-    onError: (error: any) => {
-      console.error('❌ Failed to update call status:', error);
     }
   });
 
