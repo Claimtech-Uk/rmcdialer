@@ -14,14 +14,15 @@ import {
   User,
   MapPin,
   FileText,
-  DollarSign,
   Building,
   AlertCircle,
   CheckCircle2,
   Calendar,
   Send,
   MessageSquare,
-  Activity
+  Activity,
+  Check,
+  CheckCheck
 } from 'lucide-react';
 import { api } from '@/lib/trpc/client';
 import { useToast } from '@/modules/core/hooks/use-toast';
@@ -34,6 +35,156 @@ interface CallInterfaceProps {
   userContext: UserCallContext;
   onCallComplete?: (outcome: CallOutcomeOptions) => void;
   // Remove agentId and agentEmail props - get from auth context
+}
+
+// Component to display individual conversation with message history (same as user page)
+function ConversationDetail({ conversation }: { conversation: any }) {
+  // Fetch messages for this specific conversation
+  const { data: conversationData, isLoading: messagesLoading } = api.communications.sms.getConversation.useQuery(
+    {
+      conversationId: conversation.id,
+      page: 1,
+      limit: 50
+    },
+    {
+      enabled: !!conversation.id,
+      refetchInterval: false,
+      staleTime: 30000 // Cache for 30 seconds
+    }
+  );
+
+  const messages = conversationData?.messages || [];
+
+  const formatMessageTime = (date: Date) => {
+    return new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit'
+    }).format(new Date(date));
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-200 px-3 py-1';
+      case 'closed':
+        return 'bg-slate-100 text-slate-600 border-slate-200 px-3 py-1';
+      default:
+        return 'bg-blue-100 text-blue-800 border-blue-200 px-3 py-1';
+    }
+  };
+
+  return (
+    <div className="border border-slate-200 rounded-xl bg-white shadow-sm">
+      {/* Conversation Header */}
+      <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-xl p-4 border-b border-slate-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <MessageSquare className="h-5 w-5 text-emerald-600" />
+            <span className="font-semibold text-slate-800">{conversation.phoneNumber}</span>
+            <Badge className={`border ${getStatusColor(conversation.status)}`}>
+              {conversation.status}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-3 text-sm text-slate-500">
+            <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">
+              {conversation.messageCount || 0} messages
+            </span>
+            {conversation.assignedAgentId && (
+              <span className="text-xs">
+                Agent: {conversation.assignedAgentId}
+              </span>
+            )}
+            <span className="bg-slate-200 px-2 py-1 rounded text-xs">
+              {conversation.lastMessageAt ? 
+                new Date(conversation.lastMessageAt).toLocaleDateString() : 
+                'No messages'
+              }
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="p-4">
+        {messagesLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+            <span className="ml-2 text-slate-600">Loading messages...</span>
+          </div>
+        ) : messages.length > 0 ? (
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {messages.map((message: any) => (
+              <div
+                key={message.id}
+                className={`flex ${message.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl shadow-sm ${
+                    message.direction === 'outbound'
+                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
+                      : 'bg-slate-100 text-slate-800 border border-slate-200'
+                  }`}
+                >
+                  <p className="text-sm leading-relaxed">{message.body}</p>
+                  
+                  {/* Message type indicator */}
+                  {(message.isAutoResponse || (message.messageType && message.messageType !== 'manual')) && (
+                    <div className="mt-2">
+                      <Badge 
+                        variant="outline"
+                        className={`text-xs ${
+                          message.direction === 'outbound' 
+                            ? 'bg-white/20 text-blue-100 border-blue-200' 
+                            : 'bg-slate-200 text-slate-600 border-slate-300'
+                        }`}
+                      >
+                        {message.isAutoResponse 
+                          ? '🤖 Auto Response' 
+                          : message.messageType === 'magic_link' 
+                            ? '🔗 Magic Link' 
+                            : message.messageType === 'callback_confirmation'
+                              ? '📞 Callback'
+                              : message.messageType === 'auto_response'
+                                ? '🤖 Auto Response'
+                                : '🏷️ Automated'
+                        }
+                      </Badge>
+                    </div>
+                  )}
+                  
+                  <div className={`flex items-center justify-between mt-2 text-xs ${
+                    message.direction === 'outbound' ? 'text-blue-100' : 'text-slate-500'
+                  }`}>
+                    <span>
+                      {formatMessageTime(message.sentAt || new Date())}
+                    </span>
+                    {message.direction === 'outbound' && (
+                      <div className="flex items-center gap-1">
+                        {message.status === 'delivered' ? (
+                          <CheckCheck className="h-3 w-3" />
+                        ) : (
+                          <Check className="h-3 w-3" />
+                        )}
+                        <span>{message.status || 'sending'}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-slate-500">
+            <MessageSquare className="h-12 w-12 mx-auto mb-3 text-slate-300" />
+            <p className="font-medium">No messages in this conversation</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function CallInterface({ 
@@ -92,8 +243,14 @@ export function CallInterface({
     { enabled: !!userContext.userId }
   );
 
-  // Fetch call history
-  const { data: callHistoryResponse, isLoading: callHistoryLoading } = api.calls.getCallHistoryTable.useQuery(
+  // Fetch complete user details to get addresses
+  const { data: userDetailsResponse, isLoading: userDetailsLoading } = api.users.getCompleteUserDetails.useQuery(
+    { userId: userContext.userId },
+    { enabled: !!userContext.userId }
+  );
+
+  // Fetch call history with detailed table
+  const { data: callHistoryResponse, isLoading: callHistoryLoading, refetch: refetchCallHistory } = api.calls.getCallHistoryTable.useQuery(
     { 
       userId: userContext.userId,
       limit: 20,
@@ -567,6 +724,50 @@ export function CallInterface({
             </CardContent>
           </Card>
 
+          {/* User Addresses */}
+          {userDetailsResponse?.data?.addresses && userDetailsResponse.data.addresses.length > 0 && (
+            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+              <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+                <CardTitle className="flex items-center gap-2 text-slate-800">
+                  <MapPin className="w-5 h-5 text-emerald-600" />
+                  Addresses ({userDetailsResponse.data.addresses.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                {/* Sort addresses: current first, then previous */}
+                {userDetailsResponse.data.addresses
+                  .sort((a, b) => (b.isCurrent ? 1 : 0) - (a.isCurrent ? 1 : 0))
+                  .map((address, index) => (
+                  <div key={address.id} className="border-b border-slate-200 last:border-b-0 pb-4 last:pb-0">
+                    <div className="flex items-center justify-between mb-3">
+                      <Badge 
+                        className={`border ${address.isCurrent 
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-200' 
+                          : 'bg-slate-100 text-slate-800 border-slate-200'
+                        }`}
+                      >
+                        {address.isCurrent ? 'Current Address' : 'Previous Address'}
+                      </Badge>
+                      {address.createdAt && (
+                        <div className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                          Added {new Date(address.createdAt).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <div className="font-semibold text-slate-800">{address.fullAddress}</div>
+                      <div className="text-sm text-slate-600 flex items-center gap-2">
+                        <span className="bg-slate-100 px-2 py-1 rounded text-xs">{address.postCode}</span>
+                        <span>•</span>
+                        <span>{address.county}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Call History */}
           <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
@@ -582,29 +783,11 @@ export function CallInterface({
                   <p className="text-sm text-slate-500 mt-2">Loading call history...</p>
                 </div>
               ) : callHistoryResponse?.calls?.length ? (
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {callHistoryResponse.calls.slice(0, 5).map((call: any, index: number) => (
-                    <div key={index} className="border-l-2 border-blue-200 pl-3 pb-2 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 rounded-r-lg p-2">
-                      <div className="flex justify-between items-start">
-                        <div className="text-sm">
-                          <div className="font-medium text-slate-800">{call.direction === 'outbound' ? 'Outbound' : 'Inbound'}</div>
-                          <div className="text-slate-500">{call.startedAt ? new Date(call.startedAt).toLocaleDateString() : 'Unknown date'}</div>
-                        </div>
-                        <Badge variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">
-                          {call.status || 'unknown'}
-                        </Badge>
-                      </div>
-                      {call.lastOutcomeNotes && (
-                        <p className="text-xs text-slate-600 mt-1">{call.lastOutcomeNotes}</p>
-                      )}
-                    </div>
-                  ))}
-                  {callHistoryResponse.calls.length > 5 && (
-                    <p className="text-xs text-center text-slate-500 pt-2">
-                      ... and {callHistoryResponse.calls.length - 5} more calls
-                    </p>
-                  )}
-                </div>
+                                 <CallHistoryTable 
+                   calls={callHistoryResponse.calls} 
+                   onRefresh={() => refetchCallHistory()}
+                   showUserInfo={false}
+                 />
               ) : (
                 <p className="text-sm text-slate-500 text-center py-4">No call history found</p>
               )}
@@ -626,19 +809,9 @@ export function CallInterface({
                   <p className="text-sm text-slate-500 mt-2">Loading SMS history...</p>
                 </div>
               ) : smsConversationsResponse?.data?.length ? (
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {smsConversationsResponse.data.slice(0, 3).map((conversation: any, index: number) => (
-                    <div key={index} className="border border-slate-200 rounded-lg p-3 bg-gradient-to-r from-white to-slate-50 shadow-sm">
-                      <div className="flex justify-between items-start mb-1">
-                        <div className="text-xs text-slate-500">
-                          {conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleDateString() : 'Unknown date'}
-                        </div>
-                        <Badge variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">
-                          {conversation.messageCount} messages
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-slate-700">{conversation.lastMessage || 'No preview available'}</p>
-                    </div>
+                <div className="space-y-6">
+                  {smsConversationsResponse.data.map((conversation: any) => (
+                    <ConversationDetail key={conversation.id} conversation={conversation} />
                   ))}
                 </div>
               ) : (
