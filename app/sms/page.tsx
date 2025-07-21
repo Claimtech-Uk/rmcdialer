@@ -19,7 +19,7 @@ export default function SMSPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all')
   const { toast } = useToast()
 
-  // Fetch conversations with real-time updates
+  // Fetch conversations with reduced polling (much more reasonable)
   const { data: conversationsData, refetch: refetchConversations } = api.communications.sms.getConversations.useQuery(
     {
       status: statusFilter === 'all' ? undefined : statusFilter,
@@ -27,11 +27,12 @@ export default function SMSPage() {
       limit: 50
     },
     {
-      refetchInterval: 5000, // Poll every 5 seconds for new messages
+      refetchInterval: 15000, // Poll every 15 seconds (was 5 seconds)
+      refetchOnWindowFocus: true, // Refresh when user returns to tab
     }
   )
 
-  // Fetch messages for selected conversation
+  // Fetch messages for selected conversation with reduced polling
   const { data: conversationData, refetch: refetchMessages } = api.communications.sms.getConversation.useQuery(
     {
       conversationId: selectedConversation,
@@ -40,18 +41,20 @@ export default function SMSPage() {
     },
     {
       enabled: !!selectedConversation,
-      refetchInterval: 3000, // Poll every 3 seconds for new messages
+      refetchInterval: 10000, // Poll every 10 seconds (was 3 seconds)
+      refetchOnWindowFocus: true, // Refresh when user returns to tab
     }
   )
 
-  // Fetch SMS stats
+  // Fetch SMS stats much less frequently
   const { data: statsData } = api.communications.sms.getStats.useQuery(
     {
       startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
       endDate: new Date()
     },
     {
-      refetchInterval: 30000, // Update every 30 seconds
+      refetchInterval: 60000, // Poll every minute (was 30 seconds)
+      refetchOnWindowFocus: false, // Don't refresh stats on window focus
     }
   )
 

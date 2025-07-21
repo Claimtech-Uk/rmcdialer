@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { SMSService } from '@/modules/communications';
 import { AuthService } from '@/modules/auth';
+import { UserService } from '@/modules/users';
 import { prisma } from '@/lib/db';
 import { logger } from '@/modules/core';
 
@@ -25,12 +26,35 @@ const TwilioSMSWebhookSchema = z.object({
   ToCountry: z.string().optional(),
 });
 
-// Initialize services
+// Initialize services with proper dependencies
 const authService = new AuthService({ prisma, logger });
+const userService = new UserService();
+
 const authForComms = {
   getCurrentAgent: async () => ({ id: 1, role: 'system' }) // System agent for webhooks
 };
-const smsService = new SMSService({ authService: authForComms });
+
+// Create user service adapter for SMS service
+const userServiceAdapter = {
+  async getUserData(userId: number) {
+    const context = await userService.getUserCallContext(userId);
+    if (!context) {
+      throw new Error(`User ${userId} not found`);
+    }
+    return {
+      id: context.user.id,
+      firstName: context.user.firstName || 'Unknown',
+      lastName: context.user.lastName || 'User',
+      email: context.user.email || '',
+      phoneNumber: context.user.phoneNumber || ''
+    };
+  }
+};
+
+const smsService = new SMSService({ 
+  authService: authForComms,
+  userService: userServiceAdapter
+});
 
 export async function POST(request: NextRequest) {
   try {
