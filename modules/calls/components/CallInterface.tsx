@@ -625,16 +625,28 @@ export function CallInterface({
               <Button 
                 onClick={handleSendMagicLink}
                 disabled={sendMagicLinkMutation.isPending}
+                size="default"
+                responsive="nowrap"
                 className="w-full bg-green-600 hover:bg-green-700"
               >
                 <Send className="w-4 h-4 mr-2" />
                 {sendMagicLinkMutation.isPending ? 'Sending...' : 'Send Claim Portal Link'}
               </Button>
-              <Button variant="outline" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                size="default"
+                responsive="nowrap"
+                className="w-full justify-start"
+              >
                 <Calendar className="w-4 h-4 mr-2" />
                 Schedule Callback
               </Button>
-              <Button variant="outline" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                size="default"
+                responsive="nowrap"
+                className="w-full justify-start"
+              >
                 <CheckCircle2 className="w-4 h-4 mr-2" />
                 Mark as Complete
               </Button>

@@ -165,7 +165,11 @@ export default function AdminOverviewPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-        <Button asChild>
+        <Button 
+          asChild
+          size="default"
+          responsive="nowrap"
+        >
           <Link href="/admin/agents">
             <UserPlus className="w-4 h-4 mr-2" />
             Manage Agents

@@ -308,7 +308,11 @@ export default function SMSPage() {
               Manage two-way SMS conversations with users
             </p>
           </div>
-          <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg">
+          <Button 
+            size="default"
+            responsive="nowrap"
+            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg"
+          >
             <Plus className="h-4 w-4 mr-2" />
             New Conversation
           </Button>
@@ -406,6 +410,7 @@ export default function SMSPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    responsive="nowrap"
                     onClick={() => setStatusFilter('all')}
                     className={`flex-1 text-xs transition-all duration-200 ${
                       statusFilter === 'all' 
@@ -418,6 +423,7 @@ export default function SMSPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    responsive="nowrap"
                     onClick={() => setStatusFilter('active')}
                     className={`flex-1 text-xs transition-all duration-200 ${
                       statusFilter === 'active' 
@@ -430,6 +436,7 @@ export default function SMSPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    responsive="nowrap"
                     onClick={() => setStatusFilter('closed')}
                     className={`flex-1 text-xs transition-all duration-200 ${
                       statusFilter === 'closed' 
@@ -659,6 +666,7 @@ export default function SMSPage() {
                       disabled={!newMessage.trim() || aiEnhancing}
                       variant="outline"
                       size="sm"
+                      responsive="nowrap"
                       className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400 px-3"
                       title="Enhance with AI"
                     >
@@ -672,6 +680,7 @@ export default function SMSPage() {
                       onClick={handleSendMessage}
                       disabled={!newMessage.trim() || sendMessageMutation.isPending}
                       size="sm"
+                      responsive="nowrap"
                       className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-md px-4"
                     >
                       <Send className="h-4 w-4" />

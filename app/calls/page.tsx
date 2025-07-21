@@ -143,6 +143,8 @@ export default function CallsPage() {
               </p>
               <Button 
                 onClick={() => router.push('/calls/history')}
+                size="default"
+                responsive="nowrap"
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
               >
                 <Clock className="w-4 h-4 mr-2" />
@@ -165,6 +167,8 @@ export default function CallsPage() {
               <Button 
                 onClick={() => router.push('/queue/unsigned')}
                 variant="outline"
+                size="default"
+                responsive="nowrap"
                 className="w-full border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 shadow-md hover:shadow-lg transition-all duration-200"
               >
                 <Phone className="w-4 h-4 mr-2" />

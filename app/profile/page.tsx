@@ -247,6 +247,8 @@ export default function ProfilePage() {
           <Button
             onClick={() => setIsEditing(!isEditing)}
             variant="outline"
+            size="default"
+            responsive="nowrap"
             className="border-2 border-slate-300 hover:bg-slate-100 hover:border-slate-400 shadow-md hover:shadow-lg transition-all duration-200"
           >
             <Edit className="w-4 h-4 mr-2" />
@@ -317,7 +319,11 @@ export default function ProfilePage() {
                         className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                       />
                     </div>
-                    <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200">
+                    <Button 
+                      size="default"
+                      responsive="nowrap"
+                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
+                    >
                       Save Changes
                     </Button>
                   </div>

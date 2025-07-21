@@ -66,7 +66,7 @@ export default function UserDetailPage() {
       userId: parseInt(userId),
       limit: 20,
       page: 1,
-      status: 'active'
+      status: undefined // Get all conversations (active and closed)
     },
     { 
       enabled: !!userId && !isNaN(parseInt(userId)),

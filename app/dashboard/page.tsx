@@ -501,6 +501,7 @@ export default function DashboardPage() {
               <Button 
                 variant="outline" 
                 size="sm"
+                responsive="nowrap"
                 className="border-slate-300 hover:bg-slate-100"
               >
                 <Link2 className="h-4 w-4 mr-2" />
