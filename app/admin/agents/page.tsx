@@ -231,7 +231,7 @@ export default function AgentManagementPage() {
   };
 
   const handleDelete = (agent: any) => {
-    const confirmMessage = `⚠️ PERMANENTLY DELETE AGENT?\n\nAgent: ${agent.firstName} ${agent.lastName}\nEmail: ${agent.email}\nRole: ${agent.role}\n\nThis action CANNOT be undone!\n\nType 'DELETE' to confirm:`;
+    const confirmMessage = `⚠️ PERMANENTLY DELETE AGENT?\n\nAgent: ${agent.firstName} ${agent.lastName}\nEmail: ${agent.email}\nRole: ${agent.role}\n\nThis action CANNOT be undone!\n\n🔴 TO CONFIRM DELETION:\nType the word DELETE (in capital letters) below:`;
     
     const userInput = prompt(confirmMessage);
     if (userInput === 'DELETE') {
