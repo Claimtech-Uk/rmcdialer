@@ -1,9 +1,19 @@
 import OpenAI from 'openai';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization of OpenAI client
+let openai: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openai) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OpenAI API key not configured');
+    }
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openai;
+}
 
 export interface MessageEnhancementOptions {
   message: string;
@@ -74,7 +84,7 @@ Respond in JSON format:
     let useJsonFormat = true;
     
     try {
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAIClient().chat.completions.create({
         model,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -108,7 +118,7 @@ Original message: "${message}"
 
 Enhance this message to be more professional and effective for SMS. Respond with just the improved message (no JSON format needed).`;
 
-      const fallbackResponse = await openai.chat.completions.create({
+      const fallbackResponse = await getOpenAIClient().chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
           { role: 'user', content: fallbackPrompt }
@@ -167,7 +177,7 @@ ${claimType ? `Claim type: ${claimType}` : ''}
 Return as JSON array of strings.`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4',
       messages: [
         { role: 'system', content: systemPrompt }
