@@ -195,6 +195,7 @@ export function CallInterface({
     isReady,
     isConnecting,
     isInCall,
+    isIncomingCall,
     callStatus,
     error,
     makeCall,
@@ -202,15 +203,47 @@ export function CallInterface({
     toggleMute,
     sendDigits,
     callDuration,
-    isMuted
+    isMuted,
+    acceptIncomingCall,
+    rejectIncomingCall,
+    incomingCallInfo
   } = useTwilioVoice({
     agentId,
     agentEmail,
-    autoConnect: true
+    autoConnect: true,
+    onIncomingCall: (callInfo) => {
+      console.log('📞 Incoming call received in CallInterface:', callInfo);
+      toast({
+        title: "Incoming Call",
+        description: `Call from ${callInfo.from}`,
+      });
+    }
   });
 
   // Track previous call state to detect when call ends
   const [wasInCall, setWasInCall] = useState(false);
+
+  // Handle incoming call acceptance
+  const handleAcceptIncomingCall = () => {
+    console.log('✅ Accepting incoming call');
+    acceptIncomingCall();
+    
+    // Create call session for accepted incoming call if we don't have one
+    if (!callSessionId && incomingCallInfo) {
+      console.log('📝 Creating call session for accepted incoming call');
+      initiateCallMutation.mutate({
+        userId: 999999, // Unknown caller ID - will be handled by backend
+        direction: 'inbound',
+        phoneNumber: incomingCallInfo.from
+      });
+    }
+  };
+
+  // Handle incoming call rejection
+  const handleRejectIncomingCall = () => {
+    console.log('❌ Rejecting incoming call');
+    rejectIncomingCall();
+  };
 
   // Watch for call status changes to update call session with Twilio SID
   useEffect(() => {
@@ -557,94 +590,97 @@ export function CallInterface({
 
         {/* Call Controls Panel */}
         <div className="space-y-6">
-          {/* Call Status */}
-          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
-              <CardTitle className="flex items-center gap-2 text-slate-800">
-                <Phone className="w-5 h-5 text-blue-600" />
-                Call Controls
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 p-6">
-              {/* Connection Status */}
-              <div className={`p-3 rounded-lg ${
-                isReady ? 'bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-800 border border-emerald-200' : 
-                isConnecting ? 'bg-gradient-to-r from-yellow-50 to-amber-50 text-yellow-800 border border-yellow-200' : 
-                'bg-gradient-to-r from-slate-50 to-gray-50 text-slate-800 border border-slate-200'
-              }`}>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    isReady ? 'bg-emerald-500' : 
-                    isConnecting ? 'bg-yellow-500' : 
-                    'bg-slate-500'
-                  }`} />
-                  <span className="font-medium">
-                    {isConnecting ? 'Connecting...' : isReady ? 'Ready' : 'Not Connected'}
-                  </span>
-                </div>
-                {error && (
-                  <div className="text-red-600 text-sm mt-1">{error}</div>
-                )}
-              </div>
+          {/* Call Status Section */}
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <div className={`w-3 h-3 rounded-full ${
+                error ? 'bg-red-500' : 
+                isIncomingCall ? 'bg-orange-500 animate-pulse' :
+                isInCall ? 'bg-green-500' : 
+                isReady ? 'bg-blue-500' : 
+                'bg-gray-400'
+              }`} />
+              <span className="text-lg font-semibold text-slate-700">
+                {error ? 'Connection Error' :
+                 isIncomingCall ? 'Incoming Call...' :
+                 isInCall ? 'Call Active' :
+                 isConnecting ? 'Connecting...' :
+                 isReady ? 'Ready to Call' :
+                 'Initializing...'}
+              </span>
+            </div>
 
-              {/* Call Duration */}
-              {isInCall && (
-                <div className="text-center bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
-                  <div className="text-3xl font-mono font-bold text-blue-600">
-                    {formatDuration(callDuration)}
-                  </div>
-                  <div className="text-sm text-blue-500">Call Duration</div>
-                </div>
+            {error && (
+              <Alert className="mb-6 border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">
+                  {error}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {isIncomingCall && incomingCallInfo && (
+              <Alert className="mb-6 border-orange-200 bg-orange-50">
+                <Phone className="h-4 w-4 text-orange-600" />
+                <AlertDescription className="text-orange-800">
+                  Incoming call from {incomingCallInfo.from} - Use the popup to accept or decline
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {isInCall && (
+              <div className="flex items-center justify-center gap-4 mb-4">
+                <Clock className="w-5 h-5 text-green-600" />
+                <span className="text-xl font-mono text-green-600">
+                  {Math.floor(callDuration / 60)}:{(callDuration % 60).toString().padStart(2, '0')}
+                </span>
+              </div>
+            )}
+
+            {/* Call Controls */}
+            <div className="flex gap-3 justify-center mb-6">
+              {!isInCall && !isIncomingCall && (
+                <Button
+                  onClick={handleMakeCall}
+                  disabled={!isReady || isConnecting || initiateCallMutation.isPending}
+                  size="lg"
+                  className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                >
+                  <Phone className="w-5 h-5 mr-2" />
+                  {isConnecting ? 'Connecting...' : 
+                   initiateCallMutation.isPending ? 'Starting...' : 
+                   'Start Call'}
+                </Button>
               )}
 
-              {/* Main Call Button */}
-              <div className="flex justify-center">
-                {!isInCall ? (
-                  <Button
-                    onClick={handleMakeCall}
-                    disabled={!isReady}
-                    size="xl"
-                    responsive="nowrap"
-                    className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
-                  >
-                    <Phone className="w-6 h-6 mr-2 flex-shrink-0" />
-                    Call {userContext.firstName}
-                  </Button>
-                ) : (
+              {(isInCall || isIncomingCall) && (
+                <>
                   <Button
                     onClick={handleCallEnd}
-                    size="xl"
-                    responsive="nowrap"
-                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
-                  >
-                    <PhoneOff className="w-6 h-6 mr-2 flex-shrink-0" />
-                    End Call & Add Notes
-                  </Button>
-                )}
-              </div>
-
-              {/* In-Call Controls */}
-              {isInCall && (
-                <div className="flex justify-center gap-4">
-                  <Button
-                    variant="outline"
                     size="lg"
-                    onClick={toggleMute}
-                    className={`border-2 transition-all duration-200 ${isMuted ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'border-slate-300 hover:bg-slate-100'} shadow-md hover:shadow-lg`}
+                    variant="destructive"
+                    className="bg-red-600 hover:bg-red-700 text-white shadow-md"
                   >
-                    {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    <PhoneOff className="w-5 h-5 mr-2" />
+                    End Call
                   </Button>
-                </div>
-              )}
 
-              {/* DTMF Controls (if needed for transfers) */}
-              {isInCall && (
-                <div className="text-center">
-                  <p className="text-sm text-slate-500 mb-2">DTMF available via sendDigits() if needed</p>
-                </div>
+                  {isInCall && (
+                    <>
+                      <Button
+                        onClick={toggleMute}
+                        size="lg"
+                        variant="outline"
+                        className={`${isMuted ? 'bg-red-50 border-red-200 text-red-600' : 'border-gray-300'}`}
+                      >
+                        {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                      </Button>
+                    </>
+                  )}
+                </>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Call Context & Reason */}
           {queueType?.data?.queueType && (
@@ -832,6 +868,55 @@ export function CallInterface({
         callDuration={callDuration}
         isSubmitting={submittingOutcome || initiateCallMutation.isPending}
       />
+
+      {/* Incoming Call Notification Modal */}
+      {isIncomingCall && incomingCallInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <Card className="w-full max-w-md bg-white shadow-2xl border-0 animate-pulse">
+            <CardHeader className="text-center pb-4">
+              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <Phone className="w-8 h-8 text-green-600 animate-bounce" />
+              </div>
+              <CardTitle className="text-xl font-semibold text-slate-800">
+                Incoming Call
+              </CardTitle>
+              <p className="text-slate-600 mt-2">
+                Call from: <span className="font-medium text-slate-800">{incomingCallInfo.from}</span>
+              </p>
+              <p className="text-sm text-slate-500">
+                Call ID: {incomingCallInfo.callSid.slice(-8)}
+              </p>
+            </CardHeader>
+            
+            <CardContent className="text-center">
+              <div className="flex gap-4 justify-center">
+                <Button
+                  onClick={handleRejectIncomingCall}
+                  variant="outline"
+                  size="lg"
+                  className="flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                >
+                  <PhoneOff className="w-5 h-5 mr-2" />
+                  Decline
+                </Button>
+                
+                <Button
+                  onClick={handleAcceptIncomingCall}
+                  size="lg"
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-lg"
+                >
+                  <Phone className="w-5 h-5 mr-2" />
+                  Accept
+                </Button>
+              </div>
+              
+              <p className="text-xs text-slate-400 mt-4">
+                Click Accept to start the conversation or Decline to end the call
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </>
   );
 } 
