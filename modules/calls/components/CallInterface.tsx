@@ -162,6 +162,16 @@ export function CallInterface({
     }
   });
 
+  // Call status update mutation
+  const updateCallStatusMutation = api.calls.updateCallStatus.useMutation({
+    onSuccess: (result: any) => {
+      console.log('✅ Call status updated:', result);
+    },
+    onError: (error: any) => {
+      console.error('❌ Failed to update call status:', error);
+    }
+  });
+
   // Magic link sending mutation
   const sendMagicLinkMutation = api.communications.sendMagicLinkSMS.useMutation({
     onSuccess: (result) => {
@@ -201,6 +211,19 @@ export function CallInterface({
 
   // Track previous call state to detect when call ends
   const [wasInCall, setWasInCall] = useState(false);
+
+  // Watch for call status changes to update call session with Twilio SID
+  useEffect(() => {
+    if (callStatus?.state === 'connected' && callStatus.callSid && callSessionId) {
+      console.log('📞 Updating call session with Twilio SID:', callStatus.callSid);
+      updateCallStatusMutation.mutate({
+        sessionId: callSessionId,
+        twilioCallSid: callStatus.callSid,
+        status: 'connected',
+        connectedAt: new Date()
+      });
+    }
+  }, [callStatus?.state, callStatus?.callSid, callSessionId]);
 
   // Handle call status changes and automatic disposition modal
   useEffect(() => {
