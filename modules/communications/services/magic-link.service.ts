@@ -559,7 +559,7 @@ export class MagicLinkService {
     // Shorter route paths
     const routes: Record<MagicLinkType, string> = {
       firstLogin: '/login',
-      claimPortal: '/claim',
+      claimPortal: '/claims',
       documentUpload: '/docs',
       claimCompletion: '/complete',
       requirementReview: '/review',
