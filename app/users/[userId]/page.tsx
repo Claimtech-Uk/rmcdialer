@@ -60,7 +60,7 @@ export default function UserDetailPage() {
     { enabled: !!userId && !isNaN(parseInt(userId)) }
   );
 
-  // Fetch SMS conversations for this user
+  // Fetch SMS conversations for this user - TEMPORARILY DISABLED
   const { data: smsConversationsResponse, isLoading: smsLoading } = api.communications.sms.getConversations.useQuery(
     { 
       userId: parseInt(userId),
@@ -68,7 +68,10 @@ export default function UserDetailPage() {
       page: 1,
       status: 'active'
     },
-    { enabled: !!userId && !isNaN(parseInt(userId)) }
+    { 
+      enabled: false, // TEMPORARILY DISABLED - was: !!userId && !isNaN(parseInt(userId))
+      refetchInterval: false
+    }
   );
 
   // Fetch magic link history for this user

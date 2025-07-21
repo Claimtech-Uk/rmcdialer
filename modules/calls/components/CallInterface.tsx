@@ -97,7 +97,7 @@ export function CallInterface({
     { enabled: !!userContext.userId }
   );
 
-  // Fetch SMS conversations
+  // Fetch SMS conversations - TEMPORARILY DISABLED
   const { data: smsConversationsResponse, isLoading: smsLoading } = api.communications.sms.getConversations.useQuery(
     { 
       userId: userContext.userId,
@@ -105,7 +105,10 @@ export function CallInterface({
       page: 1,
       status: 'active'
     },
-    { enabled: !!userContext.userId }
+    { 
+      enabled: false, // TEMPORARILY DISABLED - was: !!userContext.userId
+      refetchInterval: false
+    }
   );
 
   // Fetch magic link history
