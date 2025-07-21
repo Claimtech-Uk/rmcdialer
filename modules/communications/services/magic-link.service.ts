@@ -505,26 +505,11 @@ export class MagicLinkService {
     claimId?: number,
     requirementTypes?: string[]
   ): string {
-    // Use routes expected by portal app
-    const routes: Record<MagicLinkType, string> = {
-      firstLogin: '/first-login',
-      claimPortal: '/claims',
-      documentUpload: '/claim/requirements',
-      claimCompletion: '/claim/incomplete-redirect',
-      requirementReview: '/claim/requirements',
-      statusUpdate: '/claims',
-      profileUpdate: '/profile'
-    };
-
-    const baseRoute = routes[linkType];
-    const url = new URL(baseRoute, this.baseUrl);
+    // Use standard /claims route for all magic links
+    const url = new URL('/claims', this.baseUrl);
     
-    // Use parameter name expected by portal app
-    if (linkType === 'firstLogin') {
-      url.searchParams.set('base64_user_id', token);
-    } else {
-      url.searchParams.set('mlid', token);
-    }
+    // Use mlid parameter for all magic links
+    url.searchParams.set('mlid', token);
     
     // Add custom parameters if provided
     Object.entries(customParams).forEach(([key, value]) => {
@@ -537,17 +522,8 @@ export class MagicLinkService {
   private buildMessage(linkType: MagicLinkType, url: string, userName?: string): string {
     const name = userName ? ` ${userName}` : '';
     
-    const messages: Record<MagicLinkType, string> = {
-      firstLogin: `Hi${name}, access your RMC account: ${url}`,
-      claimPortal: `Hi${name}, view your claim: ${url}`,
-      documentUpload: `Hi${name}, upload documents: ${url}`,
-      claimCompletion: `Hi${name}, complete your claim: ${url}`,
-      requirementReview: `Hi${name}, review requirements: ${url}`,
-      statusUpdate: `Hi${name}, check status: ${url}`,
-      profileUpdate: `Hi${name}, update profile: ${url}`
-    };
-
-    return messages[linkType];
+    // Standard message for all magic links since they all go to /claims
+    return `Hi${name}, view your claim: ${url}`;
   }
 
   // private async generateShortUrl(originalUrl: string): Promise<string | null> {
