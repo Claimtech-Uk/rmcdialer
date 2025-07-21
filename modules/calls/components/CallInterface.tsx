@@ -84,13 +84,15 @@ export function CallInterface({
 
   // Magic link sending mutation
   const sendMagicLinkMutation = api.communications.sendMagicLinkSMS.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
+      console.log('✅ Magic link sent successfully:', result);
       toast({ 
         title: "Magic Link Sent!", 
         description: "User will receive the claim portal link via SMS" 
       });
     },
     onError: (error) => {
+      console.error('❌ Magic link failed:', error);
       toast({
         title: "Failed to Send Link",
         description: error.message || "Could not send magic link",
@@ -122,23 +124,29 @@ export function CallInterface({
 
   // Handle call status changes and automatic disposition modal
   useEffect(() => {
+    console.log('📊 Call state tracking:', {
+      isInCall,
+      wasInCall,
+      callStatus: callStatus?.state,
+      showOutcomeModal
+    });
+
     // Track when we enter a call
     if (isInCall && !wasInCall) {
+      console.log('📞 Call started - setting wasInCall to true');
       setWasInCall(true);
       // Generate session ID when call starts
       setCallSessionId(`session_${Date.now()}`);
     }
     
-    // Detect when call ends (was in call, now disconnected)
-    if (wasInCall && !isInCall && callStatus?.state === 'disconnected') {
-      console.log('🔚 Call ended, showing disposition modal');
+    // Detect when call ends (was in call, now disconnected OR not in call anymore)
+    if (wasInCall && !isInCall) {
+      console.log('🔚 Call ended detected - showing disposition modal');
       setWasInCall(false);
-      // Small delay to ensure UI is ready
-      setTimeout(() => {
-        setShowOutcomeModal(true);
-      }, 500);
+      // Show modal immediately - no delay
+      setShowOutcomeModal(true);
     }
-  }, [isInCall, wasInCall, callStatus?.state]);
+  }, [isInCall, wasInCall, callStatus?.state, showOutcomeModal]);
 
   const handleMakeCall = async () => {
     try {
@@ -158,13 +166,14 @@ export function CallInterface({
 
   const handleCallEnd = () => {
     console.log('🔚 Agent ending call manually');
-    // Mark that we expect the disposition modal
-    setWasInCall(true);
+    
+    // First hang up the call
     hangUp();
-    // Also trigger modal immediately for manual end
-    setTimeout(() => {
-      setShowOutcomeModal(true);
-    }, 1000);
+    
+    // Immediately show disposition modal for manual end
+    console.log('📝 Triggering disposition modal immediately');
+    setShowOutcomeModal(true);
+    setWasInCall(false); // Reset state
   };
 
   const handleOutcomeSubmit = async (outcome: CallOutcomeOptions) => {
@@ -215,11 +224,25 @@ export function CallInterface({
   };
 
   const handleSendMagicLink = () => {
-    sendMagicLinkMutation.mutate({
+    const payload = {
       userId: userContext.userId,
       phoneNumber: userContext.phoneNumber,
-      linkType: 'claimPortal'
-    });
+      linkType: 'claimPortal' as const
+    };
+    
+    console.log('📤 Sending magic link with payload:', payload);
+    
+    if (!userContext.phoneNumber) {
+      console.error('❌ No phone number available');
+      toast({
+        title: "No Phone Number",
+        description: "This user doesn't have a phone number on file",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    sendMagicLinkMutation.mutate(payload);
   };
 
   const formatDuration = (seconds: number): string => {
