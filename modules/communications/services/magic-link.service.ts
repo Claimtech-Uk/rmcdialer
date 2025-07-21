@@ -423,21 +423,36 @@ export class MagicLinkService {
     expiresAt?: Date;
   }> {
     try {
-      const decoded = this.verifyToken(token);
-      if (!decoded) {
-        return { isValid: false };
-      }
-
+      // First check if token exists in database and is not expired
       const activity = await prisma.magicLinkActivity.findFirst({
         where: { 
           linkToken: token,
+          isActive: true,
           expiresAt: { gt: new Date() }
         }
       });
 
       if (!activity) {
+        logger.warn('Magic link not found or expired', { token: token.substring(0, 8) + '...' });
         return { isValid: false };
       }
+
+      // Now verify the token structure and signature
+      const verified = this.verifyTokenWithLinkType(token, activity.linkType as MagicLinkType);
+      if (!verified) {
+        logger.warn('Magic link token verification failed', { 
+          token: token.substring(0, 8) + '...',
+          userId: activity.userId,
+          linkType: activity.linkType 
+        });
+        return { isValid: false };
+      }
+
+      logger.info('Magic link validated successfully', {
+        userId: activity.userId,
+        linkType: activity.linkType,
+        tokenPrefix: token.substring(0, 8) + '...'
+      });
 
       return {
         isValid: true,
@@ -496,17 +511,41 @@ export class MagicLinkService {
       const randomValue = buffer.readUInt32BE(8);
       const providedSignature = buffer.subarray(12, 18);
       
-      // For verification, we need to determine linkType from database
-      // For now, we'll return the basic info and verify linkType in the calling method
-      const dataBuffer = buffer.subarray(0, 12);
-      
+      // We need to look up the token in the database to get the link type
+      // and verify the signature against the stored link type
       return {
         userId,
-        linkType: 'claimPortal', // Will be verified against database
+        linkType: 'claimPortal', // This will be verified against database in validateMagicLink
         timestamp
       };
     } catch (error) {
       return null;
+    }
+  }
+
+  private verifyTokenWithLinkType(token: string, linkType: MagicLinkType): boolean {
+    try {
+      const buffer = Buffer.from(token, 'base64url');
+      
+      if (buffer.length !== 18) return false;
+      
+      // Extract data from binary format
+      const timestamp = buffer.readUInt32BE(0);
+      const userId = buffer.readUInt32BE(4);
+      const randomValue = buffer.readUInt32BE(8);
+      const providedSignature = buffer.subarray(12, 18);
+      
+      // Recreate the signature with the known link type
+      const hmac = crypto.createHmac('sha256', this.encryptionKey);
+      hmac.update(buffer.subarray(0, 12)); // Hash first 12 bytes (timestamp + userId + random)
+      hmac.update(linkType); // Include link type in hash
+      const expectedSignature = hmac.digest().subarray(0, 6); // First 6 bytes only
+      
+      // Compare signatures
+      return Buffer.compare(providedSignature, expectedSignature) === 0;
+    } catch (error) {
+      logger.error('Token verification error:', error);
+      return false;
     }
   }
 

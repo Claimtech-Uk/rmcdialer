@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/compone
 import { Badge } from '@/modules/core/components/ui/badge'
 import { Input } from '@/modules/core/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/modules/core/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/modules/core/components/ui/dialog'
 import { useToast } from '@/modules/core/hooks/use-toast'
 import { api } from '@/lib/trpc/client'
 import { useRouter } from 'next/navigation'
@@ -21,9 +20,7 @@ export default function SMSPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all')
   
   // AI Enhancement state
-  const [showAiModal, setShowAiModal] = useState(false)
   const [aiEnhancing, setAiEnhancing] = useState(false)
-  const [aiEnhancementResult, setAiEnhancementResult] = useState<any>(null)
   
   const { toast } = useToast()
   const router = useRouter()
@@ -159,8 +156,9 @@ export default function SMSPage() {
       return
     }
 
+    // Store original message in case we need to revert
+    const originalMessage = newMessage
     setAiEnhancing(true)
-    setShowAiModal(true)
 
     try {
       const response = await fetch('/api/enhance-message', {
@@ -185,7 +183,13 @@ export default function SMSPage() {
         throw new Error(result.error || 'Failed to enhance message')
       }
 
-      setAiEnhancementResult(result.data)
+      // Directly replace the message with the enhanced version
+      setNewMessage(result.data.enhancedMessage)
+      
+      toast({
+        title: "✨ Message enhanced!",
+        description: "Your message has been improved with AI",
+      })
     } catch (error) {
       console.error('AI Enhancement error:', error)
       toast({
@@ -193,22 +197,12 @@ export default function SMSPage() {
         description: error instanceof Error ? error.message : "Failed to enhance message with AI",
         variant: "destructive",
       })
-      setShowAiModal(false)
     } finally {
       setAiEnhancing(false)
     }
   }
 
-  // Apply enhanced message
-  const handleApplyEnhancement = (enhancedMessage: string) => {
-    setNewMessage(enhancedMessage)
-    setShowAiModal(false)
-    setAiEnhancementResult(null)
-    toast({
-      title: "Message enhanced",
-      description: "AI-enhanced message applied successfully",
-    })
-  }
+
 
   // Helper function to get user display name
   const getUserDisplayName = (conversation: SMSConversation): string => {
@@ -680,9 +674,9 @@ export default function SMSPage() {
                           }
                         }
                       }}
-                      disabled={sendMessageMutation.isPending}
+                      disabled={sendMessageMutation.isPending || aiEnhancing}
                       rows={1}
-                      className="resize-none border-0 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent rounded-lg px-3 py-2 text-sm min-h-[40px] max-h-32 overflow-y-auto"
+                      className="flex-1 resize-none border-0 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent rounded-lg px-3 py-2 text-sm min-h-[40px] max-h-32 overflow-y-auto"
                       style={{ 
                         height: 'auto',
                         minHeight: '40px'
@@ -700,7 +694,7 @@ export default function SMSPage() {
                       size="sm"
                       responsive="nowrap"
                       className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400 px-3"
-                      title="Enhance with AI"
+                      title={aiEnhancing ? "Improving message with AI..." : "Improve message with AI"}
                     >
                       {aiEnhancing ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -734,102 +728,6 @@ export default function SMSPage() {
           </Card>
         </div>
       </div>
-      
-      {/* AI Enhancement Modal */}
-      <Dialog open={showAiModal} onOpenChange={setShowAiModal}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-emerald-600" />
-              AI Message Enhancement
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="space-y-6">
-            {/* Original Message */}
-            <div>
-              <h4 className="font-medium text-sm text-slate-600 mb-2">Original Message:</h4>
-              <div className="bg-slate-100 rounded-lg p-3 text-sm text-slate-800">
-                {newMessage}
-              </div>
-            </div>
-            
-            {aiEnhancing ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mx-auto mb-3" />
-                  <p className="text-slate-600">AI is enhancing your message...</p>
-                </div>
-              </div>
-            ) : aiEnhancementResult ? (
-              <div className="space-y-4">
-                {/* Enhanced Message */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-sm text-slate-600">Enhanced Message:</h4>
-                    <Button
-                      onClick={() => handleApplyEnhancement(aiEnhancementResult.enhancedMessage)}
-                      size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                    >
-                      Use This
-                    </Button>
-                  </div>
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-slate-800">
-                    {aiEnhancementResult.enhancedMessage}
-                  </div>
-                </div>
-                
-                {/* Alternative Suggestions */}
-                {aiEnhancementResult.suggestions && aiEnhancementResult.suggestions.length > 0 && (
-                  <div>
-                    <h4 className="font-medium text-sm text-slate-600 mb-2">Alternative Suggestions:</h4>
-                    <div className="space-y-2">
-                      {aiEnhancementResult.suggestions.map((suggestion: string, index: number) => (
-                        <div key={index} className="flex items-start gap-2">
-                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-slate-800 flex-1">
-                            {suggestion}
-                          </div>
-                          <Button
-                            onClick={() => handleApplyEnhancement(suggestion)}
-                            size="sm"
-                            variant="outline"
-                            className="border-blue-300 text-blue-700 hover:bg-blue-50 mt-1"
-                          >
-                            Use
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* AI Reasoning */}
-                {aiEnhancementResult.reasoning && (
-                  <div>
-                    <h4 className="font-medium text-sm text-slate-600 mb-2">AI Improvements:</h4>
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
-                      {aiEnhancementResult.reasoning}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : null}
-            
-            <div className="flex justify-end gap-2 pt-4 border-t">
-              <Button
-                onClick={() => {
-                  setShowAiModal(false)
-                  setAiEnhancementResult(null)
-                }}
-                variant="outline"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 } 
