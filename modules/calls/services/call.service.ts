@@ -89,10 +89,10 @@ export class CallService {
              userId: BigInt(userId),
              queueType: 'manual_call',
              priorityScore: 0,
-             status: 'assigned',
+             status: 'pending', // Don't assign until we verify agent exists
              queueReason: 'Manual agent-initiated call',
-             assignedToAgentId: agentId,
-             assignedAt: new Date(),
+             // assignedToAgentId: agentId, // Remove assignment for now
+             // assignedAt: new Date(),
            }
          });
          actualQueueId = manualQueue.id;
