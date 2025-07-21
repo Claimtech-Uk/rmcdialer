@@ -33,20 +33,52 @@ import type { UserCallContext, CallOutcomeOptions } from '../types/call.types';
 interface CallInterfaceProps {
   userContext: UserCallContext;
   onCallComplete?: (outcome: CallOutcomeOptions) => void;
-  agentId: string;
-  agentEmail: string;
+  // Remove agentId and agentEmail props - get from auth context
 }
 
 export function CallInterface({ 
   userContext, 
-  onCallComplete,
-  agentId,
-  agentEmail
+  onCallComplete
 }: CallInterfaceProps) {
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
   const [callSessionId, setCallSessionId] = useState<string>('');
   const [submittingOutcome, setSubmittingOutcome] = useState(false);
   const { toast } = useToast();
+
+  // Get authenticated agent context from tRPC
+  const { data: agentContext, isLoading: agentLoading, error: agentError } = api.auth.me.useQuery();
+
+  // Wait for agent context to load before proceeding
+  if (agentLoading) {
+    return (
+      <Card className="w-full max-w-4xl mx-auto">
+        <CardContent className="p-6 text-center">
+          <Activity className="w-8 h-8 animate-pulse text-blue-600 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold mb-2">Loading Agent Context</h2>
+          <p className="text-gray-600">Verifying authentication...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (agentError || !agentContext?.agent) {
+    return (
+      <Card className="w-full max-w-4xl mx-auto">
+        <CardContent className="p-6 text-center">
+          <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold mb-2">Authentication Required</h2>
+          <p className="text-gray-600">Please log in to access the call interface</p>
+          <Button className="mt-4" onClick={() => window.location.href = '/login'}>
+            Go to Login
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Extract agent info from authenticated context
+  const agentId = agentContext.agent.id.toString(); // Convert to string for compatibility
+  const agentEmail = agentContext.agent.email;
 
   // Fetch additional data that was on the user detail page
   // Determine queue type for call context

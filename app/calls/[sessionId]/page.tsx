@@ -111,7 +111,6 @@ export default function CallSessionPage() {
         <CallInterface
           userContext={userContext}
           onCallComplete={handleCallComplete}
-          // Remove hardcoded agent props - let CallInterface get from auth context
         />
       </div>
     </div>
