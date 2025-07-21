@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { authService } from '@/modules/auth/services/auth.service'
+import { prisma } from '@/lib/db'
 import { logger } from '@/modules/core/utils/logger.utils'
+import { AuthService } from '@/modules/auth/services/auth.service'
+
+// Initialize the auth service with proper dependencies
+const authService = new AuthService({
+  prisma,
+  logger,
+  redis: null // Using null for testing without Redis
+})
 
 export async function GET(request: NextRequest) {
   try {

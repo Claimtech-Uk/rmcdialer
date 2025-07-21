@@ -177,6 +177,35 @@ export default function AgentManagementPage() {
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate form data
+    if (!createFormData.email || !createFormData.password || !createFormData.firstName || !createFormData.lastName) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (createFormData.password.length < 8) {
+      toast({
+        title: "Validation Error", 
+        description: "Password must be at least 8 characters long",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!/\S+@\S+\.\S+/.test(createFormData.email)) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid email address",
+        variant: "destructive",
+      });
+      return;
+    }
+
     createAgentMutation.mutate(createFormData);
   };
 
