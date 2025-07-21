@@ -1,7 +1,7 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Plus, Send, MessageSquare, Phone, Users, Clock, TrendingUp, Search, Filter, CheckCheck, Check, User } from 'lucide-react'
 import { Button } from '@/modules/core/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card'
@@ -18,6 +18,12 @@ export default function SMSPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all')
   const { toast } = useToast()
+
+  // Memoize stats query parameters to prevent constant re-renders
+  const statsParams = useMemo(() => ({
+    startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+    endDate: new Date()
+  }), [])
 
   // Fetch conversations with reduced polling (much more reasonable)
   const { data: conversationsData, refetch: refetchConversations } = api.communications.sms.getConversations.useQuery(
@@ -46,15 +52,13 @@ export default function SMSPage() {
     }
   )
 
-  // Fetch SMS stats much less frequently
+  // Fetch SMS stats with memoized parameters (FIXED: was causing constant requests)
   const { data: statsData } = api.communications.sms.getStats.useQuery(
+    statsParams,
     {
-      startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
-      endDate: new Date()
-    },
-    {
-      refetchInterval: false, // TEMPORARILY DISABLED - was 60000
+      refetchInterval: false, // DISABLED - was causing 300ms request loops
       refetchOnWindowFocus: false, // Don't refresh stats on window focus
+      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     }
   )
 
