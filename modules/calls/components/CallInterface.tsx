@@ -117,14 +117,28 @@ export function CallInterface({
     autoConnect: true
   });
 
-  // Handle call end - show outcome modal
+  // Track previous call state to detect when call ends
+  const [wasInCall, setWasInCall] = useState(false);
+
+  // Handle call status changes and automatic disposition modal
   useEffect(() => {
-    if (callStatus?.state === 'disconnected' && callDuration > 0) {
-      // Generate a session ID (in production, this would come from the service)
+    // Track when we enter a call
+    if (isInCall && !wasInCall) {
+      setWasInCall(true);
+      // Generate session ID when call starts
       setCallSessionId(`session_${Date.now()}`);
-      setShowOutcomeModal(true);
     }
-  }, [callStatus?.state, callDuration]);
+    
+    // Detect when call ends (was in call, now disconnected)
+    if (wasInCall && !isInCall && callStatus?.state === 'disconnected') {
+      console.log('🔚 Call ended, showing disposition modal');
+      setWasInCall(false);
+      // Small delay to ensure UI is ready
+      setTimeout(() => {
+        setShowOutcomeModal(true);
+      }, 500);
+    }
+  }, [isInCall, wasInCall, callStatus?.state]);
 
   const handleMakeCall = async () => {
     try {
@@ -143,29 +157,61 @@ export function CallInterface({
   };
 
   const handleCallEnd = () => {
+    console.log('🔚 Agent ending call manually');
+    // Mark that we expect the disposition modal
+    setWasInCall(true);
     hangUp();
+    // Also trigger modal immediately for manual end
+    setTimeout(() => {
+      setShowOutcomeModal(true);
+    }, 1000);
   };
 
   const handleOutcomeSubmit = async (outcome: CallOutcomeOptions) => {
     setSubmittingOutcome(true);
     try {
       // In production, this would call the CallService via tRPC
-      console.log('Submitting call outcome:', {
+      console.log('✅ Submitting call outcome:', {
         sessionId: callSessionId,
         outcome,
         userContext
       });
       
+      toast({
+        title: "Recording Call Outcome",
+        description: "Saving call notes and disposition...",
+      });
+      
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      toast({
+        title: "Call Completed Successfully",
+        description: `Outcome: ${outcome.outcomeType.replace('_', ' ').toUpperCase()}`,
+      });
+      
       setShowOutcomeModal(false);
+      setWasInCall(false); // Reset call tracking
       onCallComplete?.(outcome);
     } catch (error) {
       console.error('Failed to save call outcome:', error);
+      toast({
+        title: "Error Saving Outcome",
+        description: "Please try again or contact support",
+        variant: "destructive"
+      });
     } finally {
       setSubmittingOutcome(false);
     }
+  };
+
+  // Prevent closing modal without disposition
+  const handleModalClose = () => {
+    toast({
+      title: "Disposition Required",
+      description: "Please select a call outcome before closing",
+      variant: "destructive"
+    });
   };
 
   const handleSendMagicLink = () => {
@@ -194,6 +240,30 @@ export function CallInterface({
 
   return (
     <>
+      {/* Disposition Required Alert */}
+      {wasInCall && !isInCall && !showOutcomeModal && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-6 rounded-r-lg">
+          <div className="flex items-center">
+            <AlertCircle className="w-5 h-5 text-yellow-500 mr-3" />
+            <div className="flex-1">
+              <p className="text-yellow-800 font-medium">
+                ⚠️ Call Disposition Required
+              </p>
+              <p className="text-yellow-700 text-sm">
+                Please complete the call outcome form to finish this call session.
+              </p>
+            </div>
+            <Button 
+              onClick={() => setShowOutcomeModal(true)}
+              size="sm"
+              className="bg-yellow-600 hover:bg-yellow-700 text-white"
+            >
+              Complete Disposition
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* User Context Panel */}
         <div className="lg:col-span-2 space-y-6">
@@ -364,7 +434,7 @@ export function CallInterface({
                     className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-full"
                   >
                     <PhoneOff className="w-6 h-6 mr-2" />
-                    End Call
+                    End Call & Add Notes
                   </Button>
                 )}
               </div>
@@ -461,9 +531,9 @@ export function CallInterface({
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
                   <p className="text-sm text-gray-500 mt-2">Loading call history...</p>
                 </div>
-              ) : callHistoryResponse?.data?.calls?.length ? (
+              ) : callHistoryResponse?.calls?.length ? (
                 <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {callHistoryResponse.data.calls.slice(0, 5).map((call, index) => (
+                  {callHistoryResponse.calls.slice(0, 5).map((call: any, index: number) => (
                     <div key={index} className="border-l-2 border-gray-200 pl-3 pb-2">
                       <div className="flex justify-between items-start">
                         <div className="text-sm">
@@ -479,9 +549,9 @@ export function CallInterface({
                       )}
                     </div>
                   ))}
-                  {callHistoryResponse.data.calls.length > 5 && (
+                  {callHistoryResponse.calls.length > 5 && (
                     <p className="text-xs text-center text-gray-500 pt-2">
-                      ... and {callHistoryResponse.data.calls.length - 5} more calls
+                      ... and {callHistoryResponse.calls.length - 5} more calls
                     </p>
                   )}
                 </div>
@@ -505,9 +575,9 @@ export function CallInterface({
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
                   <p className="text-sm text-gray-500 mt-2">Loading SMS history...</p>
                 </div>
-              ) : smsConversationsResponse?.data?.conversations?.length ? (
+              ) : smsConversationsResponse?.data?.length ? (
                 <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {smsConversationsResponse.data.conversations.slice(0, 3).map((conversation, index) => (
+                  {smsConversationsResponse.data.slice(0, 3).map((conversation: any, index: number) => (
                     <div key={index} className="border border-gray-200 rounded p-2">
                       <div className="flex justify-between items-start mb-1">
                         <div className="text-xs text-gray-500">
@@ -528,7 +598,7 @@ export function CallInterface({
           </Card>
 
           {/* Magic Link History */}
-          {magicLinkHistoryResponse?.data?.links?.length && (
+          {magicLinkHistoryResponse?.data?.length && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -538,7 +608,7 @@ export function CallInterface({
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {magicLinkHistoryResponse.data.links.slice(0, 3).map((link, index) => (
+                  {magicLinkHistoryResponse.data.slice(0, 3).map((link: any, index: number) => (
                     <div key={index} className="flex justify-between items-center text-sm">
                       <div>
                         <div className="font-medium">{link.linkType}</div>
@@ -556,10 +626,10 @@ export function CallInterface({
         </div>
       </div>
 
-      {/* Call Outcome Modal */}
+      {/* Call Outcome Modal - Required after every call */}
       <CallOutcomeModal
         isOpen={showOutcomeModal}
-        onClose={() => setShowOutcomeModal(false)}
+        onClose={handleModalClose}
         onSubmit={handleOutcomeSubmit}
         callSessionId={callSessionId}
         userContext={userContext}
