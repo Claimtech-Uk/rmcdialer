@@ -447,7 +447,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         <Button 
                           size="default"
                           variant="outline"
-                          className="w-full justify-start border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 h-12 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-md"
+                          className="w-full justify-start border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 h-12 px-4 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-md"
                           onClick={() => {
                             console.log('VIEW DETAILS CLICKED - FULL USER OBJECT:', userContext);
                             console.log('VIEW DETAILS CLICKED - USER ID:', user.id);
@@ -484,7 +484,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         
                         <Button 
                           size="default"
-                          className="w-full justify-start bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg h-12 px-4 py-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0"
+                          className="w-full justify-start bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg h-12 px-4 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0"
                           onClick={() => {
                             console.log('CALL NOW CLICKED - FULL USER OBJECT:', userContext);
                             console.log('CALL NOW CLICKED - USER ID:', user.id);

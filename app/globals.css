@@ -73,4 +73,17 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+@layer components {
+  /* Button text vertical centering fix */
+  button {
+    line-height: 1;
+    vertical-align: baseline;
+  }
+  
+  /* Ensure button content is properly centered */
+  button > * {
+    vertical-align: baseline;
+  }
 } 
