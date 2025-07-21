@@ -39,7 +39,7 @@ interface CallInterfaceProps {
 
 // Component to display individual conversation with message history (same as user page)
 function ConversationDetail({ conversation }: { conversation: any }) {
-  // Fetch messages for this specific conversation
+  // Fetch messages for this specific conversation - optimized caching
   const { data: conversationData, isLoading: messagesLoading } = api.communications.sms.getConversation.useQuery(
     {
       conversationId: conversation.id,
@@ -48,8 +48,10 @@ function ConversationDetail({ conversation }: { conversation: any }) {
     },
     {
       enabled: !!conversation.id,
-      refetchInterval: false,
-      staleTime: 30000 // Cache for 30 seconds
+      refetchInterval: false, // Disable auto-refetching
+      staleTime: 5 * 60 * 1000, // 5 minutes - conversation data is relatively stable
+      refetchOnWindowFocus: false, // Don't refetch when window regains focus
+      refetchOnMount: false, // Don't refetch on component mount if we have cached data
     }
   );
 
@@ -246,31 +248,37 @@ export function CallInterface({
   // Fetch complete user details to get addresses
   const { data: userDetailsResponse, isLoading: userDetailsLoading } = api.users.getCompleteUserDetails.useQuery(
     { userId: userContext.userId },
-    { enabled: !!userContext.userId }
+    { 
+      enabled: !!userContext.userId,
+      staleTime: 10 * 60 * 1000, // 10 minutes - user details change infrequently
+      refetchInterval: false, // Disable auto-refetching
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+    }
   );
 
   // Fetch call history with detailed table
   const { data: callHistoryResponse, isLoading: callHistoryLoading, refetch: refetchCallHistory } = api.calls.getCallHistoryTable.useQuery(
     { 
       userId: userContext.userId,
-      limit: 20,
-      page: 1
+      page: 1,
+      limit: 10
     },
-    { enabled: !!userContext.userId }
+    {
+      enabled: !!userContext.userId,
+      staleTime: 3 * 60 * 1000, // 3 minutes - call history can be cached longer
+      refetchInterval: false, // Disable auto-refetching
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+    }
   );
 
-  // Fetch SMS conversations - Re-enabled with optimized polling
+  // Fetch SMS conversations
   const { data: smsConversationsResponse, isLoading: smsLoading } = api.communications.sms.getConversations.useQuery(
-    { 
-      userId: userContext.userId,
-      limit: 10,
-      page: 1,
-      status: 'active'
-    },
-    { 
+    { userId: userContext.userId },
+    {
       enabled: !!userContext.userId,
-      refetchInterval: 30000, // Refresh every 30 seconds
-      staleTime: 15000 // Consider data fresh for 15 seconds
+      staleTime: 2 * 60 * 1000, // 2 minutes - SMS conversations can be cached
+      refetchInterval: false, // Disable auto-refetching  
+      refetchOnWindowFocus: false, // Don't refetch on window focus
     }
   );
 
@@ -280,26 +288,6 @@ export function CallInterface({
     { enabled: !!userContext.userId }
   );
 
-  // Call session creation mutation
-  const initiateCallMutation = api.calls.initiateCall.useMutation({
-    onSuccess: (result) => {
-      console.log('✅ Call session created in database:', result);
-      setCallSessionId(result.callSession.id);
-      toast({
-        title: "Call Session Started",
-        description: "Call session created and tracking started",
-      });
-    },
-    onError: (error) => {
-      console.error('❌ Failed to create call session:', error);
-      toast({
-        title: "Session Creation Failed",
-        description: error.message || "Could not create call session",
-        variant: "destructive"
-      });
-    }
-  });
-
   // Call outcome recording mutation
   const recordCallOutcomeMutation = api.calls.recordOutcome.useMutation({
     onSuccess: (result: any) => {
@@ -308,11 +296,35 @@ export function CallInterface({
         title: "Call Completed Successfully",
         description: `Outcome: ${result.outcomeType.replace('_', ' ').toUpperCase()}`,
       });
+      // Only refetch call history, not everything
+      refetchCallHistory();
     },
     onError: (error: any) => {
       console.error('❌ Failed to record call outcome:', error);
       toast({
         title: "Error Saving Outcome",
+        description: error.message || "Please try again or contact support",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Call initiation mutation
+  const initiateCallMutation = api.calls.initiateCall.useMutation({
+    onSuccess: (result: any) => {
+      console.log('✅ Call initiated successfully:', result);
+      setCallSessionId(result.callSession.id);
+      toast({
+        title: "Call Session Created",
+        description: "Call tracking initialized successfully",
+      });
+      // Refetch call history to show the new session
+      refetchCallHistory();
+    },
+    onError: (error: any) => {
+      console.error('❌ Failed to initiate call:', error);
+      toast({
+        title: "Call Initiation Failed", 
         description: error.message || "Please try again or contact support",
         variant: "destructive"
       });
@@ -459,7 +471,7 @@ export function CallInterface({
         direction: 'outbound'
       });
       
-      console.log('✅ Call session created:', callSessionResult.callSession.id);
+              console.log('✅ Call session created:', callSessionResult.callSession.id);
       
       // 2. Then start the actual Twilio call
       console.log('📞 Starting Twilio call...');
@@ -516,7 +528,7 @@ export function CallInterface({
           phoneNumber: userContext.phoneNumber
         });
         
-        sessionId = result.callSession.id;
+                 sessionId = result.callSession.id;
         setCallSessionId(sessionId);
         console.log('✅ Created call session for outcome:', sessionId);
       }
@@ -602,6 +614,16 @@ export function CallInterface({
     return userContext.claims.flatMap(claim => 
       claim.requirements.filter(req => req.status === 'PENDING')
     );
+  };
+
+  // Manual refresh functions
+  const refreshAllData = () => {
+    refetchCallHistory();
+    // Don't refetch user details as they change infrequently
+    toast({
+      title: "Data Refreshed",
+      description: "Call history updated",
+    });
   };
 
   return (
@@ -771,9 +793,20 @@ export function CallInterface({
           {/* Call History */}
           <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
-              <CardTitle className="flex items-center gap-2 text-slate-800">
-                <Phone className="w-5 h-5 text-blue-600" />
-                Call History
+              <CardTitle className="flex items-center justify-between text-slate-800">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-blue-600" />
+                  Call History
+                </div>
+                <Button
+                  onClick={refreshAllData}
+                  variant="outline"
+                  size="sm"
+                  className="text-slate-600 hover:text-slate-800"
+                >
+                  <Activity className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6">
