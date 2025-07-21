@@ -82,6 +82,45 @@ export function CallInterface({
     { enabled: !!userContext.userId }
   );
 
+  // Call session creation mutation
+  const initiateCallMutation = api.calls.initiateCall.useMutation({
+    onSuccess: (result) => {
+      console.log('✅ Call session created in database:', result);
+      setCallSessionId(result.callSession.id);
+      toast({
+        title: "Call Session Started",
+        description: "Call session created and tracking started",
+      });
+    },
+    onError: (error) => {
+      console.error('❌ Failed to create call session:', error);
+      toast({
+        title: "Session Creation Failed",
+        description: error.message || "Could not create call session",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Call outcome recording mutation
+  const recordCallOutcomeMutation = api.calls.recordOutcome.useMutation({
+    onSuccess: (result: any) => {
+      console.log('✅ Call outcome recorded in database:', result);
+      toast({
+        title: "Call Completed Successfully",
+        description: `Outcome: ${result.outcomeType.replace('_', ' ').toUpperCase()}`,
+      });
+    },
+    onError: (error: any) => {
+      console.error('❌ Failed to record call outcome:', error);
+      toast({
+        title: "Error Saving Outcome",
+        description: error.message || "Please try again or contact support",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Magic link sending mutation
   const sendMagicLinkMutation = api.communications.sendMagicLinkSMS.useMutation({
     onSuccess: (result) => {
@@ -150,6 +189,18 @@ export function CallInterface({
 
   const handleMakeCall = async () => {
     try {
+      // 1. Create call session in database first
+      console.log('📋 Creating call session in database...');
+      const callSessionResult = await initiateCallMutation.mutateAsync({
+        userId: userContext.userId,
+        phoneNumber: userContext.phoneNumber,
+        direction: 'outbound'
+      });
+      
+      console.log('✅ Call session created:', callSessionResult.callSession.id);
+      
+      // 2. Then start the actual Twilio call
+      console.log('📞 Starting Twilio call...');
       await makeCall({
         phoneNumber: userContext.phoneNumber,
         userContext: {
@@ -159,8 +210,15 @@ export function CallInterface({
           claimId: userContext.claims[0]?.id
         }
       });
-    } catch (error) {
-      console.error('Failed to make call:', error);
+      
+      console.log('✅ Call started successfully');
+    } catch (error: any) {
+      console.error('❌ Failed to start call:', error);
+      toast({
+        title: "Call Failed",
+        description: error.message || "Could not start call",
+        variant: "destructive"
+      });
     }
   };
 
@@ -179,8 +237,7 @@ export function CallInterface({
   const handleOutcomeSubmit = async (outcome: CallOutcomeOptions) => {
     setSubmittingOutcome(true);
     try {
-      // In production, this would call the CallService via tRPC
-      console.log('✅ Submitting call outcome:', {
+      console.log('📋 Recording call outcome in database:', {
         sessionId: callSessionId,
         outcome,
         userContext
@@ -191,22 +248,28 @@ export function CallInterface({
         description: "Saving call notes and disposition...",
       });
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Call Completed Successfully",
-        description: `Outcome: ${outcome.outcomeType.replace('_', ' ').toUpperCase()}`,
+      // Record outcome in database via tRPC
+      await recordCallOutcomeMutation.mutateAsync({
+        sessionId: callSessionId,
+        outcomeType: outcome.outcomeType,
+        outcomeNotes: outcome.outcomeNotes || '',
+        callbackDateTime: outcome.callbackDateTime,
+        callbackReason: outcome.callbackReason,
+        magicLinkSent: outcome.magicLinkSent || false,
+        smsSent: outcome.smsSent || false,
+        documentsRequested: outcome.documentsRequested,
+        scoreAdjustment: outcome.scoreAdjustment,
+        nextCallDelayHours: outcome.nextCallDelayHours
       });
       
       setShowOutcomeModal(false);
       setWasInCall(false); // Reset call tracking
       onCallComplete?.(outcome);
-    } catch (error) {
-      console.error('Failed to save call outcome:', error);
+    } catch (error: any) {
+      console.error('❌ Failed to save call outcome:', error);
       toast({
         title: "Error Saving Outcome",
-        description: "Please try again or contact support",
+        description: error.message || "Please try again or contact support",
         variant: "destructive"
       });
     } finally {
