@@ -38,8 +38,8 @@ interface CallInterfaceProps {
 }
 
 // Component to display individual conversation with message history (same as user page)
-function ConversationDetail({ conversation }: { conversation: any }) {
-  // Fetch messages for this specific conversation - optimized caching
+function ConversationDetail({ conversation, expanded = false }: { conversation: any; expanded?: boolean }) {
+  // Only fetch messages when conversation is expanded - MAJOR performance improvement
   const { data: conversationData, isLoading: messagesLoading } = api.communications.sms.getConversation.useQuery(
     {
       conversationId: conversation.id,
@@ -47,7 +47,7 @@ function ConversationDetail({ conversation }: { conversation: any }) {
       limit: 50
     },
     {
-      enabled: !!conversation.id,
+      enabled: expanded && !!conversation.id, // Only load when expanded
       refetchInterval: false, // Disable auto-refetching
       staleTime: 5 * 60 * 1000, // 5 minutes - conversation data is relatively stable
       refetchOnWindowFocus: false, // Don't refetch when window regains focus
@@ -196,6 +196,7 @@ export function CallInterface({
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
   const [callSessionId, setCallSessionId] = useState<string>('');
   const [submittingOutcome, setSubmittingOutcome] = useState(false);
+  const [expandedConversations, setExpandedConversations] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   // Get authenticated agent context from tRPC
@@ -239,10 +240,15 @@ export function CallInterface({
   const agentEmail = agentContext.agent.email;
 
   // Fetch additional data that was on the user detail page
-  // Determine queue type for call context
+  // Determine queue type for call context - optimized
   const { data: queueType } = api.users.determineUserQueueType.useQuery(
     { userId: userContext.userId },
-    { enabled: !!userContext.userId }
+    { 
+      enabled: !!userContext.userId,
+      staleTime: 15 * 60 * 1000, // 15 minutes - queue type rarely changes
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+    }
   );
 
   // Fetch complete user details to get addresses
@@ -282,10 +288,16 @@ export function CallInterface({
     }
   );
 
-  // Fetch magic link history
+  // Fetch magic link history - DISABLED to reduce network requests
+  // Only fetch when explicitly needed (when magic link panel is opened)
   const { data: magicLinkHistoryResponse, isLoading: magicLinkLoading } = api.communications.magicLinks.getUserHistory.useQuery(
     { userId: userContext.userId },
-    { enabled: !!userContext.userId }
+    { 
+      enabled: false, // Disabled by default - will enable manually when needed
+      staleTime: 10 * 60 * 1000, // 10 minutes
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+    }
   );
 
   // Call outcome recording mutation
@@ -626,6 +638,29 @@ export function CallInterface({
     });
   };
 
+  // Toggle conversation expansion
+  const toggleConversationExpansion = (conversationId: string) => {
+    const newExpanded = new Set(expandedConversations);
+    if (newExpanded.has(conversationId)) {
+      newExpanded.delete(conversationId);
+    } else {
+      newExpanded.add(conversationId);
+    }
+    setExpandedConversations(newExpanded);
+  };
+
+  // Status color helper function
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      case 'closed':
+        return 'bg-slate-100 text-slate-600 border-slate-200';
+      default:
+        return 'bg-blue-100 text-blue-800 border-blue-200';
+    }
+  };
+
   return (
     <>
       {/* Disposition Required Alert */}
@@ -842,9 +877,38 @@ export function CallInterface({
                   <p className="text-sm text-slate-500 mt-2">Loading SMS history...</p>
                 </div>
               ) : smsConversationsResponse?.data?.length ? (
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {smsConversationsResponse.data.map((conversation: any) => (
-                    <ConversationDetail key={conversation.id} conversation={conversation} />
+                    <div key={conversation.id} className="border rounded-lg p-4 bg-slate-50">
+                      <div 
+                        className="flex items-center justify-between cursor-pointer"
+                        onClick={() => toggleConversationExpansion(conversation.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="text-sm font-medium text-slate-800">
+                            {conversation.phoneNumber}
+                          </div>
+                          <div className={`px-2 py-1 rounded-full text-xs ${getStatusColor(conversation.status)}`}>
+                            {conversation.status}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <span>{conversation.messageCount || 0} messages</span>
+                          <span className={expandedConversations.has(conversation.id) ? "rotate-180" : ""}>
+                            ▼
+                          </span>
+                        </div>
+                      </div>
+                      {expandedConversations.has(conversation.id) && (
+                        <div className="mt-4 border-t pt-4">
+                          <ConversationDetail 
+                            key={`${conversation.id}-detail`}
+                            conversation={conversation} 
+                            expanded={true}
+                          />
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : (
