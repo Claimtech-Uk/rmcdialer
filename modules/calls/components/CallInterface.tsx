@@ -286,13 +286,30 @@ export function CallInterface({
   const handleOutcomeSubmit = async (outcome: CallOutcomeOptions) => {
     setSubmittingOutcome(true);
     try {
-      // Validate session ID
-      if (!callSessionId || callSessionId === '') {
-        throw new Error('No valid call session ID available');
+      let sessionId = callSessionId;
+      
+      // If no session ID exists (race condition), create one now
+      if (!sessionId || sessionId === '') {
+        console.log('⚠️ No session ID available - creating call session now');
+        
+        toast({
+          title: "Creating Call Session",
+          description: "Initializing call tracking...",
+        });
+        
+        const result = await initiateCallMutation.mutateAsync({
+          userId: userContext.userId,
+          direction: 'outbound',
+          phoneNumber: userContext.phoneNumber
+        });
+        
+        sessionId = result.callSession.id;
+        setCallSessionId(sessionId);
+        console.log('✅ Created call session for outcome:', sessionId);
       }
 
       console.log('📋 Recording call outcome in database:', {
-        sessionId: callSessionId,
+        sessionId: sessionId,
         outcome,
         userContext
       });
@@ -304,7 +321,7 @@ export function CallInterface({
       
       // Record outcome in database via tRPC
       await recordCallOutcomeMutation.mutateAsync({
-        sessionId: callSessionId,
+        sessionId: sessionId,
         outcomeType: outcome.outcomeType,
         outcomeNotes: outcome.outcomeNotes || '',
         callbackDateTime: outcome.callbackDateTime,
@@ -787,10 +804,10 @@ export function CallInterface({
         isOpen={showOutcomeModal}
         onClose={handleModalClose}
         onSubmit={handleOutcomeSubmit}
-        callSessionId={callSessionId}
+        callSessionId={callSessionId || 'pending'}
         userContext={userContext}
         callDuration={callDuration}
-        isSubmitting={submittingOutcome}
+        isSubmitting={submittingOutcome || initiateCallMutation.isPending}
       />
     </>
   );
