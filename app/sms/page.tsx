@@ -27,7 +27,7 @@ export default function SMSPage() {
       limit: 50
     },
     {
-      refetchInterval: 15000, // Poll every 15 seconds (was 5 seconds)
+      refetchInterval: false, // TEMPORARILY DISABLED - was 15000
       refetchOnWindowFocus: true, // Refresh when user returns to tab
     }
   )
@@ -41,7 +41,7 @@ export default function SMSPage() {
     },
     {
       enabled: !!selectedConversation,
-      refetchInterval: 10000, // Poll every 10 seconds (was 3 seconds)
+      refetchInterval: false, // TEMPORARILY DISABLED - was 10000
       refetchOnWindowFocus: true, // Refresh when user returns to tab
     }
   )
@@ -53,7 +53,7 @@ export default function SMSPage() {
       endDate: new Date()
     },
     {
-      refetchInterval: 60000, // Poll every minute (was 30 seconds)
+      refetchInterval: false, // TEMPORARILY DISABLED - was 60000
       refetchOnWindowFocus: false, // Don't refresh stats on window focus
     }
   )

@@ -143,13 +143,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         : 'text-gray-700 hover:bg-gray-100'
                       }
                     `}>
-                      <item.icon className="w-4 h-4 mr-3 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="truncate">{item.name}</div>
-                        <div className={`text-xs truncate ${isActive ? 'text-blue-100' : 'text-gray-500'}`}>
-                          {item.description}
-                        </div>
-                      </div>
+                                             <item.icon className="w-4 h-4 mr-3 flex-shrink-0" />
+                       <div className="flex-1 min-w-0">
+                         <div className="truncate">{item.name}</div>
+                       </div>
                     </div>
                   </Link>
                 );
@@ -177,9 +174,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                       <item.icon className="w-4 h-4 mr-3 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="truncate">{item.name}</div>
-                        <div className={`text-xs truncate ${isActive ? 'text-red-100' : 'text-gray-500'}`}>
-                          {item.description}
-                        </div>
                       </div>
                     </div>
                   </Link>

@@ -606,11 +606,64 @@ export class SMSService {
       // Clean phone number for matching (remove spaces, dashes, etc.)
       const cleanPhoneNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
       
-      // Search for user with this phone number in the replica database
-      const user = await replicaDb.user.findFirst({
+      logger.info('Searching for user by phone number', { 
+        originalPhone: phoneNumber, 
+        cleanPhone: cleanPhoneNumber 
+      });
+      
+      // Try multiple search strategies
+      let user = null;
+      
+      // Strategy 1: Exact match
+      user = await replicaDb.user.findFirst({
+        where: {
+          phone_number: phoneNumber
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          phone_number: true
+        }
+      });
+      
+      if (user) {
+        logger.info('User found with exact match', { userId: user.id, phone: user.phone_number });
+        return {
+          id: Number(user.id),
+          firstName: user.first_name || 'Unknown',
+          lastName: user.last_name || 'User'
+        };
+      }
+      
+      // Strategy 2: Clean number match
+      user = await replicaDb.user.findFirst({
+        where: {
+          phone_number: cleanPhoneNumber
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          phone_number: true
+        }
+      });
+      
+      if (user) {
+        logger.info('User found with clean number match', { userId: user.id, phone: user.phone_number });
+        return {
+          id: Number(user.id),
+          firstName: user.first_name || 'Unknown',
+          lastName: user.last_name || 'User'
+        };
+      }
+      
+      // Strategy 3: Contains last 10 digits (most flexible)
+      const last10Digits = cleanPhoneNumber.slice(-10);
+      user = await replicaDb.user.findFirst({
         where: {
           phone_number: {
-            contains: cleanPhoneNumber.slice(-10) // Match last 10 digits for flexibility
+            contains: last10Digits
           }
         },
         select: {
@@ -620,14 +673,58 @@ export class SMSService {
           phone_number: true
         }
       });
+      
+      if (user) {
+        logger.info('User found with last 10 digits match', { 
+          userId: user.id, 
+          phone: user.phone_number,
+          searchDigits: last10Digits 
+        });
+        return {
+          id: Number(user.id),
+          firstName: user.first_name || 'Unknown',
+          lastName: user.last_name || 'User'
+        };
+      }
+      
+      // Strategy 4: Try without country code
+      const withoutCountryCode = cleanPhoneNumber.replace(/^(\+44|44|0)/, '');
+      if (withoutCountryCode !== cleanPhoneNumber) {
+        user = await replicaDb.user.findFirst({
+          where: {
+            phone_number: {
+              contains: withoutCountryCode
+            }
+          },
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            phone_number: true
+          }
+        });
+        
+        if (user) {
+          logger.info('User found without country code', { 
+            userId: user.id, 
+            phone: user.phone_number,
+            searchWithout: withoutCountryCode 
+          });
+          return {
+            id: Number(user.id),
+            firstName: user.first_name || 'Unknown',
+            lastName: user.last_name || 'User'
+          };
+        }
+      }
 
-      if (!user) return null;
-
-      return {
-        id: Number(user.id),
-        firstName: user.first_name || 'Unknown',
-        lastName: user.last_name || 'User'
-      };
+      logger.warn('No user found for phone number', { 
+        originalPhone: phoneNumber, 
+        cleanPhone: cleanPhoneNumber,
+        last10: last10Digits,
+        withoutCountry: withoutCountryCode
+      });
+      return null;
 
     } catch (error) {
       logger.error('Failed to search user by phone number:', { phoneNumber, error });
