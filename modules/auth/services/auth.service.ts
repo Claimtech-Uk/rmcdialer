@@ -543,17 +543,15 @@ export class AuthService {
         throw new Error('Agent not found');
       }
 
-      // For safety, we'll deactivate instead of hard delete to preserve audit trail
-      // In production, you might want to soft delete or transfer ownership of related records
-      await this.deps.prisma.agent.update({
-        where: { id: agentId },
-        data: {
-          isActive: false,
-          email: `deleted_${Date.now()}_${existingAgent.email}` // Prevent email conflicts
-        }
+      // Log the deletion for audit trail
+      this.deps.logger.info('Agent deletion initiated', {
+        agentId,
+        email: existingAgent.email,
+        role: existingAgent.role,
+        deleteAction: 'hard_delete'
       });
 
-      // Also logout any active sessions
+      // First, logout any active sessions and mark them as deleted
       await this.deps.prisma.agentSession.updateMany({
         where: { agentId },
         data: {
@@ -562,9 +560,15 @@ export class AuthService {
         }
       });
 
-      this.deps.logger.info('Agent deleted (deactivated) successfully', {
+      // Hard delete the agent record
+      await this.deps.prisma.agent.delete({
+        where: { id: agentId }
+      });
+
+      this.deps.logger.info('Agent deleted successfully', {
         agentId,
-        originalEmail: existingAgent.email
+        originalEmail: existingAgent.email,
+        deleteAction: 'completed'
       });
     } catch (error: any) {
       this.deps.logger.error('Failed to delete agent', { error, agentId });

@@ -88,7 +88,8 @@ export default function AgentManagementPage() {
     page: currentPage,
     limit: 20,
     ...(roleFilter !== 'all' && { role: roleFilter as any }),
-    ...(activeFilter !== 'all' && { isActive: activeFilter === 'true' }),
+    // Only show active agents unless specifically filtering for inactive ones
+    isActive: activeFilter === 'false' ? false : activeFilter === 'all' ? undefined : true,
     ...(searchTerm && { search: searchTerm })
   });
 
@@ -201,8 +202,17 @@ export default function AgentManagementPage() {
   };
 
   const handleDelete = (agent: any) => {
-    if (confirm(`Are you sure you want to delete ${agent.firstName} ${agent.lastName}?`)) {
+    const confirmMessage = `⚠️ PERMANENTLY DELETE AGENT?\n\nAgent: ${agent.firstName} ${agent.lastName}\nEmail: ${agent.email}\nRole: ${agent.role}\n\nThis action CANNOT be undone!\n\nType 'DELETE' to confirm:`;
+    
+    const userInput = prompt(confirmMessage);
+    if (userInput === 'DELETE') {
       deleteAgentMutation.mutate({ id: agent.id });
+    } else if (userInput !== null) {
+      toast({
+        title: "Deletion Cancelled",
+        description: "Agent was not deleted. You must type 'DELETE' exactly to confirm.",
+        variant: "destructive",
+      });
     }
   };
 
