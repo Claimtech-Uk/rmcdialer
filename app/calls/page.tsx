@@ -16,6 +16,19 @@ export default function CallsPage() {
   // Get today's summary
   const { data: todaysSummary } = api.calls.getTodaysSummary.useQuery();
 
+  // End call mutation to clear stuck call state
+  const endCallMutation = api.calls.updateCallStatus.useMutation({
+    onSuccess: () => {
+      // Refresh current call data to update UI
+      window.location.reload();
+    },
+    onError: (error) => {
+      console.error('Failed to end call:', error);
+      // Force refresh anyway
+      window.location.reload();
+    }
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="space-y-6 p-6">
@@ -51,20 +64,34 @@ export default function CallsPage() {
                     Status: {currentCall.status}
                   </p>
                 </div>
-                <Button 
-                  onClick={() => {
-                    const urlParams = new URLSearchParams({
-                      userId: currentCall.userContext?.userId?.toString() || '',
-                      phone: currentCall.userContext?.phoneNumber || '',
-                      name: `${currentCall.userContext?.firstName || ''} ${currentCall.userContext?.lastName || ''}`.trim()
-                    });
-                    router.push(`/calls/${currentCall.id}?${urlParams.toString()}`);
-                  }}
-                  className="bg-white text-blue-600 hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-200"
-                >
-                  <ArrowRight className="w-4 h-4 mr-2" />
-                  Manage Call
-                </Button>
+                <div className="space-x-3">
+                  <Button 
+                    onClick={() => {
+                      const urlParams = new URLSearchParams({
+                        userId: currentCall.userContext?.userId?.toString() || '',
+                        phone: currentCall.userContext?.phoneNumber || '',
+                        name: `${currentCall.userContext?.firstName || ''} ${currentCall.userContext?.lastName || ''}`.trim()
+                      });
+                      router.push(`/calls/${currentCall.id}?${urlParams.toString()}`);
+                    }}
+                    className="bg-white text-blue-600 hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-200"
+                  >
+                    <ArrowRight className="w-4 h-4 mr-2" />
+                    Manage Call
+                  </Button>
+                  <Button 
+                    onClick={() => endCallMutation.mutate({
+                      sessionId: currentCall.id,
+                      status: 'completed',
+                      endedAt: new Date()
+                    })}
+                    variant="destructive"
+                    className="bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+                    disabled={endCallMutation.isLoading}
+                  >
+                    {endCallMutation.isLoading ? 'Ending...' : 'End Call'}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

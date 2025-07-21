@@ -45,6 +45,26 @@ export default function CallSessionPage() {
   const error = userContextError || sessionError;
   const userContextData = userContextResponse?.data || callSessionResponse?.userContext;
 
+  // End call mutation to clear stuck call state
+  const endCallMutation = api.calls.updateCallStatus.useMutation({
+    onSuccess: () => {
+      router.push('/dashboard');
+    },
+    onError: () => {
+      // Force redirect even if API call fails
+      router.push('/dashboard');
+    }
+  });
+
+  const handleEndCall = () => {
+    // Try to end the call session, but redirect regardless
+    endCallMutation.mutate({
+      sessionId,
+      status: 'completed',
+      endedAt: new Date()
+    });
+  };
+
   // Loading state
   if (isLoading) {
     return (
@@ -53,7 +73,26 @@ export default function CallSessionPage() {
           <CardContent className="p-8 text-center">
             <Activity className="w-8 h-8 animate-pulse text-blue-600 mx-auto mb-4" />
             <h2 className="text-lg font-semibold mb-2 text-slate-800">Loading User Data</h2>
-            <p className="text-slate-600">Fetching user context for call session...</p>
+            <p className="text-slate-600 mb-6">Fetching user context for call session...</p>
+            
+            <div className="space-y-3">
+              <Button 
+                onClick={handleEndCall}
+                variant="destructive"
+                className="w-full"
+                disabled={endCallMutation.isLoading}
+              >
+                {endCallMutation.isLoading ? 'Ending Call...' : 'End Call & Exit'}
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => router.push('/dashboard')}
+                className="w-full"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Dashboard
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
