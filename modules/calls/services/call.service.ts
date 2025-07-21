@@ -69,6 +69,18 @@ export class CallService {
         where: { userId: BigInt(userId) }
       });
 
+      // Ensure UserCallScore exists before creating CallQueue (required for FK constraint)
+      await tx.userCallScore.upsert({
+        where: { userId: BigInt(userId) },
+        update: {},
+        create: {
+          userId: BigInt(userId),
+          currentScore: 50, // Default starting score
+          totalAttempts: 0,
+          successfulCalls: 0
+        }
+      });
+
              // For manual calls, create a queue entry first to satisfy foreign key constraint
        let actualQueueId: string = queueId || '';
        if (!queueId) {
