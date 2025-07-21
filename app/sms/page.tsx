@@ -171,6 +171,24 @@ export default function SMSPage() {
     }
   }
 
+  // Helper function to get conversation item styling (NEW: adds colored border for active conversations)
+  const getConversationItemStyling = (conversation: SMSConversation): string => {
+    const baseClasses = 'p-4 border-b border-slate-100 cursor-pointer transition-all duration-200 relative'
+    
+    // Selected conversation styling
+    if (selectedConversation === conversation.id) {
+      return `${baseClasses} bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-l-blue-500`
+    }
+    
+    // Active conversation styling (prominent left border)
+    if (conversation.status === 'active') {
+      return `${baseClasses} hover:bg-emerald-50 border-l-4 border-l-emerald-500 bg-emerald-50/50`
+    }
+    
+    // Default styling
+    return `${baseClasses} hover:bg-slate-50`
+  }
+
   // Helper function to get message status icon
   const getMessageStatusIcon = (status?: string) => {
     switch (status) {
@@ -302,7 +320,7 @@ export default function SMSPage() {
                 </Badge>
               </div>
               
-              {/* Search and Filter */}
+              {/* Search and Enhanced Filter */}
               <div className="space-y-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
@@ -314,14 +332,43 @@ export default function SMSPage() {
                   />
                 </div>
                 
+                {/* Quick Filter Buttons */}
+                <div className="flex gap-2">
+                  <Button
+                    variant={statusFilter === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setStatusFilter('all')}
+                    className="flex-1 text-xs"
+                  >
+                    All ({conversations.length})
+                  </Button>
+                  <Button
+                    variant={statusFilter === 'active' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setStatusFilter('active')}
+                    className={`flex-1 text-xs ${statusFilter === 'active' ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'border-emerald-500 text-emerald-600 hover:bg-emerald-50'}`}
+                  >
+                    Active ({activeConversationsCount})
+                  </Button>
+                  <Button
+                    variant={statusFilter === 'closed' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setStatusFilter('closed')}
+                    className="flex-1 text-xs"
+                  >
+                    Closed ({conversations.filter(c => c.status === 'closed').length})
+                  </Button>
+                </div>
+                
+                {/* Dropdown Filter (Alternative) */}
                 <Select value={statusFilter} onValueChange={(value: 'all' | 'active' | 'closed') => setStatusFilter(value)}>
                   <SelectTrigger className="border-slate-200 bg-white/80">
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Conversations</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="closed">Closed</SelectItem>
+                    <SelectItem value="active">Active Only</SelectItem>
+                    <SelectItem value="closed">Closed Only</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -332,11 +379,7 @@ export default function SMSPage() {
                 {filteredConversations.map((conversation) => (
                   <div
                     key={conversation.id}
-                    className={`p-4 border-b border-slate-100 cursor-pointer transition-all duration-200 ${
-                      selectedConversation === conversation.id 
-                        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-l-blue-500' 
-                        : 'hover:bg-slate-50'
-                    }`}
+                    className={getConversationItemStyling(conversation)}
                     onClick={() => setSelectedConversation(conversation.id)}
                   >
                     <div className="flex items-start gap-3">
@@ -384,7 +427,11 @@ export default function SMSPage() {
                   <div className="p-8 text-center text-slate-500">
                     <MessageSquare className="h-12 w-12 mx-auto mb-4 text-slate-300" />
                     <p className="font-medium">No conversations found</p>
-                    <p className="text-sm mt-1">Start a new conversation to get started</p>
+                    <p className="text-sm mt-1">
+                      {statusFilter === 'active' ? 'No active conversations at the moment' : 
+                       statusFilter === 'closed' ? 'No closed conversations found' : 
+                       'Start a new conversation to get started'}
+                    </p>
                   </div>
                 )}
               </div>
