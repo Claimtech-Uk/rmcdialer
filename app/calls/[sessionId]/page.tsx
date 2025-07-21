@@ -17,15 +17,33 @@ export default function CallSessionPage() {
   const phoneNumber = searchParams.get('phone');
   const userName = searchParams.get('name');
 
-  // Fetch real user context from database
-  const { data: userContextResponse, isLoading, error } = api.users.getUserContext.useQuery(
-    { userId: userId ? parseInt(userId) : 0 },
+  // Try to get user context - first try from URL params, then from session ID
+  const userIdFromUrl = userId ? parseInt(userId) : null;
+  
+  // Fetch user context from URL params if available
+  const { data: userContextResponse, isLoading: userContextLoading, error: userContextError } = api.users.getUserContext.useQuery(
+    { userId: userIdFromUrl || 0 },
     { 
-      enabled: !!userId,
+      enabled: !!userIdFromUrl,
       retry: 2,
       staleTime: 5 * 60 * 1000, // 5 minutes
     }
   );
+
+  // Fallback: Get call session data if no URL params (includes user context)
+  const { data: callSessionResponse, isLoading: sessionLoading, error: sessionError } = api.calls.getCallSession.useQuery(
+    { sessionId },
+    { 
+      enabled: !userIdFromUrl && !!sessionId,
+      retry: 2,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    }
+  );
+
+  // Determine which data source to use
+  const isLoading = userContextLoading || sessionLoading;
+  const error = userContextError || sessionError;
+  const userContextData = userContextResponse?.data || callSessionResponse?.userContext;
 
   // Loading state
   if (isLoading) {
@@ -43,7 +61,7 @@ export default function CallSessionPage() {
   }
 
   // Error state
-  if (error || !userContextResponse?.success || !userContextResponse?.data) {
+  if (error || !userContextData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <Card className="w-full max-w-md mx-auto border-0 shadow-xl bg-white/80 backdrop-blur-sm">
@@ -76,44 +94,39 @@ export default function CallSessionPage() {
 
   // Transform the user context to match CallInterface expectations
   const userContext = {
-    userId: userContextResponse.data.user.id,
-    firstName: userContextResponse.data.user.firstName || 'Unknown',
-    lastName: userContextResponse.data.user.lastName || 'User',
-    email: userContextResponse.data.user.email || `user${userContextResponse.data.user.id}@unknown.com`,
-    phoneNumber: userContextResponse.data.user.phoneNumber || phoneNumber || '+44000000000',
-    address: userContextResponse.data.user.address ? {
-      fullAddress: userContextResponse.data.user.address.fullAddress || 'Address not available',
-      postCode: userContextResponse.data.user.address.postCode || '',
-      county: userContextResponse.data.user.address.county || ''
-    } : {
-      fullAddress: 'Address not available',
-      postCode: '',
-      county: ''
-    },
-    claims: userContextResponse.data.claims.map(claim => ({
+    userId: userContextData.user.id,
+    firstName: userContextData.user.firstName || 'Unknown',
+    lastName: userContextData.user.lastName || 'User',
+    email: userContextData.user.email || `user${userContextData.user.id}@unknown.com`,
+    phoneNumber: userContextData.user.phoneNumber || phoneNumber || '+44000000000',
+    address: userContextData.user.address ? {
+      fullAddress: userContextData.user.address.fullAddress || 'Address not available',
+      postCode: userContextData.user.address.postCode || '',
+      county: userContextData.user.address.county || ''
+    } : undefined,
+    
+    // Convert claims to the format expected by CallInterface
+    claims: userContextData.claims.map(claim => ({
       id: claim.id,
-      type: claim.type || 'vehicle',
-      status: claim.status || 'active',
-      lender: claim.lender || 'Unknown Lender',
-      requirements: claim.requirements.map(req => ({
+      type: claim.type || 'unknown',
+      status: claim.status || 'pending',
+      value: claim.value || 0,
+      lender: claim.lender || 'Unknown',
+      requirements: (claim.requirements || []).map(req => ({
         id: req.id,
         type: req.type || 'unknown',
-        status: req.status || 'unknown',
+        status: req.status || 'pending',
         reason: req.reason || 'No reason provided'
-      })),
-      vehiclePackages: claim.vehiclePackages.map(pkg => ({
-        registration: pkg.registration || '',
-        make: pkg.make || '',
-        model: pkg.model || '',
-        dealershipName: pkg.dealership || '',
-        monthlyPayment: pkg.monthlyPayment || undefined
       }))
     })),
-    callScore: userContextResponse.data.callScore ? {
-      currentScore: userContextResponse.data.callScore.currentScore,
-      totalAttempts: userContextResponse.data.callScore.totalAttempts,
-      lastOutcome: userContextResponse.data.callScore.lastOutcome || undefined,
-      lastCallAt: userContextResponse.data.callScore.lastCallAt || undefined
+    
+    // Transform other context
+    requirements: (userContextData.claims || []).flatMap(claim => claim.requirements || []),
+    callScore: userContextData.callScore ? {
+      currentScore: userContextData.callScore.currentScore,
+      totalAttempts: userContextData.callScore.totalAttempts,
+      lastOutcome: userContextData.callScore.lastOutcome || undefined,
+      lastCallAt: userContextData.callScore.lastCallAt || undefined
     } : {
       currentScore: 75,
       totalAttempts: 1,

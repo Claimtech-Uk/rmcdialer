@@ -52,7 +52,14 @@ export default function CallsPage() {
                   </p>
                 </div>
                 <Button 
-                  onClick={() => router.push(`/calls/${currentCall.id}`)}
+                  onClick={() => {
+                    const urlParams = new URLSearchParams({
+                      userId: currentCall.userContext?.userId?.toString() || '',
+                      phone: currentCall.userContext?.phoneNumber || '',
+                      name: `${currentCall.userContext?.firstName || ''} ${currentCall.userContext?.lastName || ''}`.trim()
+                    });
+                    router.push(`/calls/${currentCall.id}?${urlParams.toString()}`);
+                  }}
                   className="bg-white text-blue-600 hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-200"
                 >
                   <ArrowRight className="w-4 h-4 mr-2" />
