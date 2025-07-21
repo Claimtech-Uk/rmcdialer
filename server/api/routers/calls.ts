@@ -12,6 +12,7 @@ import {
 } from '@/modules/calls';
 import { UserService } from '@/modules/users';
 import { prisma } from '@/lib/db';
+import { replicaDb } from '@/lib/mysql';
 
 // Create logger instance (in production this would come from a shared logger service)
 const logger = {
@@ -499,18 +500,21 @@ export const callsRouter = createTRPCRouter({
 
         // Get user details from replica DB for each call
         const userIds = [...new Set(callSessions.map((call: any) => call.userId))];
-        const users = userIds.length > 0 ? await prisma.$queryRaw`
-          SELECT id, first_name, last_name, phone_number 
-          FROM users 
-          WHERE id IN (${userIds.join(',')})
-        ` as Array<{
-          id: number;
-          first_name: string;
-          last_name: string;
-          phone_number: string;
-        }> : [];
+        const users = userIds.length > 0 ? await replicaDb.user.findMany({
+          where: {
+            id: {
+              in: userIds.map(id => BigInt(id))
+            }
+          },
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            phone_number: true
+          }
+        }) : [];
 
-        const userMap = new Map(users.map(user => [user.id, user]));
+        const userMap = new Map(users.map(user => [Number(user.id), user]));
 
         // Format for table display
         const formattedCalls = callSessions.map((session: any) => {
