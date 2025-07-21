@@ -285,7 +285,12 @@ export const authRouter = createTRPCRouter({
       }
 
       try {
-        const agent = await authService.updateAgent(input.id, input)
+        // Handle null twilioWorkerSid by converting to undefined
+        const updateData = {
+          ...input,
+          twilioWorkerSid: input.twilioWorkerSid === null ? undefined : input.twilioWorkerSid
+        };
+        const agent = await authService.updateAgent(input.id, updateData)
         logger.info('Agent updated', { 
           updatedById: ctx.agent.id, 
           agentId: input.id 
