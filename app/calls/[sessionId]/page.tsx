@@ -93,26 +93,28 @@ export default function CallSessionPage() {
   }
 
   // Transform the user context to match CallInterface expectations
+  // Handle different data structures from getUserContext vs getCallSession
+  const userData = (userContextData as any).user || userContextData; // Type assertion to handle union types
   const userContext = {
-    userId: userContextData.user.id,
-    firstName: userContextData.user.firstName || 'Unknown',
-    lastName: userContextData.user.lastName || 'User',
-    email: userContextData.user.email || `user${userContextData.user.id}@unknown.com`,
-    phoneNumber: userContextData.user.phoneNumber || phoneNumber || '+44000000000',
-    address: userContextData.user.address ? {
-      fullAddress: userContextData.user.address.fullAddress || 'Address not available',
-      postCode: userContextData.user.address.postCode || '',
-      county: userContextData.user.address.county || ''
+    userId: userData.id || userData.userId,
+    firstName: userData.firstName || 'Unknown',
+    lastName: userData.lastName || 'User',
+    email: userData.email || `user${userData.id || userData.userId}@unknown.com`,
+    phoneNumber: userData.phoneNumber || phoneNumber || '+44000000000',
+    address: userData.address ? {
+      fullAddress: userData.address.fullAddress || 'Address not available',
+      postCode: userData.address.postCode || '',
+      county: userData.address.county || ''
     } : undefined,
     
     // Convert claims to the format expected by CallInterface
-    claims: userContextData.claims.map(claim => ({
+    claims: (userContextData.claims || []).map((claim: any) => ({
       id: claim.id,
       type: claim.type || 'unknown',
       status: claim.status || 'pending',
       value: claim.value || 0,
       lender: claim.lender || 'Unknown',
-      requirements: (claim.requirements || []).map(req => ({
+      requirements: (claim.requirements || []).map((req: any) => ({
         id: req.id,
         type: req.type || 'unknown',
         status: req.status || 'pending',
@@ -120,8 +122,15 @@ export default function CallSessionPage() {
       }))
     })),
     
-    // Transform other context
-    requirements: (userContextData.claims || []).flatMap(claim => claim.requirements || []),
+    // Transform other context - flatten requirements from all claims
+    requirements: (userContextData.claims || []).flatMap((claim: any) => 
+      (claim.requirements || []).map((req: any) => ({
+        id: req.id,
+        type: req.type || 'unknown',
+        status: req.status || 'pending',
+        reason: req.reason || 'No reason provided'
+      }))
+    ),
     callScore: userContextData.callScore ? {
       currentScore: userContextData.callScore.currentScore,
       totalAttempts: userContextData.callScore.totalAttempts,
