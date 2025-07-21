@@ -551,27 +551,83 @@ export class AuthService {
         deleteAction: 'hard_delete'
       });
 
-      // First, logout any active sessions and mark them as deleted
-      await this.deps.prisma.agentSession.updateMany({
-        where: { agentId },
-        data: {
-          status: 'offline',
-          logoutAt: new Date()
-        }
+      // Use transaction to ensure atomicity
+      await this.deps.prisma.$transaction(async (tx) => {
+        // 1. Delete/update all foreign key relationships in correct order
+        
+        // Delete MagicLinkActivity records
+        const deletedMagicLinks = await tx.magicLinkActivity.deleteMany({
+          where: { sentByAgentId: agentId }
+        });
+        this.deps.logger.info('Deleted magic link activities', { count: deletedMagicLinks.count });
+
+        // Delete SMS conversations and messages (cascade should handle messages)
+        const deletedSMSConversations = await tx.smsConversation.deleteMany({
+          where: { assignedAgentId: agentId }
+        });
+        this.deps.logger.info('Deleted SMS conversations', { count: deletedSMSConversations.count });
+
+        // Delete CallOutcome records
+        const deletedCallOutcomes = await tx.callOutcome.deleteMany({
+          where: { recordedByAgentId: agentId }
+        });
+        this.deps.logger.info('Deleted call outcomes', { count: deletedCallOutcomes.count });
+
+        // Update CallSession records to remove foreign key references
+        const updatedCallSessions = await tx.callSession.updateMany({
+          where: { lastOutcomeAgentId: agentId },
+          data: { lastOutcomeAgentId: null }
+        });
+        this.deps.logger.info('Updated call sessions (removed lastOutcomeAgentId)', { count: updatedCallSessions.count });
+
+        // Delete CallSession records where agent is primary
+        const deletedCallSessions = await tx.callSession.deleteMany({
+          where: { agentId: agentId }
+        });
+        this.deps.logger.info('Deleted call sessions', { count: deletedCallSessions.count });
+
+        // Update CallQueue records to remove assignment
+        const updatedCallQueue = await tx.callQueue.updateMany({
+          where: { assignedToAgentId: agentId },
+          data: { 
+            assignedToAgentId: null,
+            assignedAt: null,
+            status: 'pending' // Reset to pending so they can be reassigned
+          }
+        });
+        this.deps.logger.info('Updated call queue (removed assignment)', { count: updatedCallQueue.count });
+
+        // Update Callback records to remove preferred agent
+        const updatedCallbacks = await tx.callback.updateMany({
+          where: { preferredAgentId: agentId },
+          data: { preferredAgentId: null }
+        });
+        this.deps.logger.info('Updated callbacks (removed preferred agent)', { count: updatedCallbacks.count });
+
+        // Delete AgentSession records
+        const deletedAgentSessions = await tx.agentSession.deleteMany({
+          where: { agentId }
+        });
+        this.deps.logger.info('Deleted agent sessions', { count: deletedAgentSessions.count });
+
+        // Finally, hard delete the agent record
+        await tx.agent.delete({
+          where: { id: agentId }
+        });
+
+        this.deps.logger.info('Agent deleted successfully', {
+          agentId,
+          originalEmail: existingAgent.email,
+          deleteAction: 'completed'
+        });
       });
 
-      // Hard delete the agent record
-      await this.deps.prisma.agent.delete({
-        where: { id: agentId }
-      });
-
-      this.deps.logger.info('Agent deleted successfully', {
-        agentId,
-        originalEmail: existingAgent.email,
-        deleteAction: 'completed'
-      });
     } catch (error: any) {
-      this.deps.logger.error('Failed to delete agent', { error, agentId });
+      this.deps.logger.error('Failed to delete agent', { 
+        error: error.message, 
+        agentId,
+        stack: error.stack
+      });
       throw error;
     }
   }
