@@ -409,8 +409,6 @@ export default function TestCallPage() {
           <CallInterface
             userContext={convertToCallUserContext(selectedUser)}
             onCallComplete={handleCallComplete}
-            agentId={agentId}
-            agentEmail={agentEmail}
           />
         </div>
       )}
