@@ -457,19 +457,27 @@ export class MagicLinkService {
   // -----------------------------------------------------------------------------
 
   private generateSecureToken(userId: number, linkType: MagicLinkType): string {
-    // Create a more secure token than just base64
-    const timestamp = Date.now().toString();
-    const randomBytes = crypto.randomBytes(16).toString('hex');
-    const data = `${userId}:${linkType}:${timestamp}:${randomBytes}`;
+    // Use compact token format - timestamp (6 bytes) + userId (4 bytes) + random (4 bytes) + HMAC (8 bytes)
+    const timestamp = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
+    const randomValue = crypto.randomBytes(4).readUInt32BE(0);
     
-    // Create HMAC for integrity
+    // Pack data into binary format for efficiency
+    const buffer = Buffer.alloc(18); // 4+4+4+6 bytes (shortened)
+    buffer.writeUInt32BE(timestamp, 0);  // 4 bytes timestamp
+    buffer.writeUInt32BE(userId, 4);     // 4 bytes user ID
+    buffer.writeUInt32BE(randomValue, 8); // 4 bytes random
+    
+    // Create compact HMAC (first 8 bytes only for brevity)
     const hmac = crypto.createHmac('sha256', this.encryptionKey);
-    hmac.update(data);
-    const signature = hmac.digest('hex');
+    hmac.update(buffer.subarray(0, 14)); // Hash first 14 bytes
+    hmac.update(linkType); // Include link type in hash
+    const signature = hmac.digest().subarray(0, 8); // First 8 bytes only
     
-    // Combine data and signature, then encode
-    const combined = `${data}:${signature}`;
-    return Buffer.from(combined).toString('base64url');
+    // Copy signature to buffer
+    signature.copy(buffer, 14);
+    
+    // Return base64url encoded (more URL-friendly than base64)
+    return buffer.toString('base64url');
   }
 
   private verifyToken(token: string): { 
@@ -540,11 +548,6 @@ export class MagicLinkService {
     Object.entries(customParams).forEach(([key, value]) => {
       url.searchParams.set(key, value);
     });
-
-    // Add cross-platform support parameters
-    url.searchParams.set('utm_source', 'dialler');
-    url.searchParams.set('utm_medium', 'magic_link');
-    url.searchParams.set('utm_campaign', linkType);
     
     return url.toString();
   }
@@ -565,10 +568,37 @@ export class MagicLinkService {
     return messages[linkType] + '\n\nThis link is valid for 48 hours and is secure for your personal information.';
   }
 
-  private async generateShortUrl(_url: string): Promise<string | null> {
-    // In production, this would integrate with a URL shortening service
-    // For now, return null to use the full URL
-    return null;
+  private async generateShortUrl(originalUrl: string): Promise<string | null> {
+    try {
+      // Generate a short code (6 characters for brevity)
+      const shortCode = this.generateShortCode();
+      
+      // Store in database
+      await prisma.shortUrl.create({
+        data: {
+          originalUrl,
+          shortCode,
+          expiresAt: new Date(Date.now() + (48 * 60 * 60 * 1000)), // 48 hours like magic links
+          createdByAgentId: 1 // Default for system-generated
+        }
+      });
+
+      // Return short URL - using a much shorter domain
+      return `https://rmc.ly/${shortCode}`;
+    } catch (error) {
+      logger.error('Failed to generate short URL:', error);
+      return null;
+    }
+  }
+
+  private generateShortCode(): string {
+    // Generate a 6-character alphanumeric code (excludes confusing chars like 0, O, I, l)
+    const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   }
 
   private async sendViaSMS(

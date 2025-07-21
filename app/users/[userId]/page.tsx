@@ -17,7 +17,9 @@ import {
   MessageSquare,
   History,
   BarChart3,
-  Send
+  Send,
+  Check,
+  CheckCheck
 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
@@ -25,6 +27,154 @@ import { Badge } from '@/modules/core/components/ui/badge';
 import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { useToast } from '@/modules/core/hooks/use-toast';
 import { CallHistoryTable } from '@/modules/calls/components/CallHistoryTable';
+
+// Component to display individual conversation with message history
+function ConversationDetail({ conversation }: { conversation: any }) {
+  // Fetch messages for this specific conversation
+  const { data: conversationData, isLoading: messagesLoading } = api.communications.sms.getConversation.useQuery(
+    {
+      conversationId: conversation.id,
+      page: 1,
+      limit: 50
+    },
+    {
+      enabled: !!conversation.id,
+      refetchInterval: false,
+      staleTime: 30000 // Cache for 30 seconds
+    }
+  );
+
+  const messages = conversationData?.messages || [];
+
+  const formatMessageTime = (date: Date) => {
+    return new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit'
+    }).format(new Date(date));
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-200 px-3 py-1';
+      case 'closed':
+        return 'bg-slate-100 text-slate-600 border-slate-200 px-3 py-1';
+      default:
+        return 'bg-blue-100 text-blue-800 border-blue-200 px-3 py-1';
+    }
+  };
+
+  return (
+    <div className="border border-slate-200 rounded-xl bg-white shadow-sm">
+      {/* Conversation Header */}
+      <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-xl p-4 border-b border-slate-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <MessageSquare className="h-5 w-5 text-emerald-600" />
+            <span className="font-semibold text-slate-800">{conversation.phoneNumber}</span>
+            <Badge className={`border ${getStatusColor(conversation.status)}`}>
+              {conversation.status}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-3 text-sm text-slate-500">
+            <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">
+              {conversation.messageCount || 0} messages
+            </span>
+            {conversation.assignedAgentId && (
+              <span className="text-xs">
+                Agent: {conversation.assignedAgentId}
+              </span>
+            )}
+            <span className="bg-slate-200 px-2 py-1 rounded text-xs">
+              {conversation.lastMessageAt ? 
+                new Date(conversation.lastMessageAt).toLocaleDateString() : 
+                'No messages'
+              }
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="p-4">
+        {messagesLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+            <span className="ml-2 text-slate-600">Loading messages...</span>
+          </div>
+        ) : messages.length > 0 ? (
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {messages.map((message: any) => (
+              <div
+                key={message.id}
+                className={`flex ${message.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl shadow-sm ${
+                    message.direction === 'outbound'
+                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
+                      : 'bg-slate-100 text-slate-800 border border-slate-200'
+                  }`}
+                >
+                  <p className="text-sm leading-relaxed">{message.body}</p>
+                  
+                  {/* Message type indicator */}
+                  {(message.isAutoResponse || message.messageType) && (
+                    <div className="mt-2">
+                      <Badge 
+                        variant="outline"
+                        className={`text-xs ${
+                          message.direction === 'outbound' 
+                            ? 'bg-white/20 text-blue-100 border-blue-200' 
+                            : 'bg-slate-200 text-slate-600 border-slate-300'
+                        }`}
+                      >
+                        {message.isAutoResponse 
+                          ? '🤖 Auto Response' 
+                          : message.messageType === 'magic_link' 
+                            ? '🔗 Magic Link' 
+                            : message.messageType === 'callback_confirmation'
+                              ? '📞 Callback'
+                              : '🏷️ Automated'
+                        }
+                      </Badge>
+                    </div>
+                  )}
+                  
+                  <div className={`flex items-center justify-between mt-2 text-xs ${
+                    message.direction === 'outbound' ? 'text-blue-100' : 'text-slate-500'
+                  }`}>
+                    <span>
+                      {formatMessageTime(message.sentAt || new Date())}
+                    </span>
+                    {message.direction === 'outbound' && (
+                      <div className="flex items-center gap-1">
+                        {message.status === 'delivered' ? (
+                          <CheckCheck className="h-3 w-3" />
+                        ) : (
+                          <Check className="h-3 w-3" />
+                        )}
+                        <span>{message.status || 'sending'}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-slate-500">
+            <MessageSquare className="h-12 w-12 mx-auto mb-3 text-slate-300" />
+            <p className="font-medium">No messages in this conversation</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function UserDetailPage() {
   const params = useParams();
@@ -450,55 +600,9 @@ export default function UserDetailPage() {
                     </div>
                   </div>
                 ) : (smsConversationsResponse as any)?.data?.length ? (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     {(smsConversationsResponse as any).data.map((conversation: any) => (
-                      <div key={conversation.id} className="border border-slate-200 rounded-xl p-4 space-y-3 bg-gradient-to-r from-slate-50 to-slate-100">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <MessageSquare className="h-5 w-5 text-emerald-600" />
-                            <span className="font-semibold text-slate-800">{conversation.phoneNumber}</span>
-                            <Badge 
-                              className={`border ${conversation.status === 'active' 
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200' 
-                                : 'bg-slate-100 text-slate-800 border-slate-200'
-                              }`}
-                            >
-                              {conversation.status}
-                            </Badge>
-                          </div>
-                          <span className="text-sm text-slate-500 bg-slate-200 px-2 py-1 rounded">
-                            {conversation.lastMessageAt ? 
-                              new Date(conversation.lastMessageAt).toLocaleDateString() : 
-                              'No messages'
-                            }
-                          </span>
-                        </div>
-                        
-                        {conversation.lastMessage && (
-                          <div className="bg-white rounded-lg p-4 border border-slate-200">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded">
-                                {conversation.lastMessage.direction === 'inbound' ? 'Received' : 'Sent'}
-                              </span>
-                              <span className="text-xs text-slate-500">
-                                {new Date(conversation.lastMessage.sentAt).toLocaleString()}
-                              </span>
-                            </div>
-                            <p className="text-sm text-slate-800">{conversation.lastMessage.message}</p>
-                          </div>
-                        )}
-                        
-                        <div className="flex items-center justify-between text-sm text-slate-600">
-                          <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">
-                            {conversation.messageCount || 0} messages
-                          </span>
-                          {conversation.assignedAgentId && (
-                            <span className="text-xs text-slate-500">
-                              Agent: {conversation.assignedAgentId}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <ConversationDetail key={conversation.id} conversation={conversation} />
                     ))}
                   </div>
                 ) : (
