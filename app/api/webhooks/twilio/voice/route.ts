@@ -89,17 +89,20 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
   try {
     console.log(`📞 Processing inbound call from ${from} to ${to}`);
     
-    // 1. Try to find user by phone number in MySQL replica
+    // 1. Enhanced caller lookup with smart phone number matching
+    let callerInfo: any = null;
     let userId: number | null = null;
+    
     try {
-      const user = await replicaDb.user.findFirst({
-        where: {
-          phone_number: from,
-          is_enabled: true
-        }
-      });
-      userId = user ? Number(user.id) : null;
-      console.log(`👤 Caller lookup: ${userId ? `Found user ${userId}` : 'Unknown caller'}`);
+      callerInfo = await performEnhancedCallerLookup(from);
+      userId = callerInfo?.user?.id ? Number(callerInfo.user.id) : null;
+      
+      if (callerInfo?.user) {
+        console.log(`👤 Caller identified: ${callerInfo.user.first_name} ${callerInfo.user.last_name} (ID: ${userId})`);
+        console.log(`📊 Claims: ${callerInfo.claims.length}, Requirements: ${callerInfo.requirements.length}`);
+      } else {
+        console.log(`👤 Unknown caller: ${from}`);
+      }
     } catch (error) {
       console.warn(`⚠️ Could not lookup caller ${from}:`, error);
     }
@@ -132,8 +135,8 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
     // 3. Create call session regardless of agent availability
     let callSession;
     try {
-      // Ensure we have a UserCallScore for database constraints
-      if (userId) {
+      if (userId && callerInfo?.user) {
+        // Known caller - create proper call session
         await prisma.userCallScore.upsert({
           where: { userId: BigInt(userId) },
           update: {},
@@ -145,39 +148,45 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           }
         });
 
-        // Create a call queue entry for inbound calls
         const inboundQueue = await prisma.callQueue.create({
           data: {
             userId: BigInt(userId),
             queueType: 'inbound_call',
-            priorityScore: 0,
+            priorityScore: callerInfo.priorityScore || 0,
             status: availableAgent ? 'assigned' : 'pending',
-            queueReason: 'Inbound call received',
+            queueReason: `Inbound call from ${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
             assignedToAgentId: availableAgent?.agentId || null,
             assignedAt: availableAgent ? new Date() : null,
           }
         });
 
-        // Create call session
         callSession = await prisma.callSession.create({
           data: {
             userId: BigInt(userId),
-            agentId: availableAgent?.agentId || 1, // Default to agent 1 for missed calls
+            agentId: availableAgent?.agentId || 1,
             callQueueId: inboundQueue.id,
             twilioCallSid: callSid,
             status: availableAgent ? 'ringing' : 'missed_call',
             direction: 'inbound',
             startedAt: new Date(),
-            callSource: 'inbound'
+            callSource: 'inbound',
+            userClaimsContext: JSON.stringify({
+              knownCaller: true,
+              callerName: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
+              phoneNumber: from,
+              claims: callerInfo.claims,
+              requirements: callerInfo.requirements,
+              callHistory: callerInfo.callHistory
+            })
           }
         });
       } else {
-        // For unknown callers, create a basic session without queue
+        // Unknown caller - create basic session
         callSession = await prisma.callSession.create({
           data: {
             userId: BigInt(999999), // Special ID for unknown callers
             agentId: availableAgent?.agentId || 1,
-            callQueueId: crypto.randomUUID(), // Temporary - will be handled differently later
+            callQueueId: crypto.randomUUID(),
             twilioCallSid: callSid,
             status: availableAgent ? 'ringing' : 'missed_call',
             direction: 'inbound',
@@ -185,7 +194,9 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             callSource: 'inbound',
             userClaimsContext: JSON.stringify({
               unknownCaller: true,
-              phoneNumber: from
+              phoneNumber: from,
+              searchAttempted: true,
+              matchFound: false
             })
           }
         });
@@ -194,14 +205,17 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       console.log(`📝 Created call session ${callSession.id} for inbound call`);
     } catch (error) {
       console.error(`❌ Failed to create call session:`, error);
-      // Continue without call session - at least handle the call
     }
 
-    // 4. Generate appropriate TwiML response
+    // 4. Generate appropriate TwiML response with caller context
     if (availableAgent) {
-      console.log(`✅ Routing call to agent ${availableAgent.agent.firstName} ${availableAgent.agent.lastName}`);
+      const callerName = callerInfo?.user ? 
+        `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 
+        'Unknown Caller';
       
-      // Update agent session to on_call
+      console.log(`✅ Routing call from ${callerName} to agent ${availableAgent.agent.firstName} ${availableAgent.agent.lastName}`);
+      
+      // Update agent session with caller context
       await prisma.agentSession.update({
         where: { id: availableAgent.id },
         data: {
@@ -211,12 +225,11 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         }
       });
 
-      // Route to available agent using client name
       const agentClientName = `agent-${availableAgent.agentId}`;
       
       return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Hello! Please hold while we connect you to an available agent.</Say>
+    <Say voice="alice">Hello${callerInfo?.user ? ' ' + callerInfo.user.first_name : ''}! Please hold while we connect you to an available agent.</Say>
     <Dial timeout="30" 
           record="record-from-answer" 
           recordingStatusCallback="https://rmcdialer.vercel.app/api/webhooks/twilio/recording"
@@ -234,12 +247,15 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         },
       });
     } else {
-      console.log(`❌ No available agents - marking as missed call`);
+      const callerName = callerInfo?.user ? 
+        `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 
+        '';
       
-      // Handle missed call
+      console.log(`❌ No available agents - marking as missed call from ${callerName || from}`);
+      
       return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Thank you for calling R M C Dialler. Unfortunately, all our agents are currently busy or offline.</Say>
+    <Say voice="alice">Thank you for calling R M C Dialler${callerName ? ', ' + callerInfo.user.first_name : ''}. Unfortunately, all our agents are currently busy or offline.</Say>
     <Pause length="1"/>
     <Say voice="alice">Your call is important to us and we will call you back as soon as possible. Thank you for your patience.</Say>
     <Hangup/>
@@ -265,6 +281,172 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       },
     });
   }
+}
+
+// Enhanced caller lookup with smart phone number matching
+async function performEnhancedCallerLookup(phoneNumber: string): Promise<any> {
+  try {
+    // Normalize phone number to multiple formats for matching
+    const normalizedNumbers = normalizePhoneNumber(phoneNumber);
+    console.log(`🔍 Searching for caller with phone variants: ${normalizedNumbers.join(', ')}`);
+
+    // Search for user with any of the normalized phone number variants
+    const user = await replicaDb.user.findFirst({
+      where: {
+        AND: [
+          {
+            phone_number: {
+              in: normalizedNumbers
+            }
+          },
+          {
+            is_enabled: true
+          }
+        ]
+      },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        phone_number: true,
+        email_address: true,
+        status: true,
+        created_at: true,
+        last_login: true
+      }
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    // Get user's claims and call history
+    const [claims, callHistory] = await Promise.all([
+      // Get active claims
+      replicaDb.claim.findMany({
+        where: {
+          user_id: user.id,
+          status: {
+            not: 'completed'
+          }
+        },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          lender: true,
+          created_at: true,
+          updated_at: true
+        },
+        take: 5,
+        orderBy: {
+          created_at: 'desc'
+        }
+      }),
+
+      // Get recent call history from PostgreSQL
+      prisma.callSession.findMany({
+        where: {
+          userId: user.id
+        },
+        select: {
+          id: true,
+          status: true,
+          direction: true,
+          startedAt: true
+        },
+        take: 5,
+        orderBy: {
+          startedAt: 'desc'
+        }
+      })
+    ]);
+
+    // Simplified requirements count
+    const requirements: any[] = [];
+
+    // Calculate priority score based on claims and requirements
+    const priorityScore = calculateCallerPriority(claims, requirements, callHistory);
+
+    return {
+      user,
+      claims,
+      requirements,
+      callHistory,
+      priorityScore,
+      lookupSuccess: true
+    };
+
+  } catch (error) {
+    console.error('❌ Enhanced caller lookup failed:', error);
+    return null;
+  }
+}
+
+// Smart phone number normalization for better matching
+function normalizePhoneNumber(phoneNumber: string): string[] {
+  // Remove all non-numeric characters
+  const digits = phoneNumber.replace(/\D/g, '');
+  
+  const variants: string[] = [];
+  
+  // Add original number
+  variants.push(phoneNumber);
+  
+  if (digits.length >= 10) {
+    // UK mobile numbers (assuming UK market)
+    if (digits.startsWith('447')) {
+      // +447... format (international)
+      variants.push(`+${digits}`);
+      // 07... format (national)
+      variants.push(`0${digits.substring(2)}`);
+      // 447... format (international without +)
+      variants.push(digits);
+    } else if (digits.startsWith('44')) {
+      // 44... format
+      variants.push(`+${digits}`);
+      variants.push(`0${digits.substring(2)}`);
+      variants.push(digits);
+    } else if (digits.startsWith('07')) {
+      // 07... format (national)
+      variants.push(digits);
+      variants.push(`+44${digits.substring(1)}`);
+      variants.push(`44${digits.substring(1)}`);
+    } else if (digits.length === 10 && digits.startsWith('7')) {
+      // 7... format (missing leading 0)
+      variants.push(`0${digits}`);
+      variants.push(`+44${digits}`);
+      variants.push(`44${digits}`);
+    }
+  }
+  
+  // Remove duplicates and return
+  return [...new Set(variants)];
+}
+
+// Calculate caller priority based on their context
+function calculateCallerPriority(claims: any[], requirements: any[], callHistory: any[]): number {
+  let score = 50; // Base score
+  
+  // Active claims boost priority
+  score += claims.length * 10;
+  
+  // Recent call activity boosts priority
+  const recentCalls = callHistory.filter(call => 
+    new Date(call.startedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
+  );
+  
+  // Recent missed calls boost priority significantly
+  const recentMissedCalls = recentCalls.filter(call => call.status === 'missed_call');
+  score += recentMissedCalls.length * 20;
+  
+  // Multiple recent calls indicate urgency
+  if (recentCalls.length >= 3) {
+    score += 15;
+  }
+  
+  // Cap the score
+  return Math.min(score, 100);
 }
 
 // Generate appropriate TwiML response for outbound calls
