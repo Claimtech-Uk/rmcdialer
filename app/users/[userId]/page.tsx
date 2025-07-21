@@ -24,7 +24,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/compone
 import { Badge } from '@/modules/core/components/ui/badge';
 import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { useToast } from '@/modules/core/hooks/use-toast';
-import { useTwilioVoice } from '@/modules/calls/hooks/useTwilioVoice';
 import { CallHistoryTable } from '@/modules/calls/components/CallHistoryTable';
 
 export default function UserDetailPage() {
@@ -78,25 +77,7 @@ export default function UserDetailPage() {
     { enabled: !!userId && !isNaN(parseInt(userId)) }
   );
 
-  // Twilio Voice SDK for direct calling (same approach as test page)
-  const agentId = 'agent_1'; // In production, get from auth context
-  const agentEmail = 'agent@rmcdialer.app'; // In production, get from auth context
-  
-  const {
-    isReady,
-    isConnecting,
-    isInCall,
-    callStatus,
-    error: callError,
-    makeCall,
-    hangUp,
-    callDuration,
-    isMuted
-  } = useTwilioVoice({
-    agentId,
-    agentEmail,
-    autoConnect: true
-  });
+  // Call functionality now handled by dedicated call session page
 
   // Magic link sending mutation
   const sendMagicLinkMutation = api.communications.sendMagicLinkSMS.useMutation({
@@ -126,36 +107,22 @@ export default function UserDetailPage() {
       return;
     }
 
-    if (!isReady) {
-      toast({
-        title: "Twilio Not Ready",
-        description: "Please wait for Twilio Voice to initialize",
-        variant: "destructive"
-      });
-      return;
-    }
-
     try {
-      console.log('Starting call to:', user.phoneNumber);
-      await makeCall({
-        phoneNumber: user.phoneNumber,
-        userContext: {
-          userId: parseInt(userId),
-          firstName: user.firstName || 'Unknown',
-          lastName: user.lastName || 'User',
-          claimId: userDetails?.claims?.[0]?.id
-        }
-      });
+      // Generate a unique session ID for this call
+      const sessionId = `call_${Date.now()}_${parseInt(userId)}`;
+      
+      // Navigate to the dedicated call session page
+      router.push(`/calls/${sessionId}?userId=${userId}&phone=${encodeURIComponent(user.phoneNumber)}&name=${encodeURIComponent(`${user.firstName} ${user.lastName}`)}`);
       
       toast({
-        title: "Call Started",
-        description: `Calling ${user.firstName} ${user.lastName}`,
+        title: "Starting Call Session",
+        description: `Preparing to call ${user.firstName} ${user.lastName}`,
       });
     } catch (error: any) {
-      console.error('Failed to make call:', error);
+      console.error('Failed to start call session:', error);
       toast({
-        title: "Call Failed",
-        description: error.message || "Failed to start call",
+        title: "Session Failed",
+        description: error.message || "Failed to start call session",
         variant: "destructive"
       });
     }
@@ -246,15 +213,7 @@ export default function UserDetailPage() {
           </div>
         </div>
         
-        {/* Twilio Voice Status */}
-        {callError && (
-          <Alert className="mb-4">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              Voice system error: {callError}
-            </AlertDescription>
-          </Alert>
-        )}
+        {/* Call status handled by dedicated session page */}
         
         <div className="flex gap-3">
           <Button 
@@ -269,11 +228,10 @@ export default function UserDetailPage() {
           </Button>
           <Button 
             onClick={handleStartCall}
-            disabled={isConnecting || isInCall || !isReady}
             className="bg-blue-600 hover:bg-blue-700"
           >
             <Phone className="w-4 h-4 mr-2" />
-            {isConnecting ? 'Connecting...' : isInCall ? 'In Call' : !isReady ? 'Initializing...' : 'Start Call'}
+            Start Call
           </Button>
           <Button 
             onClick={handleSendLink}

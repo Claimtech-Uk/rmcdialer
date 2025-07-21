@@ -16,7 +16,48 @@ export interface CallSession {
   durationSeconds?: number;
   talkTimeSeconds?: number;
   userClaimsContext?: any; // JSON snapshot of user's claims at call time
+  
+  // Recording fields
+  recordingUrl?: string; // Twilio recording URL
+  recordingSid?: string; // Twilio recording ID
+  recordingStatus?: 'in-progress' | 'completed' | 'absent' | 'failed';
+  recordingDurationSeconds?: number; // Recording duration
+  
+  // Call outcome fields (denormalized for performance)
+  lastOutcomeType?: 'contacted' | 'no_answer' | 'busy' | 'wrong_number' | 'not_interested' | 'callback_requested' | 'left_voicemail' | 'failed';
+  lastOutcomeNotes?: string;
+  lastOutcomeAgentId?: number;
+  lastOutcomeAt?: Date;
+  
+  // Quick action flags
+  magicLinkSent: boolean;
+  smsSent: boolean;
+  callbackScheduled: boolean;
+  followUpRequired: boolean;
+  
+  // Queue & priority context (snapshots at time of call)
+  sourceQueueType?: 'unsigned_users' | 'outstanding_requests' | 'callback';
+  userPriorityScore?: number;
+  queuePosition?: number;
+  callAttemptNumber?: number;
+  callSource?: 'queue' | 'manual' | 'callback';
+  
+  // Call transcripts
+  transcriptUrl?: string;
+  transcriptStatus?: 'processing' | 'completed' | 'failed';
+  transcriptText?: string;
+  transcriptSummary?: string;
+  
+  // Call scoring & quality
+  callScore?: number; // 1-10
+  sentimentScore?: number; // -1 to 1
+  agentPerformanceScore?: number; // 1-10
+  
+  // Sales & conversion (simplified)
+  saleMade: boolean;
+  
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface CallSessionOptions {
