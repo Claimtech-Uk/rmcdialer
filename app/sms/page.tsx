@@ -1,8 +1,8 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, useMemo } from 'react'
-import { Plus, Send, MessageSquare, Phone, Users, Clock, TrendingUp, Search, Filter, CheckCheck, Check, User } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { Plus, Send, MessageSquare, Phone, Users, Clock, TrendingUp, Search, Filter, CheckCheck, Check, User, ExternalLink } from 'lucide-react'
 import { Button } from '@/modules/core/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card'
 import { Badge } from '@/modules/core/components/ui/badge'
@@ -10,6 +10,7 @@ import { Input } from '@/modules/core/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/modules/core/components/ui/select'
 import { useToast } from '@/modules/core/hooks/use-toast'
 import { api } from '@/lib/trpc/client'
+import { useRouter } from 'next/navigation'
 import type { SMSConversation, SMSMessage } from '@/modules/communications'
 
 export default function SMSPage() {
@@ -18,6 +19,8 @@ export default function SMSPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all')
   const { toast } = useToast()
+  const router = useRouter()
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Memoize stats query parameters to prevent constant re-renders
   const statsParams = useMemo(() => ({
@@ -104,6 +107,13 @@ export default function SMSPage() {
   const selectedConv = conversations.find(c => c.id === selectedConversation)
   const messages: SMSMessage[] = conversationData?.messages || []
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages])
+
   const handleSendMessage = () => {
     if (!newMessage.trim() || !selectedConv) return
     
@@ -124,6 +134,13 @@ export default function SMSPage() {
     })
   }
 
+  // Navigate to user details page
+  const handleViewUserDetails = () => {
+    if (selectedConv?.userId) {
+      router.push(`/users/${selectedConv.userId}`)
+    }
+  }
+
   // Helper function to get user display name
   const getUserDisplayName = (conversation: SMSConversation): string => {
     if (conversation.user) {
@@ -142,15 +159,15 @@ export default function SMSPage() {
     return '?'
   }
 
-  // Helper function to get status color
+  // Helper function to get status color with improved padding
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200'
+        return 'bg-emerald-100 text-emerald-800 border-emerald-200 px-3 py-1'
       case 'closed':
-        return 'bg-slate-100 text-slate-600 border-slate-200'
+        return 'bg-slate-100 text-slate-600 border-slate-200 px-3 py-1'
       default:
-        return 'bg-blue-100 text-blue-800 border-blue-200'
+        return 'bg-blue-100 text-blue-800 border-blue-200 px-3 py-1'
     }
   }
 
@@ -188,6 +205,9 @@ export default function SMSPage() {
     return messageDate.toLocaleDateString()
   }
 
+  // Calculate active conversations count
+  const activeConversationsCount = conversations.filter(c => c.status === 'active').length
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="space-y-6 p-6">
@@ -207,7 +227,7 @@ export default function SMSPage() {
           </Button>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Using real data, removing hardcoded values */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -216,17 +236,17 @@ export default function SMSPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {statsData?.conversations?.active || 0}
+                {activeConversationsCount}
               </div>
               <p className="text-xs text-emerald-100">
-                +12% from yesterday
+                Currently active
               </p>
             </CardContent>
           </Card>
 
           <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-500 to-cyan-600 text-white">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-100">Messages Today</CardTitle>
+              <CardTitle className="text-sm font-medium text-blue-100">Messages Sent</CardTitle>
               <Send className="h-4 w-4 text-blue-200" />
             </CardHeader>
             <CardContent>
@@ -234,33 +254,37 @@ export default function SMSPage() {
                 {statsData?.messages?.sent || 0}
               </div>
               <p className="text-xs text-blue-100">
-                +8% from yesterday
+                Total sent messages
               </p>
             </CardContent>
           </Card>
 
           <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-pink-600 text-white">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-purple-100">Response Rate</CardTitle>
+              <CardTitle className="text-sm font-medium text-purple-100">Messages Received</CardTitle>
               <TrendingUp className="h-4 w-4 text-purple-200" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">89%</div>
+              <div className="text-2xl font-bold">
+                {statsData?.messages?.received || 0}
+              </div>
               <p className="text-xs text-purple-100">
-                +2% from yesterday
+                Total received
               </p>
             </CardContent>
           </Card>
 
           <Card className="border-0 shadow-lg bg-gradient-to-br from-orange-500 to-red-600 text-white">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-orange-100">Avg Response Time</CardTitle>
+              <CardTitle className="text-sm font-medium text-orange-100">Auto Responses</CardTitle>
               <Clock className="h-4 w-4 text-orange-200" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">2.3min</div>
+              <div className="text-2xl font-bold">
+                {statsData?.messages?.autoResponses || 0}
+              </div>
               <p className="text-xs text-orange-100">
-                -15s from yesterday
+                Automated replies
               </p>
             </CardContent>
           </Card>
@@ -273,7 +297,7 @@ export default function SMSPage() {
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-slate-700">Conversations</CardTitle>
-                <Badge variant="secondary" className="bg-slate-200 text-slate-700">
+                <Badge variant="secondary" className="bg-slate-200 text-slate-700 px-3 py-1">
                   {filteredConversations.length}
                 </Badge>
               </div>
@@ -371,7 +395,8 @@ export default function SMSPage() {
           <Card className="lg:col-span-2 border-0 shadow-xl bg-white/80 backdrop-blur-sm">
             {selectedConv ? (
               <>
-                <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+                {/* Darker header background */}
+                <CardHeader className="bg-gradient-to-r from-slate-100 to-slate-200 rounded-t-lg border-b border-slate-300">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
@@ -388,10 +413,25 @@ export default function SMSPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       <Badge className={`border ${getStatusColor(selectedConv.status)}`}>
                         {selectedConv.status}
                       </Badge>
+                      
+                      {/* View Details Button */}
+                      {selectedConv.userId && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleViewUserDetails}
+                          className="border-slate-300 hover:bg-slate-100 flex items-center gap-2"
+                        >
+                          <User className="h-4 w-4" />
+                          View Details
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      )}
+                      
                       {selectedConv.status === 'active' && (
                         <Button
                           variant="outline"
@@ -408,7 +448,7 @@ export default function SMSPage() {
                 </CardHeader>
                 
                 <CardContent className="flex flex-col h-[500px] p-4">
-                  {/* Messages */}
+                  {/* Messages with auto-scroll */}
                   <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
                     {messages.map((message) => (
                       <div
@@ -439,6 +479,9 @@ export default function SMSPage() {
                         </div>
                       </div>
                     ))}
+                    
+                    {/* Auto-scroll anchor */}
+                    <div ref={messagesEndRef} />
                     
                     {messages.length === 0 && (
                       <div className="text-center text-slate-500 py-12">
