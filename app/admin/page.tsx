@@ -17,7 +17,8 @@ import {
   XCircle,
   AlertTriangle,
   TrendingUp,
-  Loader2
+  Loader2,
+  RotateCcw
 } from 'lucide-react';
 
 export default function AdminOverviewPage() {
@@ -90,12 +91,25 @@ export default function AdminOverviewPage() {
           </AlertDescription>
         </Alert>
 
-        <div className="flex gap-4">
-          <Button onClick={() => window.location.reload()}>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <Button 
+            onClick={() => window.location.reload()}
+            size="default"
+            responsive="nowrap"
+            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            <RotateCcw className="w-4 h-4 mr-2 flex-shrink-0" />
             Retry
           </Button>
-          <Button variant="outline" asChild>
+          <Button 
+            variant="outline" 
+            asChild
+            size="default"
+            responsive="nowrap"
+            className="border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
+          >
             <Link href="/admin/agents">
+              <Users className="w-4 h-4 mr-2 flex-shrink-0" />
               Go to Agent Management
             </Link>
           </Button>

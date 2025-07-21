@@ -84,8 +84,8 @@ export default function UserDetailsModal({ userId, isOpen, onClose }: UserDetail
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <User className="w-6 h-6" />
+            <div className="flex items-center gap-2">
+              <User className="w-5 h-5 text-blue-600" />
               {isLoading ? (
                 <span>Loading user details...</span>
               ) : userDetails ? (
@@ -97,10 +97,12 @@ export default function UserDetailsModal({ userId, isOpen, onClose }: UserDetail
             <div className="flex items-center gap-2">
               <Button 
                 variant="outline" 
-                size="sm"
+                size="default"
+                responsive="nowrap"
+                className="border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
                 onClick={openFullDetails}
               >
-                <ExternalLink className="w-4 h-4 mr-2" />
+                <ExternalLink className="w-4 h-4 mr-2 flex-shrink-0" />
                 Full Details
               </Button>
             </div>
@@ -129,33 +131,34 @@ export default function UserDetailsModal({ userId, isOpen, onClose }: UserDetail
         {userDetails && (
           <div className="space-y-6">
             {/* Contact Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <User className="w-5 h-5" />
+            <Card className="border-0 shadow-lg bg-white/95 backdrop-blur-sm">
+              <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+                <CardTitle className="flex items-center gap-2 text-lg text-slate-800">
+                  <User className="w-5 h-5 text-blue-600" />
                   Contact Information
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <Mail className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm font-medium">Email</span>
+                      <Mail className="w-4 h-4 text-slate-500" />
+                      <span className="text-sm font-medium text-slate-700">Email</span>
                     </div>
-                    <p className="text-sm text-gray-700">{userDetails.user.email}</p>
+                    <p className="text-sm text-slate-600">{userDetails.user.email}</p>
                   </div>
                   
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <Phone className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm font-medium">Phone</span>
+                      <Phone className="w-4 h-4 text-slate-500" />
+                      <span className="text-sm font-medium text-slate-700">Phone</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-mono">{userDetails.user.phoneNumber}</span>
+                      <span className="text-sm font-mono text-slate-600">{userDetails.user.phoneNumber}</span>
                       <Button 
-                        size="sm" 
+                        size="icon-sm" 
                         variant="outline"
+                        className="border-slate-300 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200"
                         onClick={() => copyPhoneNumber(userDetails.user.phoneNumber)}
                       >
                         <Copy className="w-3 h-3" />
@@ -167,35 +170,39 @@ export default function UserDetailsModal({ userId, isOpen, onClose }: UserDetail
                 {userDetails.user.dateOfBirth && (
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <Calendar className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm font-medium">Date of Birth</span>
+                      <Calendar className="w-4 h-4 text-slate-500" />
+                      <span className="text-sm font-medium text-slate-700">Date of Birth</span>
                     </div>
-                    <p className="text-sm text-gray-700">
+                    <p className="text-sm text-slate-600">
                       {new Date(userDetails.user.dateOfBirth).toLocaleDateString()}
                     </p>
                   </div>
                 )}
 
                 <div className="flex items-center gap-2">
-                  <Badge className={userDetails.user.isEnabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                  <Badge className={userDetails.user.isEnabled ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-red-100 text-red-800 border border-red-200'}>
                     {userDetails.user.status || 'Unknown'}
                   </Badge>
                 </div>
 
-                <div className="flex gap-2 pt-4">
+                <div className="flex flex-col sm:flex-row gap-3 pt-4">
                   <Button 
                     onClick={startCall}
-                    className="bg-green-600 hover:bg-green-700 flex-1"
+                    size="default"
+                    responsive="nowrap"
+                    className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-1"
                   >
-                    <Phone className="w-4 h-4 mr-2" />
+                    <Phone className="w-4 h-4 mr-2 flex-shrink-0" />
                     Start Call
                   </Button>
                   <Button 
                     variant="outline"
+                    size="default"
+                    responsive="nowrap"
                     onClick={openFullDetails}
-                    className="flex-1"
+                    className="border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200 flex-1"
                   >
-                    <ExternalLink className="w-4 h-4 mr-2" />
+                    <ExternalLink className="w-4 h-4 mr-2 flex-shrink-0" />
                     View Full Profile
                   </Button>
                 </div>

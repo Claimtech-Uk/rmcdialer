@@ -178,8 +178,8 @@ export function LoginForm({ onSuccess, redirectTo = '/dashboard' }: LoginFormPro
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                size="icon-sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-slate-100 transition-all duration-200"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={loginMutation.isPending}
               >
@@ -198,11 +198,13 @@ export function LoginForm({ onSuccess, redirectTo = '/dashboard' }: LoginFormPro
           {/* Submit Button */}
           <Button
             type="submit"
-            className="w-full"
+            size="lg"
+            responsive="nowrap"
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
             disabled={loginMutation.isPending}
           >
             {loginMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-2 h-4 w-4 animate-spin flex-shrink-0" />
             )}
             {loginMutation.isPending ? 'Signing in...' : 'Sign in'}
           </Button>
@@ -232,8 +234,9 @@ export function LoginForm({ onSuccess, redirectTo = '/dashboard' }: LoginFormPro
                   key={index}
                   type="button"
                   variant="outline"
-                  size="sm"
-                  className="w-full justify-start text-left"
+                  size="default"
+                  responsive="wrap"
+                  className="w-full justify-start text-left border-slate-300 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200"
                   onClick={() => handleQuickLogin(account.email, account.password)}
                   disabled={loginMutation.isPending}
                 >

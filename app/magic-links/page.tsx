@@ -10,10 +10,14 @@ import {
   Clock,
   User,
   Phone,
-  CheckCircle
+  CheckCircle,
+  Settings,
+  BookOpen,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
+import Link from 'next/link';
 
 export default function MagicLinksPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -52,8 +56,13 @@ export default function MagicLinksPage() {
               <p className="text-slate-600 mb-6 leading-relaxed">
                 Send a secure link to a user via SMS or WhatsApp for passwordless access to their claim portal.
               </p>
-              <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200" disabled>
-                <Send className="w-4 h-4 mr-2" />
+              <Button 
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200" 
+                size="default"
+                responsive="nowrap"
+                disabled
+              >
+                <Send className="w-4 h-4 mr-2 flex-shrink-0" />
                 Coming Soon
               </Button>
             </CardContent>
@@ -72,8 +81,14 @@ export default function MagicLinksPage() {
               <p className="text-slate-600 mb-6 leading-relaxed">
                 View recently sent magic links and their status, including click-through rates and user engagement.
               </p>
-              <Button variant="outline" className="w-full border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 shadow-md hover:shadow-lg transition-all duration-200" disabled>
-                <Clock className="w-4 h-4 mr-2" />
+              <Button 
+                variant="outline" 
+                className="w-full border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 shadow-md hover:shadow-lg transition-all duration-200" 
+                size="default"
+                responsive="nowrap"
+                disabled
+              >
+                <Clock className="w-4 h-4 mr-2 flex-shrink-0" />
                 View Activity
               </Button>
             </CardContent>
@@ -92,8 +107,14 @@ export default function MagicLinksPage() {
               <p className="text-slate-600 mb-6 leading-relaxed">
                 Track magic link usage and user engagement metrics to optimize your communication strategy.
               </p>
-              <Button variant="outline" className="w-full border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 shadow-md hover:shadow-lg transition-all duration-200" disabled>
-                <User className="w-4 h-4 mr-2" />
+              <Button 
+                variant="outline" 
+                className="w-full border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 shadow-md hover:shadow-lg transition-all duration-200" 
+                size="default"
+                responsive="nowrap"
+                disabled
+              >
+                <User className="w-4 h-4 mr-2 flex-shrink-0" />
                 View Analytics
               </Button>
             </CardContent>
@@ -142,38 +163,35 @@ export default function MagicLinksPage() {
           </CardContent>
         </Card>
 
-        {/* Placeholder for future development */}
-        <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-          <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
-            <CardTitle className="text-slate-800">Magic Links Management</CardTitle>
+        {/* Additional Information */}
+        <Card className="border-0 shadow-xl bg-gradient-to-r from-purple-500 to-pink-600 text-white">
+          <CardHeader>
+            <CardTitle className="text-white text-xl flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                <MessageSquare className="w-6 h-6" />
+              </div>
+              Magic Links Development
+            </CardTitle>
           </CardHeader>
-          <CardContent className="p-8">
-            <div className="text-center py-12">
-              <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center">
-                <LinkIcon className="w-12 h-12 text-blue-600" />
-              </div>
-              <h3 className="text-2xl font-semibold text-slate-800 mb-4">
-                Magic Links Interface
-              </h3>
-              <p className="text-slate-600 mb-8 text-lg leading-relaxed max-w-2xl mx-auto">
-                This feature is currently being developed. You can send magic links directly 
-                from the call interface during conversations with users.
-              </p>
-              
-              <div className="flex justify-center gap-4">
-                <Button asChild className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200">
-                  <a href="/calls/test">
-                    <Phone className="w-4 h-4 mr-2" />
-                    Test Call Interface
-                  </a>
-                </Button>
-                <Button variant="outline" asChild className="border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 shadow-md hover:shadow-lg transition-all duration-200">
-                  <a href="/queue">
-                    <User className="w-4 h-4 mr-2" />
-                    Go to Queue
-                  </a>
-                </Button>
-              </div>
+          <CardContent className="p-6">
+            <p className="text-purple-100 mb-6 leading-relaxed">
+              This powerful feature is currently in active development. Magic links will provide secure, 
+              passwordless access for users to their claim portals, improving user experience and reducing 
+              support overhead.
+            </p>
+            
+            <div className="flex justify-center">
+              <Button 
+                asChild 
+                className="bg-white text-purple-600 hover:bg-purple-50 shadow-lg hover:shadow-xl transition-all duration-200"
+                size="default"
+                responsive="nowrap"
+              >
+                <Link href="/admin" className="flex items-center justify-center">
+                  <Settings className="w-4 h-4 mr-2 flex-shrink-0" />
+                  Configure Settings
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -211,6 +229,8 @@ export default function MagicLinksPage() {
             </div>
           </CardContent>
         </Card>
+
+
       </div>
     </div>
   );

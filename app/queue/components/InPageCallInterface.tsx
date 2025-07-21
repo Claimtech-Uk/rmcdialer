@@ -11,7 +11,8 @@ import {
   Clock,
   User,
   X,
-  Maximize2
+  Maximize2,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent } from '@/modules/core/components/ui/card';
@@ -91,17 +92,17 @@ export default function InPageCallInterface({
   if (isMinimized) {
     return (
       <div className="fixed bottom-4 right-4 z-50">
-        <Card className="shadow-xl border-2 border-blue-500">
+        <Card className="shadow-xl border-2 border-blue-500 bg-white/95 backdrop-blur-sm">
           <CardContent className="p-3">
             <div className="flex items-center gap-3">
               <div className={`w-3 h-3 rounded-full ${getStatusColor()} animate-pulse`}></div>
-              <span className="text-sm font-medium">{callData.name}</span>
-              <span className="text-xs text-gray-500">{callDuration}</span>
+              <span className="text-sm font-medium text-slate-800">{callData.name}</span>
+              <span className="text-xs text-slate-500 font-mono">{callDuration}</span>
               <Button 
-                size="sm" 
+                size="icon-sm" 
                 variant="ghost" 
                 onClick={() => setIsMinimized(false)}
-                className="h-6 w-6 p-0"
+                className="h-6 w-6 p-0 hover:bg-slate-100 transition-all duration-200"
               >
                 <Maximize2 className="w-3 h-3" />
               </Button>
@@ -114,20 +115,20 @@ export default function InPageCallInterface({
 
   return (
     <div className="fixed bottom-4 right-4 z-50 w-80">
-      <Card className="shadow-2xl border-2 border-blue-500 bg-white">
+      <Card className="shadow-2xl border-2 border-blue-500 bg-white/95 backdrop-blur-sm">
         <CardContent className="p-4">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-blue-600" />
-              <span className="font-medium text-sm">Active Call</span>
+              <span className="font-medium text-sm text-slate-800">Active Call</span>
             </div>
             <div className="flex items-center gap-1">
               <Button 
-                size="sm" 
+                size="icon-sm" 
                 variant="ghost" 
                 onClick={() => setIsMinimized(true)}
-                className="h-6 w-6 p-0"
+                className="h-6 w-6 p-0 hover:bg-slate-100 transition-all duration-200"
               >
                 <X className="w-3 h-3" />
               </Button>
@@ -163,19 +164,27 @@ export default function InPageCallInterface({
             {callData.status === 'connected' && (
               <>
                 <Button
-                  size="sm"
+                  size="icon"
                   variant={isMuted ? "destructive" : "outline"}
                   onClick={() => setIsMuted(!isMuted)}
-                  className="w-10 h-10 rounded-full"
+                  className={`w-10 h-10 rounded-full shadow-md transition-all duration-200 ${
+                    isMuted 
+                      ? 'bg-red-500 hover:bg-red-600 text-white border-red-500' 
+                      : 'border-slate-300 hover:bg-slate-100'
+                  }`}
                 >
                   {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </Button>
 
                 <Button
-                  size="sm"
+                  size="icon"
                   variant={volumeEnabled ? "outline" : "destructive"}
                   onClick={() => setVolumeEnabled(!volumeEnabled)}
-                  className="w-10 h-10 rounded-full"
+                  className={`w-10 h-10 rounded-full shadow-md transition-all duration-200 ${
+                    !volumeEnabled 
+                      ? 'bg-red-500 hover:bg-red-600 text-white border-red-500' 
+                      : 'border-slate-300 hover:bg-slate-100'
+                  }`}
                 >
                   {volumeEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                 </Button>
@@ -183,10 +192,10 @@ export default function InPageCallInterface({
             )}
 
             <Button
-              size="sm"
+              size="icon"
               variant="destructive"
               onClick={onEndCall}
-              className="w-12 h-12 rounded-full bg-red-600 hover:bg-red-700"
+              className="w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 shadow-lg hover:shadow-xl transition-all duration-200 border-red-600"
               disabled={callData.status === 'ended'}
             >
               <PhoneOff className="w-5 h-5" />
@@ -195,7 +204,7 @@ export default function InPageCallInterface({
 
           {/* Status Messages */}
           {callData.status === 'connecting' && (
-            <div className="text-center text-sm text-gray-600 mb-3">
+            <div className="text-center text-sm text-slate-600 mb-3">
               <div className="animate-pulse">Establishing connection...</div>
             </div>
           )}
@@ -207,21 +216,22 @@ export default function InPageCallInterface({
           )}
 
           {callData.status === 'ended' && (
-            <div className="text-center text-sm text-gray-600 mb-3">
+            <div className="text-center text-sm text-slate-600 mb-3">
               Call completed
             </div>
           )}
 
           {/* Quick Actions */}
           {callData.status === 'connected' && onOpenFullInterface && (
-            <div className="border-t pt-3">
+            <div className="border-t border-slate-200 pt-3">
               <Button 
                 size="sm" 
                 variant="outline" 
                 onClick={onOpenFullInterface}
-                className="w-full text-xs"
+                className="w-full border-slate-300 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200"
               >
-                Open Full Call Interface
+                <ExternalLink className="w-4 h-4 mr-2 flex-shrink-0" />
+                Open Full Interface
               </Button>
             </div>
           )}

@@ -6,7 +6,7 @@ import { Badge } from '@/modules/core/components/ui/badge'
 import { Button } from '@/modules/core/components/ui/button'
 import { Input } from '@/modules/core/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/modules/core/components/ui/select'
-import { Clock, Phone, MessageSquare, Calendar, User, Filter, ChevronDown, ChevronUp } from 'lucide-react'
+import { Clock, Phone, MessageSquare, Calendar, User, Filter, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { format, subDays, isAfter, isBefore } from 'date-fns'
 import type { CallHistoryEntry } from '../types/call.types'
 
@@ -166,7 +166,14 @@ export function CallHistoryTable({
             <Badge variant="secondary">{filteredAndSortedCalls.length} calls</Badge>
           </CardTitle>
           {onRefresh && (
-            <Button variant="outline" size="sm" onClick={onRefresh}>
+            <Button 
+              variant="outline" 
+              size="default" 
+              responsive="nowrap"
+              onClick={onRefresh}
+              className="border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
+            >
+              <RefreshCw className="h-4 w-4 mr-2 flex-shrink-0" />
               Refresh
             </Button>
           )}
@@ -237,29 +244,36 @@ export function CallHistoryTable({
         ) : (
           <div className="space-y-4">
             {/* Sort Controls */}
-            <div className="flex items-center gap-4 text-sm">
-              <span className="text-gray-500">Sort by:</span>
-              {(['date', 'duration', 'outcome'] as const).map(option => (
-                <Button
-                  key={option}
-                  variant={sortBy === option ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => {
-                    if (sortBy === option) {
-                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-                    } else {
-                      setSortBy(option)
-                      setSortOrder('desc')
-                    }
-                  }}
-                  className="flex items-center gap-1"
-                >
-                  {option.charAt(0).toUpperCase() + option.slice(1)}
-                  {sortBy === option && (
-                    sortOrder === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-                  )}
-                </Button>
-              ))}
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <span className="text-slate-500 font-medium">Sort by:</span>
+              <div className="flex flex-wrap gap-2">
+                {(['date', 'duration', 'outcome'] as const).map(option => (
+                  <Button
+                    key={option}
+                    variant={sortBy === option ? 'default' : 'ghost'}
+                    size="sm"
+                    responsive="nowrap"
+                    onClick={() => {
+                      if (sortBy === option) {
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+                      } else {
+                        setSortBy(option)
+                        setSortOrder('desc')
+                      }
+                    }}
+                    className={`flex items-center gap-1 transition-all duration-200 ${
+                      sortBy === option 
+                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md text-white' 
+                        : 'hover:bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                    {sortBy === option && (
+                      sortOrder === 'asc' ? <ChevronUp className="h-3 w-3 flex-shrink-0" /> : <ChevronDown className="h-3 w-3 flex-shrink-0" />
+                    )}
+                  </Button>
+                ))}
+              </div>
             </div>
 
             {/* Call List */}
@@ -302,7 +316,8 @@ export function CallHistoryTable({
 
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon-sm"
+                        className="hover:bg-slate-100 transition-all duration-200"
                         onClick={() => setExpandedCall(expandedCall === call.id ? null : call.id)}
                       >
                         {expandedCall === call.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
