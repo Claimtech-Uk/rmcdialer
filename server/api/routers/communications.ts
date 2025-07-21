@@ -50,7 +50,10 @@ const smsService = new SMSService({
   authService: authForComms,
   userService: userServiceAdapter
 });
-const magicLinkService = new MagicLinkService({ authService: authForComms });
+const magicLinkService = new MagicLinkService({ 
+  authService: authForComms,
+  userService: userServiceAdapter
+});
 
 // -----------------------------------------------------------------------------
 // Input Validation Schemas

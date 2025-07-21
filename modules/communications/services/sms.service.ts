@@ -118,6 +118,7 @@ export class SMSService {
           body: message,
           twilioMessageSid: twilioResponse.sid,
           isAutoResponse: messageType === 'auto_response',
+          messageType: messageType,
           sentAt: new Date()
         }
       });
@@ -159,6 +160,7 @@ export class SMSService {
             direction: 'outbound',
             body: message,
             isAutoResponse: messageType === 'auto_response',
+            messageType: messageType,
             sentAt: new Date()
             // Note: Status and failure tracking removed - not in schema
           }

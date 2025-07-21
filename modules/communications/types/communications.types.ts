@@ -59,6 +59,7 @@ export interface SMSMessage {
   twilioMessageSid?: string;
   status?: MessageStatus;
   isAutoResponse: boolean;
+  messageType?: 'manual' | 'auto_response' | 'magic_link' | 'callback_confirmation';
   sentAt?: Date;
   receivedAt?: Date;
   createdAt: Date;

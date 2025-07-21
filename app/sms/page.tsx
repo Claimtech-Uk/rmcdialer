@@ -522,6 +522,30 @@ export default function SMSPage() {
                           }`}
                         >
                           <p className="text-sm leading-relaxed">{message.body}</p>
+                          
+                          {/* Message type indicator */}
+                          {(message.isAutoResponse || message.messageType) && (
+                            <div className="mt-2">
+                              <Badge 
+                                variant="outline"
+                                className={`text-xs ${
+                                  message.direction === 'outbound' 
+                                    ? 'bg-white/20 text-blue-100 border-blue-200' 
+                                    : 'bg-slate-200 text-slate-600 border-slate-300'
+                                }`}
+                              >
+                                {message.isAutoResponse 
+                                  ? '🤖 Auto Response' 
+                                  : message.messageType === 'magic_link' 
+                                    ? '🔗 Magic Link' 
+                                    : message.messageType === 'callback_confirmation'
+                                      ? '📞 Callback'
+                                      : '🏷️ Automated'
+                                }
+                              </Badge>
+                            </div>
+                          )}
+                          
                           <div className={`flex items-center justify-between mt-2 text-xs ${
                             message.direction === 'outbound' ? 'text-blue-100' : 'text-slate-500'
                           }`}>

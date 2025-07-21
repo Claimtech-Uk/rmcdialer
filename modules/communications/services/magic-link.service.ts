@@ -578,7 +578,25 @@ export class MagicLinkService {
   ) {
     // Use the actual SMS service to send and track the magic link
     const { SMSService } = await import('./sms.service');
-    const smsService = new SMSService();
+    
+    // Create minimal dependencies for SMS service
+    const smsServiceDeps = {
+      authService: this.dependencies.authService,
+      userService: this.dependencies.userService || {
+        async getUserData(userId: number) {
+          // Fallback user data method if not provided
+          return {
+            id: userId,
+            firstName: 'User',
+            lastName: '',
+            email: '',
+            phoneNumber: phoneNumber
+          };
+        }
+      }
+    };
+    
+    const smsService = new SMSService(smsServiceDeps);
     
     try {
       const result = await smsService.sendSMS({

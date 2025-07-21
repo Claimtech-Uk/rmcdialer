@@ -280,6 +280,7 @@ model SmsMessage {
   body                  String           @map("body")
   twilioMessageSid      String?          @map("twilio_message_sid")
   isAutoResponse        Boolean          @default(false) @map("is_auto_response")
+  messageType           String?          @map("message_type") // manual, auto_response, magic_link, callback_confirmation
   sentAt                DateTime?        @map("sent_at")
   receivedAt            DateTime?        @map("received_at")
   createdAt             DateTime         @default(now()) @map("created_at")
