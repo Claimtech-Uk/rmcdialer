@@ -51,11 +51,11 @@ export function CallInterface({
   // Wait for agent context to load before proceeding
   if (agentLoading) {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
-        <CardContent className="p-6 text-center">
+      <Card className="w-full max-w-4xl mx-auto border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+        <CardContent className="p-8 text-center">
           <Activity className="w-8 h-8 animate-pulse text-blue-600 mx-auto mb-4" />
-          <h2 className="text-lg font-semibold mb-2">Loading Agent Context</h2>
-          <p className="text-gray-600">Verifying authentication...</p>
+          <h2 className="text-lg font-semibold mb-2 text-slate-800">Loading Agent Context</h2>
+          <p className="text-slate-600">Verifying authentication...</p>
         </CardContent>
       </Card>
     );
@@ -63,12 +63,17 @@ export function CallInterface({
 
   if (agentError || !agentContext?.agent) {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
-        <CardContent className="p-6 text-center">
+      <Card className="w-full max-w-4xl mx-auto border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+        <CardContent className="p-8 text-center">
           <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-4" />
-          <h2 className="text-lg font-semibold mb-2">Authentication Required</h2>
-          <p className="text-gray-600">Please log in to access the call interface</p>
-          <Button className="mt-4" onClick={() => window.location.href = '/login'}>
+          <h2 className="text-lg font-semibold mb-2 text-slate-800">Authentication Required</h2>
+          <p className="text-slate-600">Please log in to access the call interface</p>
+          <Button 
+            className="mt-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-md hover:shadow-lg transition-all duration-200" 
+            onClick={() => window.location.href = '/login'}
+            size="default"
+            responsive="nowrap"
+          >
             Go to Login
           </Button>
         </CardContent>
@@ -364,9 +369,9 @@ export function CallInterface({
     <>
       {/* Disposition Required Alert */}
       {wasInCall && !isInCall && !showOutcomeModal && (
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-6 rounded-r-lg">
+        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-l-4 border-yellow-500 p-4 mb-6 rounded-r-lg shadow-lg backdrop-blur-sm">
           <div className="flex items-center">
-            <AlertCircle className="w-5 h-5 text-yellow-500 mr-3" />
+            <AlertCircle className="w-5 h-5 text-yellow-500 mr-3 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-yellow-800 font-medium">
                 ⚠️ Call Disposition Required
@@ -377,8 +382,9 @@ export function CallInterface({
             </div>
             <Button 
               onClick={() => setShowOutcomeModal(true)}
-              size="sm"
-              className="bg-yellow-600 hover:bg-yellow-700 text-white"
+              size="default"
+              responsive="nowrap"
+              className="bg-yellow-600 hover:bg-yellow-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
             >
               Complete Disposition
             </Button>
@@ -390,26 +396,26 @@ export function CallInterface({
         {/* User Context Panel */}
         <div className="lg:col-span-2 space-y-6">
           {/* Customer Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="w-5 h-5" />
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+              <CardTitle className="flex items-center gap-2 text-slate-800">
+                <User className="w-5 h-5 text-blue-600" />
                 Customer Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <div className="text-2xl font-bold">
+                  <div className="text-2xl font-bold text-slate-900">
                     {userContext.firstName} {userContext.lastName}
                   </div>
-                  <div className="text-gray-600 flex items-center gap-2 mt-1">
-                    <Phone className="w-4 h-4" />
+                  <div className="text-slate-600 flex items-center gap-2 mt-1">
+                    <Phone className="w-4 h-4 flex-shrink-0" />
                     {userContext.phoneNumber}
                   </div>
                   {userContext.address && (
-                    <div className="text-gray-600 flex items-center gap-2 mt-1">
-                      <MapPin className="w-4 h-4" />
+                    <div className="text-slate-600 flex items-center gap-2 mt-1">
+                      <MapPin className="w-4 h-4 flex-shrink-0" />
                       {userContext.address.fullAddress}
                     </div>
                   )}
@@ -417,7 +423,7 @@ export function CallInterface({
                 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="flex items-center gap-1">
+                    <Badge variant="outline" className="flex items-center gap-1 border-blue-200 text-blue-700 bg-blue-50">
                       <FileText className="w-3 h-3" />
                       {userContext.claims.length} Claims
                     </Badge>
@@ -431,16 +437,16 @@ export function CallInterface({
                   </div>
                   
                   {getTotalClaimValue() > 0 && (
-                    <div className="flex items-center gap-2 text-green-600">
-                      <DollarSign className="w-4 h-4" />
+                    <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg">
+                      <DollarSign className="w-4 h-4 flex-shrink-0" />
                       <span className="font-semibold">
                         £{getTotalClaimValue().toLocaleString()}
                       </span>
-                      <span className="text-sm text-gray-500">total value</span>
+                      <span className="text-sm text-emerald-500">total value</span>
                     </div>
                   )}
                   
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
                     Score: {userContext.callScore.currentScore} | 
                     Attempts: {userContext.callScore.totalAttempts}
                   </div>
@@ -450,40 +456,41 @@ export function CallInterface({
           </Card>
 
           {/* Claims Overview */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Claims</CardTitle>
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+              <CardTitle className="text-slate-800">Active Claims</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               <div className="space-y-4">
                 {userContext.claims.map((claim, index) => (
-                  <div key={claim.id} className="border rounded-lg p-4">
+                  <div key={claim.id} className="border border-slate-200 rounded-xl p-4 bg-gradient-to-r from-white to-slate-50 shadow-sm hover:shadow-md transition-all duration-200">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline">{claim.type}</Badge>
-                        <span className="font-medium">{claim.lender}</span>
+                        <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50">{claim.type}</Badge>
+                        <span className="font-medium text-slate-800">{claim.lender}</span>
                       </div>
                       <Badge 
                         variant={claim.status === 'documents_needed' ? 'destructive' : 'default'}
+                        className="bg-emerald-100 text-emerald-700 border-emerald-200"
                       >
                         {claim.status.replace('_', ' ')}
                       </Badge>
                     </div>
                     
                     {claim.value && (
-                      <div className="text-lg font-semibold text-green-600 mb-2">
+                      <div className="text-lg font-semibold text-emerald-600 mb-2">
                         £{claim.value.toLocaleString()}
                       </div>
                     )}
                     
                     <div className="space-y-2">
-                      <h4 className="font-medium text-sm">Pending Requirements:</h4>
+                      <h4 className="font-medium text-sm text-slate-700">Pending Requirements:</h4>
                       {claim.requirements.filter(req => req.status === 'PENDING').map((req, reqIndex) => (
                         <div key={req.id} className="flex items-center gap-2 text-sm">
-                          <AlertCircle className="w-3 h-3 text-amber-500" />
-                          <span>{req.type.replace(/_/g, ' ')}</span>
+                          <AlertCircle className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                          <span className="text-slate-600">{req.type.replace(/_/g, ' ')}</span>
                           {req.reason && (
-                            <span className="text-gray-500">- {req.reason}</span>
+                            <span className="text-slate-500">- {req.reason}</span>
                           )}
                         </div>
                       ))}
@@ -498,25 +505,25 @@ export function CallInterface({
         {/* Call Controls Panel */}
         <div className="space-y-6">
           {/* Call Status */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Phone className="w-5 h-5" />
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+              <CardTitle className="flex items-center gap-2 text-slate-800">
+                <Phone className="w-5 h-5 text-blue-600" />
                 Call Controls
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-6">
               {/* Connection Status */}
               <div className={`p-3 rounded-lg ${
-                isReady ? 'bg-green-50 text-green-800' : 
-                isConnecting ? 'bg-yellow-50 text-yellow-800' : 
-                'bg-gray-50 text-gray-800'
+                isReady ? 'bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-800 border border-emerald-200' : 
+                isConnecting ? 'bg-gradient-to-r from-yellow-50 to-amber-50 text-yellow-800 border border-yellow-200' : 
+                'bg-gradient-to-r from-slate-50 to-gray-50 text-slate-800 border border-slate-200'
               }`}>
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${
-                    isReady ? 'bg-green-500' : 
+                    isReady ? 'bg-emerald-500' : 
                     isConnecting ? 'bg-yellow-500' : 
-                    'bg-gray-500'
+                    'bg-slate-500'
                   }`} />
                   <span className="font-medium">
                     {isConnecting ? 'Connecting...' : isReady ? 'Ready' : 'Not Connected'}
@@ -529,11 +536,11 @@ export function CallInterface({
 
               {/* Call Duration */}
               {isInCall && (
-                <div className="text-center">
+                <div className="text-center bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
                   <div className="text-3xl font-mono font-bold text-blue-600">
                     {formatDuration(callDuration)}
                   </div>
-                  <div className="text-sm text-gray-500">Call Duration</div>
+                  <div className="text-sm text-blue-500">Call Duration</div>
                 </div>
               )}
 
@@ -547,7 +554,7 @@ export function CallInterface({
                     responsive="nowrap"
                     className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
                   >
-                    <Phone className="w-6 h-6 mr-2" />
+                    <Phone className="w-6 h-6 mr-2 flex-shrink-0" />
                     Call {userContext.firstName}
                   </Button>
                 ) : (
@@ -557,7 +564,7 @@ export function CallInterface({
                     responsive="nowrap"
                     className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
                   >
-                    <PhoneOff className="w-6 h-6 mr-2" />
+                    <PhoneOff className="w-6 h-6 mr-2 flex-shrink-0" />
                     End Call & Add Notes
                   </Button>
                 )}
@@ -570,7 +577,7 @@ export function CallInterface({
                     variant="outline"
                     size="lg"
                     onClick={toggleMute}
-                    className={isMuted ? 'bg-red-50 text-red-600' : ''}
+                    className={`border-2 transition-all duration-200 ${isMuted ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'border-slate-300 hover:bg-slate-100'} shadow-md hover:shadow-lg`}
                   >
                     {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                   </Button>
@@ -580,7 +587,7 @@ export function CallInterface({
               {/* DTMF Controls (if needed for transfers) */}
               {isInCall && (
                 <div className="text-center">
-                  <p className="text-sm text-gray-500 mb-2">DTMF available via sendDigits() if needed</p>
+                  <p className="text-sm text-slate-500 mb-2">DTMF available via sendDigits() if needed</p>
                 </div>
               )}
             </CardContent>
@@ -588,24 +595,24 @@ export function CallInterface({
 
           {/* Call Context & Reason */}
           {queueType?.data?.queueType && (
-            <Card className="border-l-4 border-l-blue-500">
-              <CardHeader>
+            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm border-l-4 border-l-blue-500">
+              <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg">
                 <CardTitle className="flex items-center gap-2 text-blue-700">
                   <AlertCircle className="w-5 h-5" />
                   Call Reason
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <div className="space-y-2">
-                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 border border-blue-200">
                     {queueType.data.queueType.replace('_', ' ').toUpperCase()}
                   </Badge>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-slate-600">
                     {queueType.data.queueType === 'unsigned_users' && 'User has not signed their claim documents yet'}
                     {queueType.data.queueType === 'outstanding_requests' && 'User has outstanding document requirements'}
                     {queueType.data.queueType === 'callback' && 'User has requested a callback'}
                   </p>
-                  <div className="text-xs text-gray-500 mt-2">
+                  <div className="text-xs text-slate-500 mt-2 bg-slate-50 px-3 py-2 rounded-lg">
                     Queue determination: {queueType.data.eligible ? 'Eligible' : 'Not eligible'}
                   </div>
                 </div>
@@ -614,143 +621,143 @@ export function CallInterface({
           )}
 
           {/* Send Magic Link */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Send className="w-5 h-5" />
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+              <CardTitle className="flex items-center gap-2 text-slate-800">
+                <Send className="w-5 h-5 text-blue-600" />
                 Quick Actions
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3 p-6">
               <Button 
                 onClick={handleSendMagicLink}
                 disabled={sendMagicLinkMutation.isPending}
                 size="default"
                 responsive="nowrap"
-                className="w-full bg-green-600 hover:bg-green-700"
+                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white shadow-md hover:shadow-lg transition-all duration-200"
               >
-                <Send className="w-4 h-4 mr-2" />
+                <Send className="w-4 h-4 mr-2 flex-shrink-0" />
                 {sendMagicLinkMutation.isPending ? 'Sending...' : 'Send Claim Portal Link'}
               </Button>
               <Button 
                 variant="outline" 
                 size="default"
                 responsive="nowrap"
-                className="w-full justify-start"
+                className="w-full justify-start border-2 border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
               >
-                <Calendar className="w-4 h-4 mr-2" />
+                <Calendar className="w-4 h-4 mr-2 flex-shrink-0" />
                 Schedule Callback
               </Button>
               <Button 
                 variant="outline" 
                 size="default"
                 responsive="nowrap"
-                className="w-full justify-start"
+                className="w-full justify-start border-2 border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
               >
-                <CheckCircle2 className="w-4 h-4 mr-2" />
+                <CheckCircle2 className="w-4 h-4 mr-2 flex-shrink-0" />
                 Mark as Complete
               </Button>
             </CardContent>
           </Card>
 
           {/* Call History */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Phone className="w-5 h-5" />
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+              <CardTitle className="flex items-center gap-2 text-slate-800">
+                <Phone className="w-5 h-5 text-blue-600" />
                 Call History
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               {callHistoryLoading ? (
                 <div className="text-center py-4">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                  <p className="text-sm text-gray-500 mt-2">Loading call history...</p>
+                  <p className="text-sm text-slate-500 mt-2">Loading call history...</p>
                 </div>
               ) : callHistoryResponse?.calls?.length ? (
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {callHistoryResponse.calls.slice(0, 5).map((call: any, index: number) => (
-                    <div key={index} className="border-l-2 border-gray-200 pl-3 pb-2">
+                    <div key={index} className="border-l-2 border-blue-200 pl-3 pb-2 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 rounded-r-lg p-2">
                       <div className="flex justify-between items-start">
                         <div className="text-sm">
-                          <div className="font-medium">{call.direction === 'outbound' ? 'Outbound' : 'Inbound'}</div>
-                          <div className="text-gray-500">{call.startedAt ? new Date(call.startedAt).toLocaleDateString() : 'Unknown date'}</div>
+                          <div className="font-medium text-slate-800">{call.direction === 'outbound' ? 'Outbound' : 'Inbound'}</div>
+                          <div className="text-slate-500">{call.startedAt ? new Date(call.startedAt).toLocaleDateString() : 'Unknown date'}</div>
                         </div>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">
                           {call.status || 'unknown'}
                         </Badge>
                       </div>
                       {call.lastOutcomeNotes && (
-                        <p className="text-xs text-gray-600 mt-1">{call.lastOutcomeNotes}</p>
+                        <p className="text-xs text-slate-600 mt-1">{call.lastOutcomeNotes}</p>
                       )}
                     </div>
                   ))}
                   {callHistoryResponse.calls.length > 5 && (
-                    <p className="text-xs text-center text-gray-500 pt-2">
+                    <p className="text-xs text-center text-slate-500 pt-2">
                       ... and {callHistoryResponse.calls.length - 5} more calls
                     </p>
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 text-center py-4">No call history found</p>
+                <p className="text-sm text-slate-500 text-center py-4">No call history found</p>
               )}
             </CardContent>
           </Card>
 
           {/* SMS Conversations */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="w-5 h-5" />
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+              <CardTitle className="flex items-center gap-2 text-slate-800">
+                <MessageSquare className="w-5 h-5 text-blue-600" />
                 SMS History
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               {smsLoading ? (
                 <div className="text-center py-4">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                  <p className="text-sm text-gray-500 mt-2">Loading SMS history...</p>
+                  <p className="text-sm text-slate-500 mt-2">Loading SMS history...</p>
                 </div>
               ) : smsConversationsResponse?.data?.length ? (
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {smsConversationsResponse.data.slice(0, 3).map((conversation: any, index: number) => (
-                    <div key={index} className="border border-gray-200 rounded p-2">
+                    <div key={index} className="border border-slate-200 rounded-lg p-3 bg-gradient-to-r from-white to-slate-50 shadow-sm">
                       <div className="flex justify-between items-start mb-1">
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-slate-500">
                           {conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleDateString() : 'Unknown date'}
                         </div>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">
                           {conversation.messageCount} messages
                         </Badge>
                       </div>
-                      <p className="text-sm">{conversation.lastMessage || 'No preview available'}</p>
+                      <p className="text-sm text-slate-700">{conversation.lastMessage || 'No preview available'}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 text-center py-4">No SMS conversations found</p>
+                <p className="text-sm text-slate-500 text-center py-4">No SMS conversations found</p>
               )}
             </CardContent>
           </Card>
 
           {/* Magic Link History */}
           {magicLinkHistoryResponse?.data?.length && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Send className="w-5 h-5" />
+            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+              <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+                <CardTitle className="flex items-center gap-2 text-slate-800">
+                  <Send className="w-5 h-5 text-blue-600" />
                   Magic Links Sent
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <div className="space-y-2 max-h-32 overflow-y-auto">
                   {magicLinkHistoryResponse.data.slice(0, 3).map((link: any, index: number) => (
-                    <div key={index} className="flex justify-between items-center text-sm">
+                    <div key={index} className="flex justify-between items-center text-sm p-2 bg-gradient-to-r from-green-50/50 to-emerald-50/50 rounded-lg">
                       <div>
-                        <div className="font-medium">{link.linkType}</div>
-                        <div className="text-gray-500 text-xs">{new Date(link.sentAt).toLocaleDateString()}</div>
+                        <div className="font-medium text-slate-800">{link.linkType}</div>
+                        <div className="text-slate-500 text-xs">{new Date(link.sentAt).toLocaleDateString()}</div>
                       </div>
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="outline" className="text-xs border-emerald-200 text-emerald-700 bg-emerald-50">
                         {link.status}
                       </Badge>
                     </div>

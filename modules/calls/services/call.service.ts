@@ -69,12 +69,29 @@ export class CallService {
         where: { userId: BigInt(userId) }
       });
 
+             // For manual calls, create a queue entry first to satisfy foreign key constraint
+       let actualQueueId: string = queueId || '';
+       if (!queueId) {
+         const manualQueue = await tx.callQueue.create({
+           data: {
+             userId: BigInt(userId),
+             queueType: 'manual_call',
+             priorityScore: 0,
+             status: 'assigned',
+             queueReason: 'Manual agent-initiated call',
+             assignedToAgentId: agentId,
+             assignedAt: new Date(),
+           }
+         });
+         actualQueueId = manualQueue.id;
+       }
+
       // Create call session with enhanced context
       const callSession = await tx.callSession.create({
         data: {
           userId: BigInt(userId),
           agentId,
-          callQueueId: queueId || crypto.randomUUID(), // Generate UUID for manual calls
+          callQueueId: actualQueueId,
           status: 'initiated',
           direction,
           startedAt: new Date(),

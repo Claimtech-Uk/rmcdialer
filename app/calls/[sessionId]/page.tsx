@@ -76,32 +76,34 @@ export default function CallSessionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4">
+      <div className="bg-white/80 backdrop-blur-sm border-b border-white/20 shadow-lg px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
             <Button 
               variant="outline" 
-              size="sm"
+              size="default"
+              responsive="nowrap"
               onClick={() => router.push(userId ? `/users/${userId}` : '/queue/unsigned')}
+              className="border-2 border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
             >
-              <ArrowLeft className="w-4 h-4 mr-2" />
+              <ArrowLeft className="w-4 h-4 mr-2 flex-shrink-0" />
               Back
             </Button>
             <div>
-              <h1 className="text-xl font-semibold flex items-center gap-2">
-                <Phone className="w-5 h-5 text-blue-600" />
+              <h1 className="text-2xl font-bold flex items-center gap-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                <Phone className="w-6 h-6 text-blue-600" />
                 Call Session: {userContext.firstName} {userContext.lastName}
               </h1>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-slate-600 mt-1">
                 Session ID: {sessionId} • {phoneNumber}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <User className="w-4 h-4 text-gray-500" />
-            <span className="text-sm text-gray-600">Agent: Authenticated User</span>
+          <div className="flex items-center gap-2 bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-2 rounded-lg border border-green-200 shadow-sm">
+            <User className="w-4 h-4 text-emerald-600" />
+            <span className="text-sm font-medium text-emerald-700">Agent: Authenticated User</span>
           </div>
         </div>
       </div>
