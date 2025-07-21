@@ -61,8 +61,8 @@ export class MagicLinkService {
         options.requirementTypes
       );
       
-      // Generate short URL for SMS (optional)
-      const shortUrl = await this.generateShortUrl(url);
+      // Skip short URL generation for now - use full URL
+      const shortUrl = null;
 
       // Store in database for tracking
       await prisma.magicLinkActivity.create({
@@ -437,9 +437,9 @@ export class MagicLinkService {
         return { isValid: false };
       }
 
-      // Now verify the token structure and signature
-      const verified = this.verifyTokenWithLinkType(token, activity.linkType as MagicLinkType);
-      if (!verified) {
+      // Verify token format (simple base64 user ID)
+      const decoded = this.verifyToken(token);
+      if (!decoded || decoded.userId !== Number(activity.userId)) {
         logger.warn('Magic link token verification failed', { 
           token: token.substring(0, 8) + '...',
           userId: activity.userId,
@@ -472,27 +472,8 @@ export class MagicLinkService {
   // -----------------------------------------------------------------------------
 
   private generateSecureToken(userId: number, linkType: MagicLinkType): string {
-    // Use compact token format - timestamp (6 bytes) + userId (4 bytes) + random (4 bytes) + HMAC (8 bytes)
-    const timestamp = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
-    const randomValue = crypto.randomBytes(4).readUInt32BE(0);
-    
-    // Pack data into binary format for efficiency
-    const buffer = Buffer.alloc(18); // 4+4+4+6 bytes (shortened)
-    buffer.writeUInt32BE(timestamp, 0);  // 4 bytes timestamp
-    buffer.writeUInt32BE(userId, 4);     // 4 bytes user ID
-    buffer.writeUInt32BE(randomValue, 8); // 4 bytes random
-    
-    // Create compact HMAC (first 6 bytes only for brevity)
-    const hmac = crypto.createHmac('sha256', this.encryptionKey);
-    hmac.update(buffer.subarray(0, 12)); // Hash first 12 bytes
-    hmac.update(linkType); // Include link type in hash
-    const signature = hmac.digest().subarray(0, 6); // First 6 bytes only
-    
-    // Copy signature to buffer
-    signature.copy(buffer, 12);
-    
-    // Return base64url encoded (more URL-friendly than base64)
-    return buffer.toString('base64url');
+    // Generate token in format expected by portal app (simple base64 user ID)
+    return Buffer.from(userId.toString()).toString('base64');
   }
 
   private verifyToken(token: string): { 
@@ -501,51 +482,19 @@ export class MagicLinkService {
     timestamp: number 
   } | null {
     try {
-      const buffer = Buffer.from(token, 'base64url');
+      // Simple base64 token contains just the user ID
+      const userIdString = Buffer.from(token, 'base64').toString();
+      const userId = parseInt(userIdString);
       
-      if (buffer.length !== 18) return null;
+      if (isNaN(userId) || userId <= 0) return null;
       
-      // Extract data from binary format
-      const timestamp = buffer.readUInt32BE(0);
-      const userId = buffer.readUInt32BE(4);
-      const randomValue = buffer.readUInt32BE(8);
-      const providedSignature = buffer.subarray(12, 18);
-      
-      // We need to look up the token in the database to get the link type
-      // and verify the signature against the stored link type
       return {
         userId,
-        linkType: 'claimPortal', // This will be verified against database in validateMagicLink
-        timestamp
+        linkType: 'claimPortal', // Default type
+        timestamp: Date.now() / 1000
       };
     } catch (error) {
       return null;
-    }
-  }
-
-  private verifyTokenWithLinkType(token: string, linkType: MagicLinkType): boolean {
-    try {
-      const buffer = Buffer.from(token, 'base64url');
-      
-      if (buffer.length !== 18) return false;
-      
-      // Extract data from binary format
-      const timestamp = buffer.readUInt32BE(0);
-      const userId = buffer.readUInt32BE(4);
-      const randomValue = buffer.readUInt32BE(8);
-      const providedSignature = buffer.subarray(12, 18);
-      
-      // Recreate the signature with the known link type
-      const hmac = crypto.createHmac('sha256', this.encryptionKey);
-      hmac.update(buffer.subarray(0, 12)); // Hash first 12 bytes (timestamp + userId + random)
-      hmac.update(linkType); // Include link type in hash
-      const expectedSignature = hmac.digest().subarray(0, 6); // First 6 bytes only
-      
-      // Compare signatures
-      return Buffer.compare(providedSignature, expectedSignature) === 0;
-    } catch (error) {
-      logger.error('Token verification error:', error);
-      return false;
     }
   }
 
@@ -556,38 +505,30 @@ export class MagicLinkService {
     claimId?: number,
     requirementTypes?: string[]
   ): string {
-    // Shorter route paths
+    // Use routes expected by portal app
     const routes: Record<MagicLinkType, string> = {
-      firstLogin: '/login',
+      firstLogin: '/first-login',
       claimPortal: '/claims',
-      documentUpload: '/docs',
-      claimCompletion: '/complete',
-      requirementReview: '/review',
-      statusUpdate: '/status',
+      documentUpload: '/claim/requirements',
+      claimCompletion: '/claim/incomplete-redirect',
+      requirementReview: '/claim/requirements',
+      statusUpdate: '/claims',
       profileUpdate: '/profile'
     };
 
     const baseRoute = routes[linkType];
     const url = new URL(baseRoute, this.baseUrl);
     
-    // Add magic link token with shorter parameter name
-    url.searchParams.set('t', token);
-    
-    // Only add claim ID if actually needed (not for all link types)
-    if (claimId && ['claimPortal', 'documentUpload', 'claimCompletion'].includes(linkType)) {
-      url.searchParams.set('c', claimId.toString());
+    // Use parameter name expected by portal app
+    if (linkType === 'firstLogin') {
+      url.searchParams.set('base64_user_id', token);
+    } else {
+      url.searchParams.set('mlid', token);
     }
     
-    // Only add requirement types if specifically for document upload
-    if (requirementTypes && requirementTypes.length > 0 && linkType === 'documentUpload') {
-      url.searchParams.set('r', requirementTypes.join(','));
-    }
-    
-    // Only add essential custom parameters
+    // Add custom parameters if provided
     Object.entries(customParams).forEach(([key, value]) => {
-      if (key.length <= 2) { // Only short parameter names
-        url.searchParams.set(key, value);
-      }
+      url.searchParams.set(key, value);
     });
     
     return url.toString();
@@ -609,28 +550,10 @@ export class MagicLinkService {
     return messages[linkType];
   }
 
-  private async generateShortUrl(originalUrl: string): Promise<string | null> {
-    try {
-      // Generate a short code (6 characters for brevity)
-      const shortCode = this.generateShortCode();
-      
-      // Store in database
-      await prisma.shortUrl.create({
-        data: {
-          originalUrl,
-          shortCode,
-          expiresAt: new Date(Date.now() + (48 * 60 * 60 * 1000)), // 48 hours like magic links
-          createdByAgentId: 1 // Default for system-generated
-        }
-      });
-
-      // Return short URL - using existing domain with short path
-      return `${this.baseUrl}/s/${shortCode}`;
-    } catch (error) {
-      logger.error('Failed to generate short URL:', error);
-      return null;
-    }
-  }
+  // private async generateShortUrl(originalUrl: string): Promise<string | null> {
+  //   // Disabled for now - using full URLs only
+  //   return null;
+  // }
 
   private generateShortCode(): string {
     // Generate a 6-character alphanumeric code (excludes confusing chars like 0, O, I, l)

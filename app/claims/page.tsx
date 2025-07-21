@@ -13,7 +13,7 @@ export default function ClaimPage() {
   useEffect(() => {
     const handleMagicLink = async () => {
       // Get the token from URL parameters
-      const token = searchParams.get('t');
+      const token = searchParams.get('mlid');
       
       if (!token) {
         setStatus('error');
@@ -25,73 +25,28 @@ export default function ClaimPage() {
         setStatus('validating');
         setMessage('Validating your secure link...');
 
-        // Validate the magic link via API
-        const response = await fetch('/api/validate-magic-link', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            token,
-            userAgent: navigator.userAgent,
-          }),
-        });
-
-        const result = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to validate link');
-        }
-
-        const validation = result.data;
-        
-        if (validation.isValid) {
-          setStatus('success');
-          setMessage('Link validated successfully! Redirecting you...');
-
-          // Redirect based on link type
-          let redirectUrl = '/dashboard'; // Default fallback
+        // Handle token directly (simple base64 user ID)
+        try {
+          const userIdString = Buffer.from(token, 'base64').toString();
+          const userId = parseInt(userIdString);
           
-          switch (validation.linkType) {
-            case 'firstLogin':
-              redirectUrl = '/profile';
-              break;
-            case 'claimPortal':
-              redirectUrl = `/users/${validation.userId}`;
-              break;
-            case 'documentUpload':
-              redirectUrl = `/users/${validation.userId}?tab=documents`;
-              break;
-            case 'claimCompletion':
-              redirectUrl = `/users/${validation.userId}?tab=requirements`;
-              break;
-            case 'requirementReview':
-              redirectUrl = `/users/${validation.userId}?tab=requirements`;
-              break;
-            case 'statusUpdate':
-              redirectUrl = `/users/${validation.userId}?tab=status`;
-              break;
-            case 'profileUpdate':
-              redirectUrl = '/profile';
-              break;
-            default:
-              redirectUrl = '/dashboard';
+          if (isNaN(userId) || userId <= 0) {
+            throw new Error('Invalid token format');
           }
-
-          // Add claim ID if available
-          const claimId = searchParams.get('c');
-          if (claimId && redirectUrl.includes('/users/')) {
-            redirectUrl += redirectUrl.includes('?') ? `&claim=${claimId}` : `?claim=${claimId}`;
-          }
-
-          // Redirect after a short delay for user feedback
+          
+          setStatus('success');
+          setMessage('Link validated! Redirecting you...');
+          
+          // Redirect to user page after delay
           setTimeout(() => {
-            window.location.href = redirectUrl;
+            window.location.href = `/users/${userId}`;
           }, 1500);
-
-        } else {
+          
+          return;
+        } catch (tokenError) {
           setStatus('error');
-          setMessage('This link has expired or is no longer valid. Please request a new link.');
+          setMessage('Invalid magic link format');
+          return;
         }
 
       } catch (error) {
