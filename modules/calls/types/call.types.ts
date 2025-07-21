@@ -103,7 +103,6 @@ export interface UserCallContext {
     type: string;
     status: string;
     lender: string;
-    value?: number;
     requirements: Array<{
       id: string;
       type: string;

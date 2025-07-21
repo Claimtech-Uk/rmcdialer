@@ -95,10 +95,6 @@ export default function CallSessionPage() {
       type: claim.type || 'vehicle',
       status: claim.status || 'active',
       lender: claim.lender || 'Unknown Lender',
-      value: claim.vehiclePackages.reduce((total, pkg) => {
-        // Estimate claim value from monthly payments (36 months average)
-        return total + ((pkg.monthlyPayment || 0) * 36);
-      }, 25000), // Default minimum value
       requirements: claim.requirements.map(req => ({
         id: req.id,
         type: req.type || 'unknown',

@@ -447,10 +447,6 @@ export function CallInterface({
     );
   };
 
-  const getTotalClaimValue = () => {
-    return userContext.claims.reduce((total, claim) => total + (claim.value || 0), 0);
-  };
-
   return (
     <>
       {/* Disposition Required Alert */}
@@ -479,7 +475,7 @@ export function CallInterface({
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* User Context Panel */}
+        {/* Main Content Panel */}
         <div className="lg:col-span-2 space-y-6">
           {/* Customer Information */}
           <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
@@ -522,16 +518,6 @@ export function CallInterface({
                     </Badge>
                   </div>
                   
-                  {getTotalClaimValue() > 0 && (
-                    <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg">
-                      <DollarSign className="w-4 h-4 flex-shrink-0" />
-                      <span className="font-semibold">
-                        £{getTotalClaimValue().toLocaleString()}
-                      </span>
-                      <span className="text-sm text-emerald-500">total value</span>
-                    </div>
-                  )}
-                  
                   <div className="text-sm text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
                     Score: {userContext.callScore.currentScore} | 
                     Attempts: {userContext.callScore.totalAttempts}
@@ -563,12 +549,6 @@ export function CallInterface({
                       </Badge>
                     </div>
                     
-                    {claim.value && (
-                      <div className="text-lg font-semibold text-emerald-600 mb-2">
-                        £{claim.value.toLocaleString()}
-                      </div>
-                    )}
-                    
                     <div className="space-y-2">
                       <h4 className="font-medium text-sm text-slate-700">Pending Requirements:</h4>
                       {claim.requirements.filter(req => req.status === 'PENDING').map((req, reqIndex) => (
@@ -584,168 +564,6 @@ export function CallInterface({
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Call Controls Panel */}
-        <div className="space-y-6">
-          {/* Call Status Section */}
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <div className={`w-3 h-3 rounded-full ${
-                error ? 'bg-red-500' : 
-                isIncomingCall ? 'bg-orange-500 animate-pulse' :
-                isInCall ? 'bg-green-500' : 
-                isReady ? 'bg-blue-500' : 
-                'bg-gray-400'
-              }`} />
-              <span className="text-lg font-semibold text-slate-700">
-                {error ? 'Connection Error' :
-                 isIncomingCall ? 'Incoming Call...' :
-                 isInCall ? 'Call Active' :
-                 isConnecting ? 'Connecting...' :
-                 isReady ? 'Ready to Call' :
-                 'Initializing...'}
-              </span>
-            </div>
-
-            {error && (
-              <Alert className="mb-6 border-red-200 bg-red-50">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-800">
-                  {error}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {isIncomingCall && incomingCallInfo && (
-              <Alert className="mb-6 border-orange-200 bg-orange-50">
-                <Phone className="h-4 w-4 text-orange-600" />
-                <AlertDescription className="text-orange-800">
-                  Incoming call from {incomingCallInfo.from} - Use the popup to accept or decline
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {isInCall && (
-              <div className="flex items-center justify-center gap-4 mb-4">
-                <Clock className="w-5 h-5 text-green-600" />
-                <span className="text-xl font-mono text-green-600">
-                  {Math.floor(callDuration / 60)}:{(callDuration % 60).toString().padStart(2, '0')}
-                </span>
-              </div>
-            )}
-
-            {/* Call Controls */}
-            <div className="flex gap-3 justify-center mb-6">
-              {!isInCall && !isIncomingCall && (
-                <Button
-                  onClick={handleMakeCall}
-                  disabled={!isReady || isConnecting || initiateCallMutation.isPending}
-                  size="lg"
-                  className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-md hover:shadow-lg transition-all duration-200"
-                >
-                  <Phone className="w-5 h-5 mr-2" />
-                  {isConnecting ? 'Connecting...' : 
-                   initiateCallMutation.isPending ? 'Starting...' : 
-                   'Start Call'}
-                </Button>
-              )}
-
-              {(isInCall || isIncomingCall) && (
-                <>
-                  <Button
-                    onClick={handleCallEnd}
-                    size="lg"
-                    variant="destructive"
-                    className="bg-red-600 hover:bg-red-700 text-white shadow-md"
-                  >
-                    <PhoneOff className="w-5 h-5 mr-2" />
-                    End Call
-                  </Button>
-
-                  {isInCall && (
-                    <>
-                      <Button
-                        onClick={toggleMute}
-                        size="lg"
-                        variant="outline"
-                        className={`${isMuted ? 'bg-red-50 border-red-200 text-red-600' : 'border-gray-300'}`}
-                      >
-                        {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                      </Button>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Call Context & Reason */}
-          {queueType?.data?.queueType && (
-            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm border-l-4 border-l-blue-500">
-              <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg">
-                <CardTitle className="flex items-center gap-2 text-blue-700">
-                  <AlertCircle className="w-5 h-5" />
-                  Call Reason
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-2">
-                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 border border-blue-200">
-                    {queueType.data.queueType.replace('_', ' ').toUpperCase()}
-                  </Badge>
-                  <p className="text-sm text-slate-600">
-                    {queueType.data.queueType === 'unsigned_users' && 'User has not signed their claim documents yet'}
-                    {queueType.data.queueType === 'outstanding_requests' && 'User has outstanding document requirements'}
-                    {queueType.data.queueType === 'callback' && 'User has requested a callback'}
-                  </p>
-                  <div className="text-xs text-slate-500 mt-2 bg-slate-50 px-3 py-2 rounded-lg">
-                    Queue determination: {queueType.data.eligible ? 'Eligible' : 'Not eligible'}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Send Magic Link */}
-          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
-              <CardTitle className="flex items-center gap-2 text-slate-800">
-                <Send className="w-5 h-5 text-blue-600" />
-                Quick Actions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 p-6">
-              <Button 
-                onClick={handleSendMagicLink}
-                disabled={sendMagicLinkMutation.isPending}
-                size="default"
-                responsive="nowrap"
-                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white shadow-md hover:shadow-lg transition-all duration-200"
-              >
-                <Send className="w-4 h-4 mr-2 flex-shrink-0" />
-                {sendMagicLinkMutation.isPending ? 'Sending...' : 'Send Claim Portal Link'}
-              </Button>
-              <Button 
-                variant="outline" 
-                size="default"
-                responsive="nowrap"
-                className="w-full justify-start border-2 border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
-              >
-                <Calendar className="w-4 h-4 mr-2 flex-shrink-0" />
-                Schedule Callback
-              </Button>
-              <Button 
-                variant="outline" 
-                size="default"
-                responsive="nowrap"
-                className="w-full justify-start border-2 border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
-              >
-                <CheckCircle2 className="w-4 h-4 mr-2 flex-shrink-0" />
-                Mark as Complete
-              </Button>
             </CardContent>
           </Card>
 
@@ -826,6 +644,165 @@ export function CallInterface({
               ) : (
                 <p className="text-sm text-slate-500 text-center py-4">No SMS conversations found</p>
               )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Sidebar - Call Controls and Actions */}
+        <div className="space-y-6">
+          {/* Call Status */}
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+              <CardTitle className="flex items-center gap-2 text-slate-800">
+                <Phone className="w-5 h-5 text-blue-600" />
+                Call Controls
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 p-6">
+              {/* Connection Status */}
+              <div className={`p-3 rounded-lg ${
+                isReady ? 'bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-800 border border-emerald-200' : 
+                isConnecting ? 'bg-gradient-to-r from-yellow-50 to-amber-50 text-yellow-800 border border-yellow-200' : 
+                'bg-gradient-to-r from-slate-50 to-gray-50 text-slate-800 border border-slate-200'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    isReady ? 'bg-emerald-500' : 
+                    isConnecting ? 'bg-yellow-500' : 
+                    'bg-slate-500'
+                  }`} />
+                  <span className="font-medium">
+                    {isConnecting ? 'Connecting...' : isReady ? 'Ready' : 'Not Connected'}
+                  </span>
+                </div>
+                {error && (
+                  <div className="text-red-600 text-sm mt-1">{error}</div>
+                )}
+              </div>
+
+              {/* Call Duration */}
+              {isInCall && (
+                <div className="text-center bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+                  <div className="text-3xl font-mono font-bold text-blue-600">
+                    {formatDuration(callDuration)}
+                  </div>
+                  <div className="text-sm text-blue-500">Call Duration</div>
+                </div>
+              )}
+
+              {/* Main Call Button */}
+              <div className="flex justify-center">
+                {!isInCall ? (
+                  <Button
+                    onClick={handleMakeCall}
+                    disabled={!isReady}
+                    size="xl"
+                    responsive="nowrap"
+                    className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+                  >
+                    <Phone className="w-6 h-6 mr-2 flex-shrink-0" />
+                    Call {userContext.firstName}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleCallEnd}
+                    size="xl"
+                    responsive="nowrap"
+                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+                  >
+                    <PhoneOff className="w-6 h-6 mr-2 flex-shrink-0" />
+                    End Call & Add Notes
+                  </Button>
+                )}
+              </div>
+
+              {/* In-Call Controls */}
+              {isInCall && (
+                <div className="flex justify-center gap-4">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={toggleMute}
+                    className={`border-2 transition-all duration-200 ${isMuted ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'border-slate-300 hover:bg-slate-100'} shadow-md hover:shadow-lg`}
+                  >
+                    {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  </Button>
+                </div>
+              )}
+
+              {/* DTMF Controls (if needed for transfers) */}
+              {isInCall && (
+                <div className="text-center">
+                  <p className="text-sm text-slate-500 mb-2">DTMF available via sendDigits() if needed</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Call Context & Reason */}
+          {queueType?.data?.queueType && (
+            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm border-l-4 border-l-blue-500">
+              <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg">
+                <CardTitle className="flex items-center gap-2 text-blue-700">
+                  <AlertCircle className="w-5 h-5" />
+                  Call Reason
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="space-y-2">
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 border border-blue-200">
+                    {queueType.data.queueType.replace('_', ' ').toUpperCase()}
+                  </Badge>
+                  <p className="text-sm text-slate-600">
+                    {queueType.data.queueType === 'unsigned_users' && 'User has not signed their claim documents yet'}
+                    {queueType.data.queueType === 'outstanding_requests' && 'User has outstanding document requirements'}
+                    {queueType.data.queueType === 'callback' && 'User has requested a callback'}
+                  </p>
+                  <div className="text-xs text-slate-500 mt-2 bg-slate-50 px-3 py-2 rounded-lg">
+                    Queue determination: {queueType.data.eligible ? 'Eligible' : 'Not eligible'}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Quick Actions */}
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+              <CardTitle className="flex items-center gap-2 text-slate-800">
+                <Send className="w-5 h-5 text-blue-600" />
+                Quick Actions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 p-6">
+              <Button 
+                onClick={handleSendMagicLink}
+                disabled={sendMagicLinkMutation.isPending}
+                size="default"
+                responsive="nowrap"
+                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white shadow-md hover:shadow-lg transition-all duration-200"
+              >
+                <Send className="w-4 h-4 mr-2 flex-shrink-0" />
+                {sendMagicLinkMutation.isPending ? 'Sending...' : 'Send Claim Portal Link'}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="default"
+                responsive="nowrap"
+                className="w-full justify-start border-2 border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
+              >
+                <Calendar className="w-4 h-4 mr-2 flex-shrink-0" />
+                Schedule Callback
+              </Button>
+              <Button 
+                variant="outline" 
+                size="default"
+                responsive="nowrap"
+                className="w-full justify-start border-2 border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
+              >
+                <CheckCircle2 className="w-4 h-4 mr-2 flex-shrink-0" />
+                Mark as Complete
+              </Button>
             </CardContent>
           </Card>
 
