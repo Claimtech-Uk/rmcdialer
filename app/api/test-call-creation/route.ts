@@ -92,7 +92,7 @@ export async function GET() {
       data: {
         userId: BigInt(5777),
         agentId: 1,
-        callQueueId: 'test-queue-' + Date.now(),
+        callQueueId: crypto.randomUUID(), // Generate proper UUID
         status: 'initiated',
         direction: 'outbound',
         startedAt: new Date(),

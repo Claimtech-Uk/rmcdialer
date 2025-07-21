@@ -74,7 +74,7 @@ export class CallService {
         data: {
           userId: BigInt(userId),
           agentId,
-          callQueueId: queueId || '', // Will be set when assigned from queue
+          callQueueId: queueId || crypto.randomUUID(), // Generate UUID for manual calls
           status: 'initiated',
           direction,
           startedAt: new Date(),
