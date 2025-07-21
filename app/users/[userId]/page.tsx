@@ -60,7 +60,7 @@ export default function UserDetailPage() {
     { enabled: !!userId && !isNaN(parseInt(userId)) }
   );
 
-  // Fetch SMS conversations for this user - TEMPORARILY DISABLED
+  // Fetch SMS conversations for this user - Re-enabled with optimized polling
   const { data: smsConversationsResponse, isLoading: smsLoading } = api.communications.sms.getConversations.useQuery(
     { 
       userId: parseInt(userId),
@@ -69,8 +69,9 @@ export default function UserDetailPage() {
       status: 'active'
     },
     { 
-      enabled: false, // TEMPORARILY DISABLED - was: !!userId && !isNaN(parseInt(userId))
-      refetchInterval: false
+      enabled: !!userId && !isNaN(parseInt(userId)),
+      refetchInterval: 30000, // Refresh every 30 seconds (much slower than before)
+      staleTime: 15000 // Consider data fresh for 15 seconds
     }
   );
 

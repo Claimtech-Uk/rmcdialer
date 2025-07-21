@@ -97,7 +97,7 @@ export function CallInterface({
     { enabled: !!userContext.userId }
   );
 
-  // Fetch SMS conversations - TEMPORARILY DISABLED
+  // Fetch SMS conversations - Re-enabled with optimized polling
   const { data: smsConversationsResponse, isLoading: smsLoading } = api.communications.sms.getConversations.useQuery(
     { 
       userId: userContext.userId,
@@ -106,8 +106,9 @@ export function CallInterface({
       status: 'active'
     },
     { 
-      enabled: false, // TEMPORARILY DISABLED - was: !!userContext.userId
-      refetchInterval: false
+      enabled: !!userContext.userId,
+      refetchInterval: 30000, // Refresh every 30 seconds
+      staleTime: 15000 // Consider data fresh for 15 seconds
     }
   );
 
