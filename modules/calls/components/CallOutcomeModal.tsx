@@ -15,6 +15,7 @@ import {
   Calendar,
   Mail,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   AlertCircle,
   FileText,
@@ -236,6 +237,36 @@ export function CallOutcomeModal({
                 <Calendar className="w-4 h-4" />
                 Schedule Callback
               </h3>
+              
+              {/* Quick Time Suggestions */}
+              <div className="mb-4">
+                <Label className="text-sm font-medium mb-2 block">Quick Schedule Options</Label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {[
+                    { label: 'Tomorrow 9AM', hours: 24 + 9 - new Date().getHours() },
+                    { label: 'Tomorrow 2PM', hours: 24 + 14 - new Date().getHours() },
+                    { label: 'Next Week', hours: 7 * 24 },
+                    { label: 'Custom', hours: 0 }
+                  ].map((option) => (
+                    <Button
+                      key={option.label}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (option.hours > 0) {
+                          const callbackTime = new Date();
+                          callbackTime.setHours(callbackTime.getHours() + option.hours);
+                          setCallbackDateTime(callbackTime.toISOString().slice(0, 16));
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="callback-datetime">Callback Date & Time *</Label>
@@ -250,13 +281,20 @@ export function CallOutcomeModal({
                 </div>
                 <div>
                   <Label htmlFor="callback-reason">Reason for Callback</Label>
-                  <Input
+                  <select
                     id="callback-reason"
                     value={callbackReason}
                     onChange={(e) => setCallbackReason(e.target.value)}
-                    placeholder="e.g., Customer preferred different time"
-                    className="mt-1"
-                  />
+                    className="mt-1 w-full p-2 border rounded-lg"
+                  >
+                    <option value="">Select reason...</option>
+                    <option value="Customer requested specific time">Customer requested specific time</option>
+                    <option value="Need to gather documents">Need to gather documents</option>
+                    <option value="Discuss with family/partner">Discuss with family/partner</option>
+                    <option value="Financial review needed">Financial review needed</option>
+                    <option value="Technical questions">Technical questions</option>
+                    <option value="Other">Other (specify in notes)</option>
+                  </select>
                 </div>
               </div>
             </div>
@@ -324,10 +362,39 @@ export function CallOutcomeModal({
             <Label htmlFor="notes" className="text-base font-semibold mb-3 block">
               Call Notes
             </Label>
+            
+            {/* Quick Note Templates */}
+            <div className="mb-3">
+              <Label className="text-sm font-medium mb-2 block">Quick Note Templates</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {[
+                  'Customer interested and will review documents',
+                  'Customer needs time to discuss with family',
+                  'Customer has questions about the process',
+                  'Customer confirmed contact details',
+                  'Customer requested callback for better time',
+                  'Customer not available, left voicemail'
+                ].map((template, index) => (
+                  <Button
+                    key={index}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newNote = notes ? `${notes}\n${template}` : template;
+                      setNotes(newNote.slice(0, 500));
+                    }}
+                    className="text-xs justify-start h-auto p-2 whitespace-normal"
+                  >
+                    + {template}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
             <textarea
               id="notes"
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => setNotes(e.target.value.slice(0, 500))}
               placeholder="Add detailed notes about the conversation, customer responses, concerns, or any other relevant information..."
               className="w-full p-3 border rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               rows={4}
@@ -337,21 +404,94 @@ export function CallOutcomeModal({
             </div>
           </div>
 
+          {/* Suggested Follow-up Actions */}
+          {selectedOutcome && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold mb-2 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                Suggested Next Steps
+              </h3>
+              <div className="space-y-2 text-sm">
+                {selectedOutcome === 'contacted' && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-3 h-3" />
+                      <span>Send claim portal magic link if not already sent</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-3 h-3" />
+                      <span>Review document requirements with customer</span>
+                    </div>
+                  </>
+                )}
+                {selectedOutcome === 'no_answer' && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-3 h-3" />
+                      <span>Consider sending follow-up SMS</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-3 h-3" />
+                      <span>Schedule retry call for later today</span>
+                    </div>
+                  </>
+                )}
+                {selectedOutcome === 'callback_requested' && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-3 h-3" />
+                      <span>Callback will be automatically scheduled</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-3 h-3" />
+                      <span>Send confirmation SMS with callback time</span>
+                    </div>
+                  </>
+                )}
+                {selectedOutcome === 'left_voicemail' && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-3 h-3" />
+                      <span>Send magic link via SMS as follow-up</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-3 h-3" />
+                      <span>Schedule follow-up call in 2-3 days</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Summary */}
           {selectedOutcomeData && (
             <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">Summary</h3>
+              <h3 className="font-semibold mb-2">Call Summary</h3>
               <div className="flex items-center gap-2 mb-2">
                 <div className={`w-3 h-3 rounded-full ${selectedOutcomeData.color}`} />
                 <span className="font-medium">{selectedOutcomeData.label}</span>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 mb-2">
                 {selectedOutcomeData.description}
+              </div>
+              <div className="text-sm">
+                <span className="font-medium">Call Duration:</span> {formatDuration(callDuration)}
               </div>
               {notes && (
                 <div className="mt-2 text-sm">
                   <span className="font-medium">Notes:</span> {notes.slice(0, 100)}
                   {notes.length > 100 && '...'}
+                </div>
+              )}
+              {(magicLinkSent || smsSent || documentsRequested.length > 0) && (
+                <div className="mt-2 text-sm">
+                  <span className="font-medium">Actions Taken:</span>
+                  <ul className="list-disc list-inside ml-2">
+                    {magicLinkSent && <li>Magic link sent</li>}
+                    {smsSent && <li>SMS follow-up sent</li>}
+                    {documentsRequested.length > 0 && <li>{documentsRequested.length} document(s) requested</li>}
+                  </ul>
                 </div>
               )}
             </div>

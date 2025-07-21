@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
 import { Button } from '@/modules/core/components/ui/button';
 import { Badge } from '@/modules/core/components/ui/badge';
+import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { 
   Phone, 
   PhoneOff, 
@@ -17,10 +18,16 @@ import {
   Building,
   AlertCircle,
   CheckCircle2,
-  Calendar
+  Calendar,
+  Send,
+  MessageSquare,
+  Activity
 } from 'lucide-react';
+import { api } from '@/lib/trpc/client';
+import { useToast } from '@/modules/core/hooks/use-toast';
 import { useTwilioVoice } from '../hooks/useTwilioVoice';
 import { CallOutcomeModal } from './CallOutcomeModal';
+import { CallHistoryTable } from './CallHistoryTable';
 import type { UserCallContext, CallOutcomeOptions } from '../types/call.types';
 
 interface CallInterfaceProps {
@@ -39,6 +46,58 @@ export function CallInterface({
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
   const [callSessionId, setCallSessionId] = useState<string>('');
   const [submittingOutcome, setSubmittingOutcome] = useState(false);
+  const { toast } = useToast();
+
+  // Fetch additional data that was on the user detail page
+  // Determine queue type for call context
+  const { data: queueType } = api.users.determineUserQueueType.useQuery(
+    { userId: userContext.userId },
+    { enabled: !!userContext.userId }
+  );
+
+  // Fetch call history
+  const { data: callHistoryResponse, isLoading: callHistoryLoading } = api.calls.getCallHistoryTable.useQuery(
+    { 
+      userId: userContext.userId,
+      limit: 20,
+      page: 1
+    },
+    { enabled: !!userContext.userId }
+  );
+
+  // Fetch SMS conversations
+  const { data: smsConversationsResponse, isLoading: smsLoading } = api.communications.sms.getConversations.useQuery(
+    { 
+      userId: userContext.userId,
+      limit: 10,
+      page: 1,
+      status: 'active'
+    },
+    { enabled: !!userContext.userId }
+  );
+
+  // Fetch magic link history
+  const { data: magicLinkHistoryResponse, isLoading: magicLinkLoading } = api.communications.magicLinks.getUserHistory.useQuery(
+    { userId: userContext.userId },
+    { enabled: !!userContext.userId }
+  );
+
+  // Magic link sending mutation
+  const sendMagicLinkMutation = api.communications.sendMagicLinkSMS.useMutation({
+    onSuccess: () => {
+      toast({ 
+        title: "Magic Link Sent!", 
+        description: "User will receive the claim portal link via SMS" 
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to Send Link",
+        description: error.message || "Could not send magic link",
+        variant: "destructive"
+      });
+    }
+  });
 
   const {
     isReady,
@@ -107,6 +166,14 @@ export function CallInterface({
     } finally {
       setSubmittingOutcome(false);
     }
+  };
+
+  const handleSendMagicLink = () => {
+    sendMagicLinkMutation.mutate({
+      userId: userContext.userId,
+      phoneNumber: userContext.phoneNumber,
+      linkType: 'claimPortal'
+    });
   };
 
   const formatDuration = (seconds: number): string => {
@@ -316,36 +383,58 @@ export function CallInterface({
                 </div>
               )}
 
-              {/* DTMF Keypad (if in call) */}
+              {/* DTMF Controls (if needed for transfers) */}
               {isInCall && (
-                <div>
-                  <h4 className="font-medium mb-2 text-center">Dial Pad</h4>
-                  <div className="grid grid-cols-3 gap-2">
-                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map((digit) => (
-                      <Button
-                        key={digit}
-                        variant="outline"
-                        onClick={() => sendDigits(digit)}
-                        className="aspect-square"
-                      >
-                        {digit}
-                      </Button>
-                    ))}
-                  </div>
+                <div className="text-center">
+                  <p className="text-sm text-gray-500 mb-2">DTMF available via sendDigits() if needed</p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Quick Actions */}
+          {/* Call Context & Reason */}
+          {queueType?.data?.queueType && (
+            <Card className="border-l-4 border-l-blue-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-blue-700">
+                  <AlertCircle className="w-5 h-5" />
+                  Call Reason
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    {queueType.data.queueType.replace('_', ' ').toUpperCase()}
+                  </Badge>
+                  <p className="text-sm text-gray-600">
+                    {queueType.data.queueType === 'unsigned_users' && 'User has not signed their claim documents yet'}
+                    {queueType.data.queueType === 'outstanding_requests' && 'User has outstanding document requirements'}
+                    {queueType.data.queueType === 'callback' && 'User has requested a callback'}
+                  </p>
+                  <div className="text-xs text-gray-500 mt-2">
+                    Queue determination: {queueType.data.eligible ? 'Eligible' : 'Not eligible'}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Send Magic Link */}
           <Card>
             <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Send className="w-5 h-5" />
+                Quick Actions
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start">
-                <FileText className="w-4 h-4 mr-2" />
-                View Documents
+              <Button 
+                onClick={handleSendMagicLink}
+                disabled={sendMagicLinkMutation.isPending}
+                className="w-full bg-green-600 hover:bg-green-700"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                {sendMagicLinkMutation.isPending ? 'Sending...' : 'Send Claim Portal Link'}
               </Button>
               <Button variant="outline" className="w-full justify-start">
                 <Calendar className="w-4 h-4 mr-2" />
@@ -358,24 +447,108 @@ export function CallInterface({
             </CardContent>
           </Card>
 
-          {/* Call History Preview */}
-          {userContext.callScore.lastCallAt && (
+          {/* Call History */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Phone className="w-5 h-5" />
+                Call History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {callHistoryLoading ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-sm text-gray-500 mt-2">Loading call history...</p>
+                </div>
+              ) : callHistoryResponse?.data?.calls?.length ? (
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {callHistoryResponse.data.calls.slice(0, 5).map((call, index) => (
+                    <div key={index} className="border-l-2 border-gray-200 pl-3 pb-2">
+                      <div className="flex justify-between items-start">
+                        <div className="text-sm">
+                          <div className="font-medium">{call.direction === 'outbound' ? 'Outbound' : 'Inbound'}</div>
+                          <div className="text-gray-500">{call.startedAt ? new Date(call.startedAt).toLocaleDateString() : 'Unknown date'}</div>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {call.status || 'unknown'}
+                        </Badge>
+                      </div>
+                      {call.lastOutcomeNotes && (
+                        <p className="text-xs text-gray-600 mt-1">{call.lastOutcomeNotes}</p>
+                      )}
+                    </div>
+                  ))}
+                  {callHistoryResponse.data.calls.length > 5 && (
+                    <p className="text-xs text-center text-gray-500 pt-2">
+                      ... and {callHistoryResponse.data.calls.length - 5} more calls
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">No call history found</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* SMS Conversations */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="w-5 h-5" />
+                SMS History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {smsLoading ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-sm text-gray-500 mt-2">Loading SMS history...</p>
+                </div>
+              ) : smsConversationsResponse?.data?.conversations?.length ? (
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {smsConversationsResponse.data.conversations.slice(0, 3).map((conversation, index) => (
+                    <div key={index} className="border border-gray-200 rounded p-2">
+                      <div className="flex justify-between items-start mb-1">
+                        <div className="text-xs text-gray-500">
+                          {conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleDateString() : 'Unknown date'}
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {conversation.messageCount} messages
+                        </Badge>
+                      </div>
+                      <p className="text-sm">{conversation.lastMessage || 'No preview available'}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">No SMS conversations found</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Magic Link History */}
+          {magicLinkHistoryResponse?.data?.links?.length && (
             <Card>
               <CardHeader>
-                <CardTitle>Previous Contact</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Send className="w-5 h-5" />
+                  Magic Links Sent
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-sm space-y-1">
-                  <div>
-                    <span className="font-medium">Last Call:</span>{' '}
-                    {new Date(userContext.callScore.lastCallAt).toLocaleDateString()}
-                  </div>
-                  {userContext.callScore.lastOutcome && (
-                    <div>
-                      <span className="font-medium">Outcome:</span>{' '}
-                      {userContext.callScore.lastOutcome.replace('_', ' ')}
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {magicLinkHistoryResponse.data.links.slice(0, 3).map((link, index) => (
+                    <div key={index} className="flex justify-between items-center text-sm">
+                      <div>
+                        <div className="font-medium">{link.linkType}</div>
+                        <div className="text-gray-500 text-xs">{new Date(link.sentAt).toLocaleDateString()}</div>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {link.status}
+                      </Badge>
                     </div>
-                  )}
+                  ))}
                 </div>
               </CardContent>
             </Card>
