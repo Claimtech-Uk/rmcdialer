@@ -20,6 +20,7 @@ import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { useToast } from '@/modules/core/hooks/use-toast';
 import { QueueType } from '@/modules/queue/types/queue.types';
 import { getFriendlyLenderName, getShortLenderName } from '@/lib/utils/lender-names';
+import { formatRelativeTime } from '@/lib/utils';
 // UserDetailsModal import removed - now navigating directly to user detail pages
 import InPageCallInterface from './InPageCallInterface';
 
@@ -364,7 +365,7 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                 <p className="text-sm text-slate-500 mt-1">All users have been processed</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {users.map((userContext: any) => {
                   // Extract user data from UserCallContext structure
                   const user = userContext.user || userContext;
@@ -373,81 +374,81 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                   return (
                   <div 
                     key={user.id} 
-                    className="flex items-center justify-between p-6 border border-slate-200 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300 transition-all duration-200 bg-white/60 backdrop-blur-sm shadow-sm hover:shadow-md"
+                    className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300 transition-all duration-200 bg-white/60 backdrop-blur-sm shadow-sm hover:shadow-md"
                   >
                     <div className="flex-1">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 ${config.gradient} rounded-full flex items-center justify-center shadow-md`}>
-                          <IconComponent className="w-6 h-6 text-white" />
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 ${config.gradient} rounded-full flex items-center justify-center shadow-md`}>
+                          <IconComponent className="w-5 h-5 text-white" />
                         </div>
-                        <div>
-                          <div className="font-semibold text-xl text-slate-900">
+                        <div className="flex-1">
+                          <div className="font-semibold text-lg text-slate-900 leading-tight">
                             {user.firstName} {user.lastName}
                           </div>
-                          <div className="text-slate-600 flex items-center gap-3 mt-1">
+                          <div className="text-slate-600 flex items-center gap-2 mt-1 text-sm">
                             <span>{user.phoneNumber}</span>
                             <span>•</span>
                             <span>{claims.length} claim(s)</span>
                             <span>•</span>
-                            <div className="flex items-center gap-1 text-xs">
-                              <Calendar className="w-3 h-3" />
-                              Created {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3 flex-shrink-0" />
+                              {formatRelativeTime(user.createdAt)}
+                            </div>
+                          </div>
+                          
+                          <div className="mt-2">
+                            <div className="text-xs text-slate-700 mb-2 font-medium">
+                              <strong>Missing:</strong> {config.missingText}
+                            </div>
+                            <div className="flex gap-1 flex-wrap">
+                              {queueType === 'outstanding_requests' ? (
+                                // Show requirements for requirements queue
+                                claims.flatMap((claim: any) => 
+                                  claim.requirements.map((req: any) => (
+                                    <Badge 
+                                      key={req.id} 
+                                      className="text-xs px-2 py-0.5 bg-red-100 text-red-700 border border-red-200 hover:bg-red-200 transition-colors"
+                                    >
+                                      {req.type.replace(/([A-Z])/g, ' $1').trim()}
+                                    </Badge>
+                                  ))
+                                )
+                              ) : (
+                                // Show claim types for unsigned users
+                                claims.map((claim: any) => (
+                                  <Badge 
+                                    key={claim.id} 
+                                    className="text-xs px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors"
+                                  >
+                                    {getFriendlyLenderName(claim.lender)}
+                                  </Badge>
+                                ))
+                              )}
                             </div>
                           </div>
                         </div>
                       </div>
-                      
-                      <div className="mt-4 ml-16">
-                        <div className="text-sm text-slate-700 mb-3 font-medium">
-                          <strong>Missing:</strong> {config.missingText}
-                        </div>
-                        <div className="flex gap-2 flex-wrap">
-                          {queueType === 'outstanding_requests' ? (
-                            // Show requirements for requirements queue
-                            claims.flatMap((claim: any) => 
-                              claim.requirements.map((req: any) => (
-                                <Badge 
-                                  key={req.id} 
-                                  className="text-xs px-3 py-1 bg-red-100 text-red-700 border border-red-200 hover:bg-red-200 transition-colors"
-                                >
-                                  {req.type.replace(/([A-Z])/g, ' $1').trim()}
-                                </Badge>
-                              ))
-                            )
-                          ) : (
-                            // Show claim types for unsigned users
-                            claims.map((claim: any) => (
-                              <Badge 
-                                key={claim.id} 
-                                className="text-xs px-3 py-1 bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors"
-                              >
-                                {getFriendlyLenderName(claim.lender)}
-                              </Badge>
-                            ))
-                          )}
-                        </div>
-                      </div>
                     </div>
                     
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-4">
                       {config.showRequirementsCount && (
                         <div 
-                          className="text-center text-sm bg-blue-50 px-4 py-3 rounded-lg border border-blue-200 min-w-[100px]"
+                          className="text-center text-sm bg-blue-50 px-3 py-2 rounded-lg border border-blue-200 min-w-[80px]"
                           onClick={(e) => e.stopPropagation()} // Prevent card click when clicking the badge
                         >
-                          <div className="text-blue-600 font-bold text-lg">
+                          <div className="text-blue-600 font-bold text-base">
                             {claims.reduce((acc: number, claim: any) => 
                               acc + claim.requirements.length, 0)}
                           </div>
-                          <div className="text-xs text-blue-500">Requirements</div>
+                          <div className="text-xs text-blue-500">Reqs</div>
                         </div>
                       )}
                       
-                      <div className="flex flex-col gap-3 min-w-[180px]">
+                      <div className="flex flex-col gap-2 min-w-[150px]">
                         <Button 
-                          size="default"
+                          size="sm"
                           variant="outline"
-                          className="w-full justify-start border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 h-12 px-4 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-md"
+                          className="w-full justify-start border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 px-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-md"
                           onClick={() => {
                             console.log('VIEW DETAILS CLICKED - FULL USER OBJECT:', userContext);
                             console.log('VIEW DETAILS CLICKED - USER ID:', user.id);
@@ -483,8 +484,8 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                         </Button>
                         
                         <Button 
-                          size="default"
-                          className="w-full justify-start bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg h-12 px-4 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0"
+                          size="sm"
+                          className="w-full justify-start bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg px-3 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0"
                           onClick={() => {
                             console.log('CALL NOW CLICKED - FULL USER OBJECT:', userContext);
                             console.log('CALL NOW CLICKED - USER ID:', user.id);
