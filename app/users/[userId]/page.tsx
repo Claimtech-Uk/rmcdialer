@@ -122,7 +122,7 @@ function ConversationDetail({ conversation }: { conversation: any }) {
                   <p className="text-sm leading-relaxed">{message.body}</p>
                   
                   {/* Message type indicator */}
-                  {(message.isAutoResponse || message.messageType) && (
+                  {(message.isAutoResponse || (message.messageType && message.messageType !== 'manual')) && (
                     <div className="mt-2">
                       <Badge 
                         variant="outline"
@@ -138,7 +138,9 @@ function ConversationDetail({ conversation }: { conversation: any }) {
                             ? '🔗 Magic Link' 
                             : message.messageType === 'callback_confirmation'
                               ? '📞 Callback'
-                              : '🏷️ Automated'
+                              : message.messageType === 'auto_response'
+                                ? '🤖 Auto Response'
+                                : '🏷️ Automated'
                         }
                       </Badge>
                     </div>
