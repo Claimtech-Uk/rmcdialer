@@ -335,26 +335,38 @@ export default function SMSPage() {
                 {/* Quick Filter Buttons */}
                 <div className="flex gap-2">
                   <Button
-                    variant={statusFilter === 'all' ? 'default' : 'outline'}
+                    variant="outline"
                     size="sm"
                     onClick={() => setStatusFilter('all')}
-                    className="flex-1 text-xs"
+                    className={`flex-1 text-xs transition-all duration-200 ${
+                      statusFilter === 'all' 
+                        ? 'bg-blue-500 text-white border-blue-500 hover:bg-blue-600 shadow-md' 
+                        : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                    }`}
                   >
                     All ({conversations.length})
                   </Button>
                   <Button
-                    variant={statusFilter === 'active' ? 'default' : 'outline'}
+                    variant="outline"
                     size="sm"
                     onClick={() => setStatusFilter('active')}
-                    className={`flex-1 text-xs ${statusFilter === 'active' ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'border-emerald-500 text-emerald-600 hover:bg-emerald-50'}`}
+                    className={`flex-1 text-xs transition-all duration-200 ${
+                      statusFilter === 'active' 
+                        ? 'bg-emerald-500 text-white border-emerald-500 hover:bg-emerald-600 shadow-md' 
+                        : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'
+                    }`}
                   >
                     Active ({activeConversationsCount})
                   </Button>
                   <Button
-                    variant={statusFilter === 'closed' ? 'default' : 'outline'}
+                    variant="outline"
                     size="sm"
                     onClick={() => setStatusFilter('closed')}
-                    className="flex-1 text-xs"
+                    className={`flex-1 text-xs transition-all duration-200 ${
+                      statusFilter === 'closed' 
+                        ? 'bg-slate-500 text-white border-slate-500 hover:bg-slate-600 shadow-md' 
+                        : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                    }`}
                   >
                     Closed ({conversations.filter(c => c.status === 'closed').length})
                   </Button>
