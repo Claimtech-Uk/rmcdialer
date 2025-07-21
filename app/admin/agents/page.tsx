@@ -53,8 +53,8 @@ export default function AgentManagementPage() {
   const { toast } = useToast();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('');
-  const [activeFilter, setActiveFilter] = useState<string>('');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [activeFilter, setActiveFilter] = useState<string>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
@@ -87,8 +87,8 @@ export default function AgentManagementPage() {
   const { data: agentsData, isLoading, refetch } = api.auth.getAllAgents.useQuery({
     page: currentPage,
     limit: 20,
-    ...(roleFilter && { role: roleFilter as any }),
-    ...(activeFilter !== '' && { isActive: activeFilter === 'true' }),
+    ...(roleFilter !== 'all' && { role: roleFilter as any }),
+    ...(activeFilter !== 'all' && { isActive: activeFilter === 'true' }),
     ...(searchTerm && { search: searchTerm })
   });
 
@@ -375,7 +375,7 @@ export default function AgentManagementPage() {
                 <SelectValue placeholder="All Roles" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Roles</SelectItem>
+                <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="agent">Agent</SelectItem>
                 <SelectItem value="supervisor">Supervisor</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
@@ -387,7 +387,7 @@ export default function AgentManagementPage() {
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Status</SelectItem>
+                <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="true">Active</SelectItem>
                 <SelectItem value="false">Inactive</SelectItem>
               </SelectContent>
