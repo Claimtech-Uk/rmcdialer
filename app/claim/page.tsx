@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { RefreshCw, Shield, CheckCircle, AlertCircle } from 'lucide-react';
-import { MagicLinkService } from '@/modules/communications/services/magic-link.service';
-import { logger } from '@/modules/core';
 
 export default function ClaimPage() {
   const router = useRouter();
@@ -27,25 +25,29 @@ export default function ClaimPage() {
         setStatus('validating');
         setMessage('Validating your secure link...');
 
-        // Create magic link service
-        const magicLinkService = new MagicLinkService({
-          authService: null as any,
-          userService: null as any
+        // Validate the magic link via API
+        const response = await fetch('/api/validate-magic-link', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            token,
+            userAgent: navigator.userAgent,
+          }),
         });
 
-        // Validate the magic link
-        const validation = await magicLinkService.validateMagicLink(token);
+        const result = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to validate link');
+        }
+
+        const validation = result.data;
         
         if (validation.isValid) {
           setStatus('success');
           setMessage('Link validated successfully! Redirecting you...');
-          
-          // Track the access
-          await magicLinkService.trackAccess(
-            token,
-            navigator.userAgent,
-            // IP address would be available server-side
-          );
 
           // Redirect based on link type
           let redirectUrl = '/dashboard'; // Default fallback
@@ -93,7 +95,7 @@ export default function ClaimPage() {
         }
 
       } catch (error) {
-        logger.error('Magic link validation error:', error);
+        console.error('Magic link validation error:', error);
         setStatus('error');
         setMessage('Unable to validate your link. Please try again or request a new link.');
       }
