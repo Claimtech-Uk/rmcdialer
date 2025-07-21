@@ -600,7 +600,7 @@ export default function SMSPage() {
                           <p className="text-sm leading-relaxed">{message.body}</p>
                           
                           {/* Message type indicator */}
-                          {(message.isAutoResponse || message.messageType) && (
+                          {(message.isAutoResponse || (message.messageType && message.messageType !== 'manual')) && (
                             <div className="mt-2">
                               <Badge 
                                 variant="outline"
@@ -616,7 +616,9 @@ export default function SMSPage() {
                                     ? '🔗 Magic Link' 
                                     : message.messageType === 'callback_confirmation'
                                       ? '📞 Callback'
-                                      : '🏷️ Automated'
+                                      : message.messageType === 'auto_response'
+                                        ? '🤖 Auto Response'
+                                        : '🏷️ Automated'
                                 }
                               </Badge>
                             </div>
@@ -653,13 +655,43 @@ export default function SMSPage() {
                   
                   {/* Message Input */}
                   <div className="flex gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    <Input
-                      placeholder="Type a message..."
+                    <textarea
+                      placeholder="Type a message... (Enter to send, Cmd+Enter for new line)"
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          if (e.metaKey || e.ctrlKey) {
+                            // Cmd+Enter or Ctrl+Enter: insert new line
+                            e.preventDefault();
+                            const target = e.target as HTMLTextAreaElement;
+                            const start = target.selectionStart;
+                            const end = target.selectionEnd;
+                            const newValue = newMessage.substring(0, start) + '\n' + newMessage.substring(end);
+                            setNewMessage(newValue);
+                            // Set cursor position after the new line
+                            setTimeout(() => {
+                              target.selectionStart = target.selectionEnd = start + 1;
+                            }, 0);
+                          } else {
+                            // Regular Enter: send message
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }
+                      }}
                       disabled={sendMessageMutation.isPending}
-                      className="border-0 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      rows={1}
+                      className="resize-none border-0 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent rounded-lg px-3 py-2 text-sm min-h-[40px] max-h-32 overflow-y-auto"
+                      style={{ 
+                        height: 'auto',
+                        minHeight: '40px'
+                      }}
+                      onInput={(e) => {
+                        const target = e.target as HTMLTextAreaElement;
+                        target.style.height = 'auto';
+                        target.style.height = Math.min(target.scrollHeight, 128) + 'px';
+                      }}
                     />
                     <Button
                       onClick={handleEnhanceMessage}

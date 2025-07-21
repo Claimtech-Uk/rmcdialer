@@ -188,7 +188,7 @@ export default function Sidebar({ children }: SidebarProps) {
                         : 'text-gray-700 hover:bg-gray-100'
                       }
                     `}>
-                      <item.icon className="w-4 h-4 mr-3 flex-shrink-0" />
+                      <item.icon className="w-4 h-4 mr-2 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="truncate">{item.name}</div>
                       </div>
@@ -217,7 +217,7 @@ export default function Sidebar({ children }: SidebarProps) {
                           : 'text-gray-700 hover:bg-gray-100'
                         }
                       `}>
-                        <item.icon className="w-4 h-4 mr-3 flex-shrink-0" />
+                        <item.icon className="w-4 h-4 mr-2 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="truncate">{item.name}</div>
                         </div>
@@ -256,7 +256,7 @@ export default function Sidebar({ children }: SidebarProps) {
         <div className="space-y-1">
           <Link href="/profile">
             <Button variant="ghost" size="sm" className="w-full justify-start">
-              <User className="w-4 h-4 mr-2" />
+              <User className="w-4 h-4 mr-2 flex-shrink-0" />
               Profile
             </Button>
           </Link>
@@ -266,7 +266,7 @@ export default function Sidebar({ children }: SidebarProps) {
             disabled={logoutMutation.isPending}
             className="flex items-center w-full px-3 py-2 text-sm text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
           >
-            <LogOut className="w-4 h-4 mr-2" />
+            <LogOut className="w-4 h-4 mr-2 flex-shrink-0" />
             {logoutMutation.isPending ? 'Signing out...' : 'Sign out'}
           </button>
         </div>

@@ -356,7 +356,7 @@ export default function UserDetailPage() {
               onClick={() => router.back()}
               className="border-2 border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
             >
-              <ArrowLeft className="w-4 h-4 mr-2" />
+              <ArrowLeft className="w-4 h-4 mr-2 flex-shrink-0" />
               Back
             </Button>
             <div>

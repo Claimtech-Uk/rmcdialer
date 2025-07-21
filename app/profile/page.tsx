@@ -74,7 +74,7 @@ function StatusControls({ currentStatus, onStatusChange, isUpdating }: StatusCon
                 onClick={() => !isUpdating && onStatusChange(option.value)}
                 disabled={isUpdating}
               >
-                <Icon className={`w-5 h-5 mr-3 flex-shrink-0 ${isSelected ? 'text-white' : option.color}`} />
+                                      <Icon className={`w-4 h-4 mr-2 flex-shrink-0 ${isSelected ? 'text-white' : option.color}`} />
                 <span className="flex-1 text-left">{option.label}</span>
                 {isSelected && <Badge className="ml-auto bg-white/20 text-white border-white/30">Current</Badge>}
               </Button>
