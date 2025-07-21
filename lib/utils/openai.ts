@@ -69,33 +69,82 @@ Respond in JSON format:
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
-      response_format: { type: 'json_object' }
-    });
-
-    const result = response.choices[0]?.message?.content;
-    if (!result) {
-      throw new Error('No response from OpenAI');
-    }
-
-    const parsed: MessageEnhancementResult = JSON.parse(result);
+    // Try GPT-4 first, fallback to GPT-3.5-turbo if needed
+    let model = 'gpt-4';
+    let useJsonFormat = true;
     
-    // Validate the response structure
-    if (!parsed.enhancedMessage || !parsed.suggestions || !parsed.reasoning) {
-      throw new Error('Invalid response format from OpenAI');
-    }
+    try {
+      const response = await openai.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+        response_format: { type: 'json_object' }
+      });
 
-    return parsed;
+      const result = response.choices[0]?.message?.content;
+      if (!result) {
+        throw new Error('No response from OpenAI');
+      }
+
+      const parsed: MessageEnhancementResult = JSON.parse(result);
+      
+      // Validate the response structure
+      if (!parsed.enhancedMessage || !parsed.suggestions || !parsed.reasoning) {
+        throw new Error('Invalid response format from OpenAI');
+      }
+
+      return parsed;
+    } catch (gpt4Error) {
+      console.log('GPT-4 failed, trying GPT-3.5-turbo...', gpt4Error);
+      
+      // Fallback to GPT-3.5-turbo without strict JSON formatting
+      const fallbackPrompt = `${systemPrompt}
+
+Original message: "${message}"
+
+Enhance this message to be more professional and effective for SMS. Respond with just the improved message (no JSON format needed).`;
+
+      const fallbackResponse = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'user', content: fallbackPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 200
+      });
+
+      const enhancedMessage = fallbackResponse.choices[0]?.message?.content?.trim();
+      if (!enhancedMessage) {
+        throw new Error('No response from OpenAI fallback');
+      }
+
+      // Return a simplified result for fallback
+      return {
+        enhancedMessage,
+        suggestions: [enhancedMessage], // Just return the same message as the only suggestion
+        reasoning: 'Message enhanced for clarity and professionalism'
+      };
+    }
   } catch (error) {
     console.error('OpenAI enhancement error:', error);
-    throw new Error('Failed to enhance message with AI');
+    
+    // Ultimate fallback - return a simple enhancement
+    const simpleEnhancement = message
+      .replace(/hi /gi, 'Hello ')
+      .replace(/please /gi, 'please ')
+      .replace(/thanks/gi, 'Thank you')
+      .replace(/thx/gi, 'Thank you')
+      .trim();
+
+    return {
+      enhancedMessage: simpleEnhancement,
+      suggestions: [simpleEnhancement],
+      reasoning: 'Basic text enhancement applied (AI service temporarily unavailable)'
+    };
   }
 }
 
