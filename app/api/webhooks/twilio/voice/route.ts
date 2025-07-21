@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { prisma } from '@/lib/db';
+import { replicaDb } from '@/lib/mysql';
 
 // Twilio Voice Webhook Schema
 const TwilioVoiceWebhookSchema = z.object({
@@ -48,7 +50,12 @@ export async function POST(request: NextRequest) {
       console.log(`🎯 Target from parameters: ${targetPhoneNumber}`);
     }
 
-    // Return TwiML response
+    // Handle inbound calls differently - create call sessions and route properly
+    if (direction === 'inbound' && !isVoiceSDKCall) {
+      return await handleInboundCall(callSid, from, to, webhookData);
+    }
+
+    // Return TwiML response for outbound calls
     const twimlResponse = generateTwiMLResponse(direction, webhookData, Boolean(isVoiceSDKCall), targetPhoneNumber);
     
     return new NextResponse(twimlResponse, {
@@ -77,7 +84,190 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Generate appropriate TwiML response
+// Handle inbound calls with proper call session creation and agent routing
+async function handleInboundCall(callSid: string, from: string, to: string, webhookData: any): Promise<NextResponse> {
+  try {
+    console.log(`📞 Processing inbound call from ${from} to ${to}`);
+    
+    // 1. Try to find user by phone number in MySQL replica
+    let userId: number | null = null;
+    try {
+      const user = await replicaDb.user.findFirst({
+        where: {
+          phone_number: from,
+          is_enabled: true
+        }
+      });
+      userId = user ? Number(user.id) : null;
+      console.log(`👤 Caller lookup: ${userId ? `Found user ${userId}` : 'Unknown caller'}`);
+    } catch (error) {
+      console.warn(`⚠️ Could not lookup caller ${from}:`, error);
+    }
+
+    // 2. Find available agents
+    const availableAgents = await prisma.agentSession.findMany({
+      where: {
+        status: 'available',
+        logoutAt: null
+      },
+      include: {
+        agent: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
+      },
+      orderBy: {
+        lastActivity: 'asc' // Least recently active agent first
+      },
+      take: 1
+    });
+
+    const availableAgent = availableAgents[0];
+    console.log(`👥 Available agents: ${availableAgents.length}`);
+
+    // 3. Create call session regardless of agent availability
+    let callSession;
+    try {
+      // Ensure we have a UserCallScore for database constraints
+      if (userId) {
+        await prisma.userCallScore.upsert({
+          where: { userId: BigInt(userId) },
+          update: {},
+          create: {
+            userId: BigInt(userId),
+            currentScore: 50,
+            totalAttempts: 0,
+            successfulCalls: 0
+          }
+        });
+
+        // Create a call queue entry for inbound calls
+        const inboundQueue = await prisma.callQueue.create({
+          data: {
+            userId: BigInt(userId),
+            queueType: 'inbound_call',
+            priorityScore: 0,
+            status: availableAgent ? 'assigned' : 'pending',
+            queueReason: 'Inbound call received',
+            assignedToAgentId: availableAgent?.agentId || null,
+            assignedAt: availableAgent ? new Date() : null,
+          }
+        });
+
+        // Create call session
+        callSession = await prisma.callSession.create({
+          data: {
+            userId: BigInt(userId),
+            agentId: availableAgent?.agentId || 1, // Default to agent 1 for missed calls
+            callQueueId: inboundQueue.id,
+            twilioCallSid: callSid,
+            status: availableAgent ? 'ringing' : 'missed_call',
+            direction: 'inbound',
+            startedAt: new Date(),
+            callSource: 'inbound'
+          }
+        });
+      } else {
+        // For unknown callers, create a basic session without queue
+        callSession = await prisma.callSession.create({
+          data: {
+            userId: BigInt(999999), // Special ID for unknown callers
+            agentId: availableAgent?.agentId || 1,
+            callQueueId: crypto.randomUUID(), // Temporary - will be handled differently later
+            twilioCallSid: callSid,
+            status: availableAgent ? 'ringing' : 'missed_call',
+            direction: 'inbound',
+            startedAt: new Date(),
+            callSource: 'inbound',
+            userClaimsContext: JSON.stringify({
+              unknownCaller: true,
+              phoneNumber: from
+            })
+          }
+        });
+      }
+
+      console.log(`📝 Created call session ${callSession.id} for inbound call`);
+    } catch (error) {
+      console.error(`❌ Failed to create call session:`, error);
+      // Continue without call session - at least handle the call
+    }
+
+    // 4. Generate appropriate TwiML response
+    if (availableAgent) {
+      console.log(`✅ Routing call to agent ${availableAgent.agent.firstName} ${availableAgent.agent.lastName}`);
+      
+      // Update agent session to on_call
+      await prisma.agentSession.update({
+        where: { id: availableAgent.id },
+        data: {
+          status: 'on_call',
+          currentCallSessionId: callSession?.id,
+          lastActivity: new Date()
+        }
+      });
+
+      // Route to available agent using client name
+      const agentClientName = `agent-${availableAgent.agentId}`;
+      
+      return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Hello! Please hold while we connect you to an available agent.</Say>
+    <Dial timeout="30" 
+          record="record-from-answer" 
+          recordingStatusCallback="https://rmcdialer.vercel.app/api/webhooks/twilio/recording"
+          statusCallback="https://rmcdialer.vercel.app/api/webhooks/twilio/call-status"
+          statusCallbackEvent="initiated ringing answered completed"
+          statusCallbackMethod="POST">
+        <Client>${agentClientName}</Client>
+    </Dial>
+    <Say voice="alice">The agent is not available right now. We'll have someone call you back shortly. Thank you!</Say>
+    <Hangup/>
+</Response>`, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/xml',
+        },
+      });
+    } else {
+      console.log(`❌ No available agents - marking as missed call`);
+      
+      // Handle missed call
+      return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Thank you for calling R M C Dialler. Unfortunately, all our agents are currently busy or offline.</Say>
+    <Pause length="1"/>
+    <Say voice="alice">Your call is important to us and we will call you back as soon as possible. Thank you for your patience.</Say>
+    <Hangup/>
+</Response>`, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/xml',
+        },
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error handling inbound call:', error);
+    
+    return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">I'm sorry, there was an error processing your call. Please try again later.</Say>
+    <Hangup/>
+</Response>`, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/xml',
+      },
+    });
+  }
+}
+
+// Generate appropriate TwiML response for outbound calls
 function generateTwiMLResponse(direction: string | undefined, data: any, isVoiceSDKCall: boolean, targetPhoneNumber: string | null): string {
   const userId = data.userId;
   const userName = data.userName;
@@ -123,22 +313,6 @@ function generateTwiMLResponse(direction: string | undefined, data: any, isVoice
     <Hangup/>
 </Response>`;
     }
-  }
-
-  // Handle regular inbound calls (not from Voice SDK)
-  if (direction === 'inbound') {
-    console.log(`📞 Regular inbound call`);
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="alice">Hello, you've reached R M C Dialler. This is an automated system for financial claims support.</Say>
-    <Pause length="1"/>
-    <Say voice="alice">If you're expecting a call from one of our agents, please hold while we connect you.</Say>
-    <Dial timeout="30">
-        <Queue>support-queue</Queue>
-    </Dial>
-    <Say voice="alice">All agents are currently busy. Please try again later or visit our website. Goodbye.</Say>
-    <Hangup/>
-</Response>`;
   }
 
   // Fallback - no target number provided
