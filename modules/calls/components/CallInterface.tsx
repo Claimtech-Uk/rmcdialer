@@ -215,8 +215,16 @@ export function CallInterface({
     if (isInCall && !wasInCall) {
       console.log('📞 Call started - setting wasInCall to true');
       setWasInCall(true);
-      // Generate session ID when call starts
-      setCallSessionId(`session_${Date.now()}`);
+      
+      // If we don't have a session ID yet, this is a manual call - create a session
+      if (!callSessionId) {
+        console.log('🆔 Manual call detected - creating call session in database');
+        initiateCallMutation.mutate({
+          userId: userContext.userId,
+          direction: 'outbound',
+          phoneNumber: userContext.phoneNumber
+        });
+      }
     }
     
     // Detect when call ends (was in call, now disconnected OR not in call anymore)
@@ -278,6 +286,11 @@ export function CallInterface({
   const handleOutcomeSubmit = async (outcome: CallOutcomeOptions) => {
     setSubmittingOutcome(true);
     try {
+      // Validate session ID
+      if (!callSessionId || callSessionId === '') {
+        throw new Error('No valid call session ID available');
+      }
+
       console.log('📋 Recording call outcome in database:', {
         sessionId: callSessionId,
         outcome,
