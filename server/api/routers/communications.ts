@@ -353,13 +353,15 @@ export const communicationsRouter = createTRPCRouter({
       callSessionId: z.string().optional()
     }))
     .mutation(async ({ input, ctx }) => {
-      return await smsService.sendMagicLink(
-        input.userId,
-        input.phoneNumber,
-        input.linkType,
-        ctx.agent.id,
-        input.callSessionId
-      );
+      // Use the proper magic link service instead of SMS service placeholder
+      return await magicLinkService.sendMagicLink({
+        userId: input.userId,
+        linkType: input.linkType,
+        deliveryMethod: 'sms',
+        phoneNumber: input.phoneNumber,
+        agentId: ctx.agent.id,
+        callSessionId: input.callSessionId
+      });
     }),
 
   /**
