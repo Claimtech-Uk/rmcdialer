@@ -6,8 +6,7 @@ import { AuthService } from '@/modules/auth/services/auth.service'
 // Initialize the auth service with proper dependencies
 const authService = new AuthService({
   prisma,
-  logger,
-  redis: null // Using null for testing without Redis
+  logger
 })
 
 export async function GET(request: NextRequest) {
@@ -106,7 +105,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
       overall: Object.values(tests).every(t => t.status === 'success' || t.status === 'skipped') ? 'PASS' : 'FAIL',
       tests,
-      recommendations: []
+      recommendations: [] as string[]
     }
 
     // Add recommendations based on test results
