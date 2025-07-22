@@ -6,7 +6,7 @@ import { Badge } from '@/modules/core/components/ui/badge'
 import { Button } from '@/modules/core/components/ui/button'
 import { Input } from '@/modules/core/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/modules/core/components/ui/select'
-import { Clock, Phone, MessageSquare, Calendar, User, Filter, ChevronDown, ChevronUp, RefreshCw, Play, Pause, Volume2, Download } from 'lucide-react'
+import { Clock, Phone, MessageSquare, Calendar, User, Filter, ChevronDown, ChevronUp, RefreshCw, Play, Pause, Volume2, Download, PhoneIncoming, PhoneOutgoing, PhoneMissed } from 'lucide-react'
 import { format, subDays, isAfter, isBefore } from 'date-fns'
 import { api } from '@/lib/trpc/client'
 import type { CallHistoryEntry } from '../types/call.types'
@@ -361,7 +361,46 @@ export function CallHistoryTable({
       return formatDuration(durationSeconds) + ' (est.)'
     }
     
-    return 'No talk time'
+    // Don't show anything if no duration - we'll handle this with call status instead
+    return null
+  }
+
+  // Helper function to determine if call was missed
+  const isMissedCall = (call: CallHistoryEntry) => {
+    return (
+      (!call.durationSeconds || call.durationSeconds === 0) &&
+      (call.outcome === 'no_answer' || call.status === 'no_answer')
+    )
+  }
+
+  // Helper function to get direction icon and label
+  const getDirectionInfo = (call: CallHistoryEntry) => {
+    const missed = isMissedCall(call)
+    
+    if (missed) {
+      return {
+        icon: PhoneMissed,
+        label: 'Missed',
+        color: 'text-red-500',
+        bgColor: 'bg-red-50'
+      }
+    }
+    
+    if (call.direction === 'inbound') {
+      return {
+        icon: PhoneIncoming,
+        label: 'Inbound',
+        color: 'text-blue-500',
+        bgColor: 'bg-blue-50'
+      }
+    }
+    
+    return {
+      icon: PhoneOutgoing,
+      label: 'Outbound', 
+      color: 'text-green-500',
+      bgColor: 'bg-green-50'
+    }
   }
 
   const getOutcomeDisplay = (outcome: string) => {
@@ -559,12 +598,26 @@ export function CallHistoryTable({
                         <div className="text-sm font-medium">
                           {formatDuration(call.durationSeconds)}
                         </div>
-                        <div className="text-xs text-gray-500">
-                          {formatTalkTime(call.talkTimeSeconds, call.durationSeconds)}
-                        </div>
+                        {formatTalkTime(call.talkTimeSeconds, call.durationSeconds) && (
+                          <div className="text-xs text-gray-500">
+                            {formatTalkTime(call.talkTimeSeconds, call.durationSeconds)}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-col items-end gap-1">
+                        {/* Direction Indicator */}
+                        {(() => {
+                          const directionInfo = getDirectionInfo(call)
+                          const DirectionIcon = directionInfo.icon
+                          return (
+                            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${directionInfo.bgColor} ${directionInfo.color}`}>
+                              <DirectionIcon className="h-3 w-3" />
+                              <span>{directionInfo.label}</span>
+                            </div>
+                          )
+                        })()}
+                        
                         <Badge className={OUTCOME_COLORS[call.outcome] || 'bg-gray-100 text-gray-800'}>
                           {getOutcomeDisplay(call.outcome)}
                         </Badge>

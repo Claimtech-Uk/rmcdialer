@@ -1,18 +1,65 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 Debug: Checking agent device registration status...');
-    
-    // Get all active agent sessions
+    console.log('🔍 Debug: Agent Device Status Check...');
+
+    const results = {
+      timestamp: new Date().toISOString(),
+      system: {
+        globalTwilioEnabled: process.env.NEXT_PUBLIC_ENABLE_GLOBAL_TWILIO !== 'false',
+        twilioCredentials: {
+          accountSid: !!process.env.TWILIO_ACCOUNT_SID,
+          apiKey: !!process.env.TWILIO_API_KEY,
+          apiSecret: !!process.env.TWILIO_API_SECRET,
+          twimlAppSid: !!process.env.TWILIO_TWIML_APP_SID,
+        },
+        isDevelopment: process.env.NODE_ENV === 'development'
+      },
+      agents: [] as any[],
+      agentSessions: [] as any[],
+      recommendations: [] as string[]
+    };
+
+    // Check Twilio credentials first
+    const missingCredentials = [];
+    if (!process.env.TWILIO_ACCOUNT_SID) missingCredentials.push('TWILIO_ACCOUNT_SID');
+    if (!process.env.TWILIO_API_KEY) missingCredentials.push('TWILIO_API_KEY');
+    if (!process.env.TWILIO_API_SECRET) missingCredentials.push('TWILIO_API_SECRET');
+    if (!process.env.TWILIO_TWIML_APP_SID) missingCredentials.push('TWILIO_TWIML_APP_SID');
+
+    if (missingCredentials.length > 0) {
+      results.recommendations.push(`❌ CRITICAL: Missing Twilio credentials: ${missingCredentials.join(', ')}`);
+      results.recommendations.push('Agents will not be able to register devices without proper Twilio configuration');
+    }
+
+    // Get all active agents
+    const agents = await prisma.agent.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        isActive: true,
+        role: true,
+        createdAt: true
+      },
+      orderBy: { id: 'asc' }
+    });
+
+    results.agents = agents.map(agent => ({
+      ...agent,
+      expectedTwilioIdentity: `agent_${agent.id}`,
+      createdAt: agent.createdAt.toISOString()
+    }));
+
+    // Get all current agent sessions
     const agentSessions = await prisma.agentSession.findMany({
       where: {
-        status: 'available',
-        logoutAt: null,
-        agent: {
-          isActive: true
-        }
+        logoutAt: null, // Only active sessions
+        agent: { isActive: true }
       },
       include: {
         agent: {
@@ -25,89 +72,72 @@ export async function GET() {
           }
         }
       },
-      orderBy: {
-        lastActivity: 'desc'
-      }
+      orderBy: { lastActivity: 'desc' }
     });
 
-    console.log(`📊 Found ${agentSessions.length} available agent sessions`);
+    results.agentSessions = agentSessions.map(session => ({
+      sessionId: session.id,
+      agentId: session.agentId,
+      status: session.status,
+      loginAt: session.loginAt?.toISOString(),
+      lastActivity: session.lastActivity?.toISOString(),
+      currentCallSessionId: session.currentCallSessionId,
+      agent: session.agent,
+      expectedTwilioIdentity: `agent_${session.agentId}`,
+      isAvailableForCalls: session.status === 'available' && !session.logoutAt
+    }));
 
-    const deviceStatus = agentSessions.map(session => {
-      const expectedClientName = `agent_${session.agentId}`;
-      
-      return {
-        agentSessionId: session.id,
-        agentId: session.agentId,
-        agentName: `${session.agent.firstName} ${session.agent.lastName}`,
-        email: session.agent.email,
-        status: session.status,
-        expectedTwilioClientIdentity: expectedClientName,
-        loginAt: session.loginAt,
-        lastActivity: session.lastActivity,
-        deviceRegistrationNotes: [
-          'Device should be registered with Twilio as Client identity',
-          'Device should be online and listening for incoming calls',
-          'Check browser console for Twilio Device connection status',
-          'Verify ACCESS_TOKEN is correctly generated for this agent'
-        ]
-      };
-    });
+    // Analysis and recommendations
+    if (agents.length === 0) {
+      results.recommendations.push('❌ No active agents found in database');
+    } else {
+      results.recommendations.push(`✅ Found ${agents.length} active agent(s)`);
+    }
 
-    // Also check for any potential agent ID mismatches
-    const allAgents = await prisma.agent.findMany({
-      where: { isActive: true },
-      select: { id: true, firstName: true, lastName: true, email: true }
-    });
+    const availableAgents = agentSessions.filter(s => s.status === 'available');
+    if (availableAgents.length === 0) {
+      results.recommendations.push('⚠️ CRITICAL: No agents with status "available" - this is why inbound calls fail');
+      results.recommendations.push('Solution: Agents need to log into the system and ensure their status is set to "available"');
+    } else {
+      results.recommendations.push(`✅ Found ${availableAgents.length} available agent(s) ready for calls`);
+    }
 
-    const agentIdAnalysis = {
-      totalActiveAgents: allAgents.length,
-      totalAvailableSessions: agentSessions.length,
-      agentIdRange: allAgents.length > 0 ? {
-        min: Math.min(...allAgents.map(a => a.id)),
-        max: Math.max(...allAgents.map(a => a.id)),
-        ids: allAgents.map(a => a.id).sort()
-      } : null,
-      sessionAgentIds: agentSessions.map(s => s.agentId).sort()
-    };
+    if (agentSessions.length === 0) {
+      results.recommendations.push('❌ No active agent sessions found - agents are not logged into the system');
+      results.recommendations.push('Solution: Agents need to log into the web interface');
+    } else {
+      results.recommendations.push(`ℹ️ Found ${agentSessions.length} active agent session(s)`);
+    }
 
-    console.log('📊 Agent device status check completed');
+    // Check for common issues
+    if (!results.system.globalTwilioEnabled) {
+      results.recommendations.push('❌ CRITICAL: Global Twilio feature is DISABLED');
+      results.recommendations.push('Solution: Set NEXT_PUBLIC_ENABLE_GLOBAL_TWILIO=true or remove the environment variable');
+    }
 
+    if (missingCredentials.length === 0 && results.system.isDevelopment) {
+      results.recommendations.push('⚠️ Running in development mode - device registration should work normally');
+    }
+
+    // Provide next steps
+    results.recommendations.push('');
+    results.recommendations.push('🔧 NEXT DEBUGGING STEPS:');
+    results.recommendations.push('1. Have an agent log into the web interface');
+    results.recommendations.push('2. Agent should navigate to any page (like /queue/unsigned)');
+    results.recommendations.push('3. Check browser console for Twilio device messages:');
+    results.recommendations.push('   - Look for: "🎧 Initializing Global Twilio for agent: [email]"');
+    results.recommendations.push('   - Look for: "📱 Twilio Device ready for calls"');
+    results.recommendations.push('   - Look for any error messages');
+    results.recommendations.push('4. Test access token generation with: POST /api/twilio/access-token');
+    results.recommendations.push('5. Verify microphone permissions are granted in browser');
+
+    return NextResponse.json(results, { status: 200 });
+
+  } catch (error: any) {
+    console.error('❌ Agent device status debug error:', error);
     return NextResponse.json({
-      success: true,
-      timestamp: new Date().toISOString(),
-      availableAgentDevices: deviceStatus,
-      agentIdAnalysis,
-      debugNotes: {
-        expectedFlow: [
-          '1. Agent logs into web interface',
-          '2. Agent status set to "available" in database',
-          '3. Twilio Device registers with identity "agent_{agentId}"',
-          '4. Device stays connected and listening',
-          '5. Incoming call dials <Client>agent_{agentId}</Client>',
-          '6. If device online → rings, if offline → no-answer/failed'
-        ],
-        commonIssues: [
-          'Device not registered (user never opened softphone)',
-          'Device registered but went offline (browser closed/tab inactive)',
-          'Wrong agent ID format (underscore vs dash)',
-          'Network connectivity issues',
-          'Twilio client token expired'
-        ],
-        verificationSteps: [
-          'Check browser console for "Twilio.Device ready" message',
-          'Verify agent status is "available" in database',
-          'Confirm agent ID matches between session and device registration',
-          'Test device registration with simple test call'
-        ]
-      }
-    });
-
-  } catch (error) {
-    console.error('❌ Agent device status debug failed:', error);
-    return NextResponse.json({
-      success: false,
       error: 'Failed to check agent device status',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      details: error.message,
       timestamp: new Date().toISOString()
     }, { status: 500 });
   }

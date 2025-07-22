@@ -91,6 +91,37 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
       
       console.log('🎧 Creating new TwilioVoiceService instance');
       
+      // CRITICAL FIX: Handle AudioContext user gesture requirement
+      const handleAudioContextGesture = () => {
+        console.log('🎵 Attempting to resume AudioContext for user gesture compliance');
+        // Try to resume any suspended AudioContext instances
+        if (window.AudioContext || (window as any).webkitAudioContext) {
+          try {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            if (audioCtx.state === 'suspended') {
+              audioCtx.resume().then(() => {
+                console.log('✅ AudioContext resumed successfully');
+              }).catch((err) => {
+                console.warn('⚠️ Failed to resume AudioContext:', err);
+              });
+            }
+          } catch (err) {
+            console.warn('⚠️ AudioContext handling failed:', err);
+          }
+        }
+      };
+
+      // Add one-time click listener to handle user gesture requirement
+      const clickHandler = () => {
+        handleAudioContextGesture();
+        document.removeEventListener('click', clickHandler);
+        document.removeEventListener('touchstart', clickHandler);
+      };
+      
+      // Listen for user gestures to unlock audio
+      document.addEventListener('click', clickHandler, { once: true });
+      document.addEventListener('touchstart', clickHandler, { once: true });
+      
       // Use performance monitoring for Twilio initialization
       const service = performanceService.measurePerformance('twilio_initialization', () => {
         return new TwilioVoiceService({
@@ -103,6 +134,9 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
             setIsReady(true);
             setIsConnecting(false);
             console.log('✅ Global Twilio ready for calls');
+            
+            // ADDITIONAL FIX: Try to unlock audio when device is ready
+            handleAudioContextGesture();
           } else if (status.state === 'error') {
             setError(status.error || 'Unknown error');
             setIsConnecting(false);
@@ -116,6 +150,8 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
             setIncomingCall(null);
           } else if (status.state === 'incoming') {
             console.log('📞 Global incoming call detected');
+            // CRITICAL: Try to unlock audio for incoming calls
+            handleAudioContextGesture();
           }
         },
         onError: (err: Error) => {
@@ -133,6 +169,9 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
         onIncomingCall: (callInfo: IncomingCallInfo) => {
           console.log('📞 Global incoming call received:', callInfo);
           setIncomingCall(callInfo);
+          
+          // CRITICAL: Unlock audio immediately for incoming calls
+          handleAudioContextGesture();
           
           // Show incoming call notification
           toast({

@@ -221,6 +221,7 @@ export interface CallHistoryEntry {
   userPhone?: string;
   agentId: number;
   agentName?: string;
+  direction?: 'inbound' | 'outbound'; // Added direction field
   startedAt: Date;
   endedAt?: Date;
   durationSeconds?: number;

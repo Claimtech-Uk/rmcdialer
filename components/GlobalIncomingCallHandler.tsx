@@ -3,13 +3,16 @@
 import { useGlobalTwilio } from '@/lib/providers/GlobalTwilioProvider';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
-import { Phone, PhoneOff, User, Clock } from 'lucide-react';
+import { Phone, PhoneOff, User, Clock, Volume2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { isFeatureEnabled } from '@/lib/config/features';
+import { useToast } from '@/modules/core/hooks/use-toast';
 
 export function GlobalIncomingCallHandler() {
   const { incomingCall, acceptIncomingCall, rejectIncomingCall, isEnabled } = useGlobalTwilio();
   const [callDuration, setCallDuration] = useState(0);
+  const [showAudioUnlockHelper, setShowAudioUnlockHelper] = useState(false);
+  const { toast } = useToast();
 
   // Auto-increment call duration timer
   useEffect(() => {
@@ -25,6 +28,60 @@ export function GlobalIncomingCallHandler() {
 
     return () => clearInterval(interval);
   }, [incomingCall]);
+  
+  // CRITICAL: Check for AudioContext issues when calls arrive
+  useEffect(() => {
+    if (incomingCall) {
+      // Check if AudioContext might be suspended
+      if (typeof window !== 'undefined' && (window.AudioContext || (window as any).webkitAudioContext)) {
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          const testContext = new AudioContextClass();
+          
+          if (testContext.state === 'suspended') {
+            console.log('⚠️ AudioContext suspended during incoming call - showing unlock helper');
+            setShowAudioUnlockHelper(true);
+            
+            toast({
+              title: "🎵 Audio Unlock Required",
+              description: "Click anywhere to enable call audio. This is required by your browser.",
+            });
+          }
+          
+          testContext.close();
+        } catch (err) {
+          console.warn('AudioContext check failed:', err);
+        }
+      }
+    } else {
+      setShowAudioUnlockHelper(false);
+    }
+  }, [incomingCall, toast]);
+
+  // Handle user click to unlock audio
+  const handleAudioUnlock = () => {
+    if (typeof window !== 'undefined' && (window.AudioContext || (window as any).webkitAudioContext)) {
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const testContext = new AudioContextClass();
+        
+        if (testContext.state === 'suspended') {
+          testContext.resume().then(() => {
+            console.log('✅ AudioContext unlocked by user click');
+            setShowAudioUnlockHelper(false);
+            toast({
+              title: "🎵 Audio Unlocked",
+              description: "Call audio is now enabled!",
+            });
+          });
+        }
+        
+        testContext.close();
+      } catch (err) {
+        console.warn('Failed to unlock audio:', err);
+      }
+    }
+  };
 
   // Don't render if feature is disabled or no incoming call
   if (!isEnabled || !incomingCall) return null;

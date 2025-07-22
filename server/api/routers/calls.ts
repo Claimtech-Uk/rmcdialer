@@ -696,6 +696,7 @@ export const callsRouter = createTRPCRouter({
             userPhone: user?.phone_number || 'Unknown',
             agentId: session.agentId,
             agentName: `${session.agent.firstName} ${session.agent.lastName}`,
+            direction: session.direction, // Added direction field
             startedAt: session.startedAt,
             endedAt: session.endedAt,
             durationSeconds: session.durationSeconds,

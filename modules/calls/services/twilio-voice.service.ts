@@ -54,6 +54,9 @@ export class TwilioVoiceService {
 
       // Request microphone permissions first
       await this.requestMicrophonePermission();
+      
+      // CRITICAL FIX: Handle AudioContext user gesture requirement for Chrome autoplay policy
+      this.handleAudioContextGesture();
 
       // Get access token from our API
       const tokenResponse = await fetch('/api/twilio/access-token', {
@@ -180,10 +183,13 @@ export class TwilioVoiceService {
       });
     });
 
-    // Incoming call event - UPDATED to accept calls
+    // Incoming call event - UPDATED to accept calls with AudioContext handling
     this.device.on('incoming', (call: Call) => {
       console.log('📞 Incoming call received from:', call.parameters?.From || 'Unknown');
       console.log('📞 Call SID:', call.parameters?.CallSid);
+      
+      // CRITICAL: Handle AudioContext for incoming calls
+      this.handleAudioContextGesture();
       
       this.currentIncomingCall = call;
       
@@ -456,5 +462,98 @@ export class TwilioVoiceService {
     if (error?.message) return error.message;
     if (error?.description) return error.description;
     return 'Unknown error occurred';
+  }
+
+  // CRITICAL FIX: Handle AudioContext user gesture requirement
+  private handleAudioContextGesture(): void {
+    try {
+      console.log('🎵 Aggressively handling AudioContext user gesture compliance...');
+      
+      if (typeof window === 'undefined') return;
+      
+      // Patch AudioContext constructor to automatically resume when created
+      const originalAudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!originalAudioContext) return;
+
+      // Track if we've already patched
+      if ((window as any).__twilioAudioContextPatched) {
+        console.log('🎵 AudioContext already patched for auto-resume');
+        return;
+      }
+
+      // Create a global gesture unlock function
+      const unlockAudio = () => {
+        console.log('🎵 Unlocking all AudioContext instances...');
+        
+        // Find and resume all existing AudioContext instances
+        if ((window as any).__audioContextInstances) {
+          (window as any).__audioContextInstances.forEach((ctx: AudioContext) => {
+            if (ctx.state === 'suspended') {
+              ctx.resume().then(() => {
+                console.log('✅ Resumed suspended AudioContext');
+              }).catch(console.warn);
+            }
+          });
+        }
+      };
+
+      // Patch AudioContext constructor to track instances and auto-resume
+      const PatchedAudioContext = class extends originalAudioContext {
+        constructor(...args: any[]) {
+          super(...args);
+          
+          // Track this instance
+          if (!(window as any).__audioContextInstances) {
+            (window as any).__audioContextInstances = [];
+          }
+          (window as any).__audioContextInstances.push(this);
+          
+          // Auto-resume if suspended
+          if (this.state === 'suspended') {
+            console.log('🎵 New AudioContext created in suspended state, setting up auto-resume...');
+            
+            // Try immediate resume (might work if user already interacted)
+            this.resume().catch(() => {
+              console.log('🎵 Immediate resume failed, waiting for user gesture...');
+            });
+            
+            // Set up gesture listeners for this specific context
+            const resumeThis = () => {
+              if (this.state === 'suspended') {
+                this.resume().then(() => {
+                  console.log('✅ AudioContext resumed after user gesture');
+                }).catch(console.warn);
+              }
+            };
+            
+            const gestureHandler = () => {
+              resumeThis();
+              unlockAudio(); // Also unlock any other instances
+            };
+            
+            // Add multiple gesture listeners
+            document.addEventListener('click', gestureHandler, { once: true });
+            document.addEventListener('touchstart', gestureHandler, { once: true });
+            document.addEventListener('keydown', gestureHandler, { once: true });
+            document.addEventListener('pointerdown', gestureHandler, { once: true });
+          }
+        }
+      };
+
+      // Replace the global AudioContext
+      window.AudioContext = PatchedAudioContext as any;
+      if ((window as any).webkitAudioContext) {
+        (window as any).webkitAudioContext = PatchedAudioContext;
+      }
+      
+      (window as any).__twilioAudioContextPatched = true;
+      console.log('✅ AudioContext patched for automatic user gesture handling');
+
+      // Add immediate unlock attempt
+      unlockAudio();
+      
+    } catch (error) {
+      console.warn('⚠️ AudioContext gesture handling failed:', error);
+    }
   }
 } 

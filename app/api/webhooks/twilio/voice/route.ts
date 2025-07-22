@@ -218,9 +218,25 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             knownCaller: true,
             callerName: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
             phoneNumber: from,
-            claims: callerInfo.claims,
-            requirements: callerInfo.requirements,
-            callHistory: callerInfo.callHistory
+            claims: callerInfo.claims.map((claim: any) => ({
+              ...claim,
+              id: Number(claim.id),
+              user_id: Number(claim.user_id),
+              created_at: claim.created_at?.toISOString(),
+              updated_at: claim.updated_at?.toISOString()
+            })),
+            requirements: callerInfo.requirements.map((req: any) => ({
+              ...req,
+              id: Number(req.id),
+              claim_id: req.claim_id ? Number(req.claim_id) : null,
+              created_at: req.created_at?.toISOString()
+            })),
+            callHistory: callerInfo.callHistory.map((call: any) => ({
+              ...call,
+              id: call.id,
+              userId: Number(call.userId),
+              startedAt: call.startedAt?.toISOString()
+            }))
           })
         };
 
@@ -496,7 +512,10 @@ async function performEnhancedCallerLookup(phoneNumber: string): Promise<any> {
     const priorityScore = calculateCallerPriority(claims, requirements, callHistory);
 
     return {
-      user,
+      user: {
+        ...user,
+        id: Number(user.id) // Convert BigInt to number for JSON serialization
+      },
       claims,
       requirements,
       callHistory,
