@@ -1,5 +1,9 @@
 import { Device, Call } from '@twilio/voice-sdk';
 
+// PERFORMANCE: Global singleton to prevent multiple Device instances
+let globalTwilioDevice: Device | null = null;
+let globalDeviceAgent: string | null = null;
+
 export interface TwilioVoiceConfig {
   agentId: string | number;
   agentEmail: string;
@@ -72,11 +76,49 @@ export class TwilioVoiceService {
       this.accessToken = accessToken;
       console.log(`🔑 Access token received (${development ? 'development' : 'production'} mode)`);
 
+      // PERFORMANCE: Don't create Device if we're in development mode with missing credentials
+      if (development) {
+        console.log('🔧 Development mode detected - Twilio Device creation skipped to prevent audio file spam');
+        this.config.onCallStatusChange?.({
+          state: 'error',
+          error: 'Development Mode: Missing Twilio credentials. Please configure TWILIO_ACCOUNT_SID, TWILIO_API_KEY, TWILIO_API_SECRET, and TWILIO_TWIML_APP_SID'
+        });
+        return;
+      }
+
+      // PERFORMANCE: Use global singleton to prevent multiple Device instances and audio file spam
+      const currentAgentKey = `${this.config.agentId}_${this.config.agentEmail}`;
+      
+      if (globalTwilioDevice && globalDeviceAgent === currentAgentKey) {
+        console.log('🔄 Reusing existing global Twilio Device for same agent');
+        this.device = globalTwilioDevice;
+        // Set up event handlers for this service instance
+        this.setupDeviceEventHandlers();
+        // Check if already registered
+        if (this.device.state === 'registered') {
+          this.isInitialized = true;
+          this.config.onCallStatusChange?.({ state: 'ready' });
+        }
+        return;
+      }
+
+      // Destroy any existing global device for different agent
+      if (globalTwilioDevice && globalDeviceAgent !== currentAgentKey) {
+        console.log('🧹 Destroying existing global Twilio Device for different agent');
+        globalTwilioDevice.destroy();
+        globalTwilioDevice = null;
+        globalDeviceAgent = null;
+      }
+
       // Initialize Twilio Device using npm package with minimal configuration for performance
       this.device = new Device(accessToken, {
         // PERFORMANCE: Reduce debug logging in production to reduce network overhead
         logLevel: development ? 'debug' : 'warn'
       });
+
+      // Store as global singleton
+      globalTwilioDevice = this.device;
+      globalDeviceAgent = currentAgentKey;
 
       // Set up device event handlers
       this.setupDeviceEventHandlers();
@@ -393,11 +435,15 @@ export class TwilioVoiceService {
       this.currentIncomingCall = null;
     }
 
-    if (this.device) {
+    // PERFORMANCE: Only destroy global device if this service owns it
+    if (this.device && this.device === globalTwilioDevice) {
+      console.log('🧹 Destroying global Twilio Device');
       this.device.destroy();
-      this.device = null;
+      globalTwilioDevice = null;
+      globalDeviceAgent = null;
     }
-
+    
+    this.device = null;
     this.isInitialized = false;
     console.log('🧹 Twilio Voice Service destroyed');
   }

@@ -56,8 +56,15 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
 
   // Initialize Twilio Voice SDK
   const initialize = useCallback(async () => {
+    // PERFORMANCE: Prevent multiple simultaneous initialization attempts
     if (twilioServiceRef.current?.isReady()) {
       console.log('🎧 Twilio Voice already initialized');
+      return;
+    }
+    
+    // PERFORMANCE: Prevent re-initialization if already connecting
+    if (isConnecting) {
+      console.log('🎧 Twilio Voice already connecting, skipping...');
       return;
     }
     
@@ -79,6 +86,12 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
           } else if (status.state === 'error') {
             setError(status.error || 'Unknown error');
             setIsConnecting(false);
+            
+            // PERFORMANCE: Don't retry if credentials are missing
+            if (status.error?.includes('Development Mode') || status.error?.includes('credentials')) {
+              console.log('🔧 Twilio credentials missing - stopping auto-retry to prevent audio file spam');
+              return;
+            }
           } else if (status.state === 'connected') {
             // Start duration timer
             startDurationTimer();
@@ -96,6 +109,7 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
         onError: (err) => {
           console.error('❌ Twilio Voice error:', err);
           setError(err.message);
+          setIsConnecting(false);
         },
         onIncomingCall: (callInfo) => {
           console.log('📞 Incoming call info received:', callInfo);
@@ -109,10 +123,16 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
       
     } catch (err) {
       console.error('❌ Failed to initialize Twilio Voice:', err);
-      setError(err instanceof Error ? err.message : 'Failed to initialize');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to initialize';
+      setError(errorMessage);
       setIsConnecting(false);
+      
+      // PERFORMANCE: Don't retry if it's a credential issue
+      if (errorMessage.includes('access token') || errorMessage.includes('credentials') || errorMessage.includes('401')) {
+        console.log('🔧 Stopping Twilio initialization due to credential issues - prevents audio file spam');
+      }
     }
-  }, [agentId, agentEmail, onIncomingCall]);
+  }, [agentId, agentEmail, onIncomingCall, isConnecting]);
   
   // Make a call
   const makeCall = useCallback(async (params: OutgoingCallParams) => {
@@ -222,7 +242,7 @@ export function useTwilioVoice(options: UseTwilioVoiceOptions): UseTwilioVoiceRe
         twilioServiceRef.current = null;
       }
     };
-  }, [autoConnect, initialize, stopDurationTimer]);
+  }, [autoConnect]); // FIXED: Removed unstable dependencies to prevent re-initialization loops
 
   return {
     // State
