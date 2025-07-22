@@ -67,6 +67,16 @@ export async function POST(request: NextRequest) {
       }
       
       console.log(`✅ Recording completed for call ${CallSid}: ${RecordingUrl}`);
+      
+      // 🚀 FUTURE: Download and store recording in cloud storage
+      // This will eliminate the need for Twilio authentication entirely
+      try {
+        await downloadAndStoreRecording(callSession.id, RecordingUrl, RecordingSid);
+      } catch (storageError) {
+        console.warn('⚠️ Failed to store recording in cloud storage:', storageError);
+        // Don't fail the webhook - recording URL is still available
+      }
+      
     } else if (RecordingStatus === 'failed') {
       console.error(`❌ Recording failed for call ${CallSid}`);
     }
@@ -96,12 +106,138 @@ export async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * Download recording from Twilio and store in cloud storage
+ * This eliminates the need for browser-based Twilio authentication
+ */
+async function downloadAndStoreRecording(sessionId: string, recordingUrl: string, recordingSid: string): Promise<string | null> {
+  try {
+    console.log(`📥 Downloading recording ${recordingSid} for storage...`);
+    
+    // Download from Twilio with server-side authentication
+    const authHeader = `Basic ${Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64')}`;
+    
+    const response = await fetch(recordingUrl, {
+      headers: {
+        'Authorization': authHeader,
+        'Accept': 'audio/wav,audio/mpeg,audio/*,*/*'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to download recording: ${response.status}`);
+    }
+
+    const audioBuffer = await response.arrayBuffer();
+    const contentType = response.headers.get('content-type') || 'audio/wav';
+    
+    console.log(`📁 Downloaded ${audioBuffer.byteLength} bytes of ${contentType}`);
+
+    // 🚀 TODO: Upload to your preferred cloud storage
+    // Examples below for different storage providers:
+    
+    // 1. AWS S3 Example:
+    // const s3Key = `call-recordings/${sessionId}/${recordingSid}.wav`;
+    // await uploadToS3(audioBuffer, s3Key, contentType);
+    
+    // 2. Vercel Blob Example:
+    // const blobUrl = await uploadToVercelBlob(audioBuffer, `${sessionId}-${recordingSid}.wav`);
+    
+    // 3. Cloudflare R2 Example:
+    // const r2Url = await uploadToR2(audioBuffer, `recordings/${sessionId}.wav`);
+    
+    // For now, we'll prepare the infrastructure but use the proxied approach
+    console.log(`✅ Recording infrastructure ready for ${sessionId}`);
+    
+    // TODO: Update call session with cloud storage URL when implemented
+    // await prisma.callSession.update({
+    //   where: { id: sessionId },
+    //   data: { cloudStorageUrl: cloudUrl }
+    // });
+    
+    return null; // Will return cloud URL when implemented
+    
+  } catch (error: any) {
+    console.error(`❌ Failed to download/store recording ${recordingSid}:`, error);
+    throw error;
+  }
+}
+
+// 🚀 FUTURE IMPLEMENTATION EXAMPLES:
+
+/*
+// AWS S3 Upload Function
+async function uploadToS3(audioBuffer: ArrayBuffer, key: string, contentType: string): Promise<string> {
+  const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+  
+  const s3Client = new S3Client({
+    region: process.env.AWS_REGION || 'us-east-1',
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    },
+  });
+
+  const command = new PutObjectCommand({
+    Bucket: process.env.S3_RECORDINGS_BUCKET!,
+    Key: key,
+    Body: new Uint8Array(audioBuffer),
+    ContentType: contentType,
+    ServerSideEncryption: 'AES256',
+  });
+
+  await s3Client.send(command);
+  return `https://${process.env.S3_RECORDINGS_BUCKET}.s3.amazonaws.com/${key}`;
+}
+
+// Vercel Blob Upload Function  
+async function uploadToVercelBlob(audioBuffer: ArrayBuffer, filename: string): Promise<string> {
+  const { put } = await import('@vercel/blob');
+  
+  const blob = await put(filename, new Uint8Array(audioBuffer), {
+    access: 'private', // Secure access
+    contentType: 'audio/wav',
+  });
+  
+  return blob.url;
+}
+
+// Cloudflare R2 Upload Function
+async function uploadToR2(audioBuffer: ArrayBuffer, key: string): Promise<string> {
+  const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+  
+  const r2Client = new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    },
+  });
+
+  const command = new PutObjectCommand({
+    Bucket: process.env.R2_RECORDINGS_BUCKET!,
+    Key: key,
+    Body: new Uint8Array(audioBuffer),
+    ContentType: 'audio/wav',
+  });
+
+  await r2Client.send(command);
+  return `https://${process.env.R2_RECORDINGS_BUCKET}.${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com/${key}`;
+}
+*/
+
 // Handle GET requests for webhook verification/testing
 export async function GET() {
   return NextResponse.json({
     success: true,
     message: 'Twilio Recording webhook endpoint ready',
     timestamp: new Date(),
-    endpoint: 'POST /api/webhooks/twilio/recording'
+    endpoint: 'POST /api/webhooks/twilio/recording',
+    features: {
+      proxyDownloads: true,
+      cloudStorageReady: false, // Set to true when cloud storage is implemented
+      supportedProviders: ['AWS S3', 'Vercel Blob', 'Cloudflare R2']
+    }
   });
 } 

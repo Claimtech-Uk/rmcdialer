@@ -70,7 +70,7 @@ export function CallHistoryTable({
     )
 
     const handlePlayRecording = async () => {
-      if (!recordingData?.hasRecording || !recordingData.recording?.url) {
+      if (!recordingData?.hasRecording || !recordingData.recording?.streamUrl) {
         return
       }
 
@@ -87,8 +87,8 @@ export function CallHistoryTable({
           audioElement.pause()
         }
 
-        // Play this recording
-        const audio = new Audio(recordingData.recording.url)
+        // Play this recording using our proxied stream URL
+        const audio = new Audio(recordingData.recording.streamUrl)
         audio.onended = () => setPlayingRecording(null)
         audio.onerror = () => {
           console.error('Failed to play recording')
@@ -108,8 +108,9 @@ export function CallHistoryTable({
     }
 
     const handleDownloadRecording = () => {
-      if (recordingData?.hasRecording && recordingData.recording?.url) {
-        window.open(recordingData.recording.url, '_blank')
+      if (recordingData?.hasRecording && recordingData.recording?.downloadUrl) {
+        // Use our proxied download URL - this will trigger a file download
+        window.open(recordingData.recording.downloadUrl, '_blank')
       }
     }
 

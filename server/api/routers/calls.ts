@@ -430,13 +430,14 @@ export const callsRouter = createTRPCRouter({
         return {
           hasRecording: !!session.recordingUrl && session.recordingStatus === 'completed',
           recording: session.recordingUrl && session.recordingStatus === 'completed' ? {
-            url: session.recordingUrl,
-            sid: session.recordingSid,
+            sessionId: session.id,
+            twilioCallSid: session.twilioCallSid,
+            recordingSid: session.recordingSid,
             status: session.recordingStatus,
             durationSeconds: session.recordingDurationSeconds,
+            streamUrl: `/api/calls/${input.sessionId}/recording?action=stream`,
+            downloadUrl: `/api/calls/${input.sessionId}/recording?action=download`,
             callInfo: {
-              sessionId: session.id,
-              twilioCallSid: session.twilioCallSid,
               direction: session.direction,
               startedAt: session.startedAt,
               endedAt: session.endedAt,
