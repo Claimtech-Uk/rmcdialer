@@ -596,10 +596,8 @@ export function CallInterface({
         outcomeNotes: outcome.outcomeNotes || '',
         magicLinkSent: outcome.magicLinkSent || false,
         smsSent: outcome.smsSent || false,
-        callbackScheduled: outcome.callbackScheduled || false,
         documentsRequested: outcome.documentsRequested,
-        nextCallDelayHours: outcome.nextCallDelayHours,
-        followUpRequired: outcome.followUpRequired || false
+        nextCallDelayHours: outcome.nextCallDelayHours
       });
       
       setShowOutcomeModal(false);
