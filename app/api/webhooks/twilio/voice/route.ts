@@ -434,6 +434,11 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             <Parameter name="callSessionId" value="${callSession?.id || 'unknown'}" />
             ${callerInfo?.user ? `<Parameter name="callerName" value="${callerInfo.user.first_name} ${callerInfo.user.last_name}" />` : ''}
             ${callerInfo?.user ? `<Parameter name="userId" value="${callerInfo.user.id}" />` : ''}
+            ${callerInfo?.user ? `<Parameter name="userFirstName" value="${callerInfo.user.first_name || ''}" />` : ''}
+            ${callerInfo?.user ? `<Parameter name="userLastName" value="${callerInfo.user.last_name || ''}" />` : ''}
+            ${callerInfo?.user ? `<Parameter name="userEmail" value="${callerInfo.user.email_address || ''}" />` : ''}
+            <Parameter name="userClaims" value="${JSON.stringify(callerInfo?.claims || []).replace(/"/g, '&quot;')}" />
+            <Parameter name="userRequirements" value="${JSON.stringify(callerInfo?.requirements || []).replace(/"/g, '&quot;')}" />
         </Client>
     </Dial>
     <Say voice="alice">I'm sorry, the agent couldn't be reached right now. We'll have someone call you back as soon as possible. Thank you!</Say>

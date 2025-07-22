@@ -28,6 +28,12 @@ export interface IncomingCallInfo {
   callSessionId?: string;
   callerName?: string;
   userId?: string;
+  // Direct user data from TwiML parameters
+  userFirstName?: string;
+  userLastName?: string;
+  userEmail?: string;
+  userClaims?: string; // JSON string
+  userRequirements?: string; // JSON string
 }
 
 export interface OutgoingCallParams {
@@ -222,6 +228,11 @@ export class TwilioVoiceService {
       const callSessionId = call.parameters?.callSessionId;
       const callerName = call.parameters?.callerName;
       const userId = call.parameters?.userId;
+      const userFirstName = call.parameters?.userFirstName;
+      const userLastName = call.parameters?.userLastName;
+      const userEmail = call.parameters?.userEmail;
+      const userClaims = call.parameters?.userClaims;
+      const userRequirements = call.parameters?.userRequirements;
       
       console.log('🎯 Extracted call parameters:', {
         originalCallSid,
@@ -229,7 +240,12 @@ export class TwilioVoiceService {
         callerPhone,
         callSessionId,
         callerName,
-        userId
+        userId,
+        userFirstName,
+        userLastName,
+        userEmail,
+        hasClaims: !!userClaims,
+        hasRequirements: !!userRequirements
       });
       
       // Notify the UI about the incoming call with enriched information
@@ -242,7 +258,13 @@ export class TwilioVoiceService {
         // Add custom call context
         callSessionId,
         callerName,
-        userId
+        userId,
+        // Direct user data from TwiML parameters - bypasses database lookups!
+        userFirstName,
+        userLastName,
+        userEmail,
+        userClaims,
+        userRequirements
       };
       
       this.config.onIncomingCall?.(incomingCallInfo);

@@ -63,23 +63,66 @@ export function InboundCallInterface({
     }
   }, [incomingCall]);
 
-  // Lookup caller information - prioritize session UUID lookup (most efficient!)
+  // Extract caller information directly from TwiML parameters (bypasses database!)
   useEffect(() => {
-    if (incomingCall && !callerInfo && !isLoadingCaller) {
-      console.log('🔍 Starting caller lookup...');
+    if (incomingCall && !callerInfo) {
+      console.log('🎯 Extracting caller info directly from TwiML parameters...');
       
-      // PRIORITY 1: Use call session UUID from TwiML parameters (most reliable)
-      if (incomingCall.callSessionId && incomingCall.callSessionId !== 'unknown') {
-        console.log('✅ Using call session UUID:', incomingCall.callSessionId);
-        lookupCallerFromSessionId(incomingCall.callSessionId);
+      // PRIORITY 1: Use direct user data from TwiML parameters (most reliable!)
+      if (incomingCall.userFirstName || incomingCall.userLastName) {
+        console.log('✅ Using direct user data from TwiML parameters');
+        
+        // Parse claims and requirements from JSON strings
+        let claims = [];
+        let requirements = [];
+        
+        try {
+          if (incomingCall.userClaims) {
+            claims = JSON.parse(incomingCall.userClaims.replace(/&quot;/g, '"'));
+          }
+        } catch (e) {
+          console.warn('❌ Error parsing userClaims:', e);
+        }
+        
+        try {
+          if (incomingCall.userRequirements) {
+            requirements = JSON.parse(incomingCall.userRequirements.replace(/&quot;/g, '"'));
+          }
+        } catch (e) {
+          console.warn('❌ Error parsing userRequirements:', e);
+        }
+        
+        setCallerInfo({
+          id: incomingCall.userId ? Number(incomingCall.userId) : 0,
+          first_name: incomingCall.userFirstName || '',
+          last_name: incomingCall.userLastName || '',
+          phone_number: incomingCall.from,
+          email_address: incomingCall.userEmail || undefined,
+          claims: claims,
+          requirements: requirements
+        });
+        
+        console.log('🎉 Successfully extracted caller info:', {
+          name: `${incomingCall.userFirstName} ${incomingCall.userLastName}`,
+          phone: incomingCall.from,
+          email: incomingCall.userEmail,
+          claimsCount: claims.length,
+          requirementsCount: requirements.length
+        });
       } else {
-        console.log('❌ No valid call session UUID, falling back to Call SID lookup');
-        console.log('Received callSessionId:', incomingCall.callSessionId);
-        // Fallback to Call SID lookup (should not be needed after agent ID fix)
-        lookupCallerFromSession(incomingCall.callSid);
+        console.log('❌ No direct user data available, falling back to database lookup');
+        
+        // Fallback to database lookup only if direct data is not available
+        if (incomingCall.callSessionId && incomingCall.callSessionId !== 'unknown') {
+          setIsLoadingCaller(true);
+          lookupCallerFromSessionId(incomingCall.callSessionId);
+        } else if (incomingCall.callSid) {
+          setIsLoadingCaller(true);
+          lookupCallerFromSession(incomingCall.callSid);
+        }
       }
     }
-  }, [incomingCall, callerInfo, isLoadingCaller]);
+  }, [incomingCall, callerInfo]);
 
     // Direct session lookup by session ID (most efficient!)
     const lookupCallerFromSessionId = async (sessionId: string) => {
