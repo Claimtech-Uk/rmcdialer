@@ -20,9 +20,7 @@ export async function POST() {
         status: { in: ['pending', 'assigned'] }
       },
       data: {
-        status: 'cancelled',
-        cancelledAt: new Date(),
-        cancelReason: 'Cleanup: Multiple conflicting queue entries detected'
+        status: 'cancelled'
       }
     });
 
