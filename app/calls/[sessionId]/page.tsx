@@ -10,6 +10,161 @@ import { callSessionValidation } from '@/lib/validation/call-session';
 import React from 'react';
 import { useToast } from '@/modules/core/hooks/use-toast';
 
+// New Call Interface Component for handling fresh calls
+function NewCallInterface({ 
+  userId, 
+  phoneNumber, 
+  userName 
+}: { 
+  userId: number; 
+  phoneNumber: string; 
+  userName: string; 
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+
+  // Fetch user context for the call
+  const { data: userContextResponse, isLoading: userContextLoading, error: userContextError } = api.users.getUserContext.useQuery(
+    { userId },
+    { 
+      enabled: !!userId,
+      retry: 1,
+      staleTime: 2 * 60 * 1000,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false
+    }
+  );
+
+  // Transform user context from users module format to calls module format
+  const userContextData = userContextResponse?.data ? {
+    userId: userContextResponse.data.user.id,
+    firstName: userContextResponse.data.user.firstName || 'Unknown',
+    lastName: userContextResponse.data.user.lastName || 'User',
+    email: userContextResponse.data.user.email || '',
+    phoneNumber: userContextResponse.data.user.phoneNumber || '',
+    address: userContextResponse.data.user.address ? {
+      fullAddress: userContextResponse.data.user.address.fullAddress || '',
+      postCode: userContextResponse.data.user.address.postCode || '',
+      county: userContextResponse.data.user.address.county || ''
+    } : undefined,
+    claims: userContextResponse.data.claims.map(claim => ({
+      id: claim.id,
+      type: claim.type || 'unknown',
+      status: claim.status || 'unknown',
+      lender: claim.lender || 'unknown',
+      value: 0, // Not available in users module data
+      requirements: claim.requirements.map(req => ({
+        id: req.id,
+        type: req.type || 'unknown',
+        status: req.status || 'unknown',
+        reason: req.reason || 'No reason provided'
+      }))
+    })),
+    callScore: userContextResponse.data.callScore ? {
+      currentScore: userContextResponse.data.callScore.currentScore,
+      totalAttempts: userContextResponse.data.callScore.totalAttempts,
+      lastOutcome: userContextResponse.data.callScore.lastOutcome || 'no_attempt'
+    } : {
+      currentScore: 50,
+      totalAttempts: 0,
+      lastOutcome: 'no_attempt'
+    }
+  } : null;
+
+  if (userContextLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <Card className="w-full max-w-md mx-auto border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <CardContent className="p-8 text-center">
+            <Activity className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+            <h2 className="text-lg font-semibold mb-2">Preparing Call</h2>
+            <p className="text-slate-600">
+              Loading user context for {userName}...
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (userContextError || !userContextData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <Card className="w-full max-w-md mx-auto border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <User className="h-8 w-8 text-red-600" />
+            </div>
+            <h2 className="text-lg font-semibold mb-2 text-red-700">Unable to Load User</h2>
+            <p className="text-red-600 mb-4">
+              {userContextError?.message || 'Failed to load user context for call'}
+            </p>
+            <Button 
+              onClick={() => router.push(`/users/${userId}`)}
+              variant="outline"
+              className="w-full"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to User Details
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Success - show call interface with user context
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <div className="p-4 max-w-7xl mx-auto">
+        
+        {/* Header */}
+        <div className="mb-6">
+          <Button 
+            onClick={() => router.push(`/users/${userId}`)}
+            variant="ghost" 
+            size="sm"
+            className="mb-4"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to User Details
+          </Button>
+          
+          <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-800">Starting New Call</h1>
+                  <p className="text-slate-600 mt-1">
+                    Calling {userName} at {phoneNumber}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-slate-500">User ID</div>
+                  <div className="font-mono text-slate-800">{userId}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Call Interface - This will handle both Twilio call AND database session creation */}
+        <CallInterface 
+          userContext={userContextData}
+          onCallComplete={(outcome) => {
+            toast({
+              title: "Call Completed",
+              description: `Outcome: ${outcome.outcomeType.replace('_', ' ').toUpperCase()}`,
+            });
+            // Navigate back to user details
+            router.push(`/users/${userId}`);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function CallSessionPage() {
   const params = useParams();
   const router = useRouter();
@@ -20,6 +175,15 @@ export default function CallSessionPage() {
   const userId = searchParams.get('userId');
   const phoneNumber = searchParams.get('phone');
   const userName = searchParams.get('name');
+
+  // Handle new call flow - redirect to proper call interface
+  if (sessionId === 'new' && userId && phoneNumber) {
+    return <NewCallInterface 
+      userId={parseInt(userId)} 
+      phoneNumber={phoneNumber} 
+      userName={userName || 'Unknown User'} 
+    />;
+  }
 
   // Validate session ID early
   React.useEffect(() => {

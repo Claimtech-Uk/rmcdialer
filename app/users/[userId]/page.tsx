@@ -286,15 +286,23 @@ export default function UserDetailPage() {
     }
 
     try {
-      // Use the proper call initiation flow through tRPC
-      await initiateCallMutation.mutateAsync({
-        userId: parseInt(userId),
-        direction: 'outbound',
-        phoneNumber: user.phoneNumber
+      // NEW APPROACH: Navigate to call page immediately with user context
+      // Let the CallInterface handle both Twilio call AND database session creation
+      const callPageUrl = `/calls/new?userId=${userId}&phone=${encodeURIComponent(user.phoneNumber)}&name=${encodeURIComponent(`${user.firstName} ${user.lastName}`)}`;
+      
+      toast({
+        title: "Starting Call",
+        description: `Preparing to call ${user.firstName} ${user.lastName}`,
       });
+      
+      router.push(callPageUrl);
     } catch (error: any) {
-      // Error handling is done in the mutation's onError callback
-      console.error('Call initiation failed:', error);
+      console.error('Navigation failed:', error);
+      toast({
+        title: "Navigation Error",
+        description: "Failed to start call session",
+        variant: "destructive"
+      });
     }
   };
 
