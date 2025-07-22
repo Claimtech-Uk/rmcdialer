@@ -80,76 +80,123 @@ export function CallHistoryTable({
 
       if (playingRecording === call.id) {
         // Stop current recording
-        console.log('🎵 Stopping current recording')
         if (audioElement) {
+          console.log('🎵 Stopping current recording')
           audioElement.pause()
           audioElement.currentTime = 0
         }
         setPlayingRecording(null)
         setAudioElement(null)
-      } else {
-        // Stop any other recording
-        if (audioElement) {
-          console.log('🎵 Stopping previous audio')
-          audioElement.pause()
-        }
+        return
+      }
 
-        // Create new audio element with better error handling and debugging
-        console.log('🎵 Creating new audio element with URL:', recordingData.recording.streamUrl)
-        
-        const audio = new Audio()
-        
-        // Add comprehensive event listeners for debugging
-        audio.addEventListener('loadstart', () => console.log('🎵 Audio: loadstart'))
-        audio.addEventListener('loadeddata', () => console.log('🎵 Audio: loadeddata'))
-        audio.addEventListener('canplay', () => console.log('🎵 Audio: canplay'))
-        audio.addEventListener('canplaythrough', () => console.log('🎵 Audio: canplaythrough'))
-        audio.addEventListener('playing', () => console.log('🎵 Audio: playing'))
-        audio.addEventListener('pause', () => console.log('🎵 Audio: pause'))
-        audio.addEventListener('ended', () => {
-          console.log('🎵 Audio: ended')
-          setPlayingRecording(null)
-          setAudioElement(null)
-        })
-        
-        audio.addEventListener('error', (e) => {
-          console.error('🎵 Audio error:', e)
+      // Create new audio element with enhanced compatibility
+      const audio = new Audio()
+      
+      // Set audio properties for better compatibility
+      audio.preload = 'auto'
+      audio.crossOrigin = 'anonymous'
+      
+      // Add comprehensive event listeners for debugging
+      audio.addEventListener('loadstart', () => console.log('🎵 Audio loadstart'))
+      audio.addEventListener('canplay', () => console.log('🎵 Audio canplay'))
+      audio.addEventListener('canplaythrough', () => console.log('🎵 Audio canplaythrough'))
+      audio.addEventListener('playing', () => console.log('🎵 Audio playing'))
+      audio.addEventListener('ended', () => {
+        console.log('🎵 Audio ended')
+        setPlayingRecording(null)
+        setAudioElement(null)
+      })
+      
+      audio.addEventListener('error', (e) => {
+        console.error('🎵 Audio error event:', e)
+        const error = audio.error
+        if (error) {
           console.error('🎵 Audio error details:', {
-            error: audio.error,
-            networkState: audio.networkState,
-            readyState: audio.readyState,
-            src: audio.src
+            code: error.code,
+            message: error.message
           })
-          setPlayingRecording(null)
-          setAudioElement(null)
-        })
-
-        // Set the source and preload
-        audio.preload = 'auto'
-        audio.src = recordingData.recording.streamUrl
-        
-        setAudioElement(audio)
-        setPlayingRecording(call.id)
-        
-        try {
-          console.log('🎵 Attempting to play audio...')
-          await audio.play()
-          console.log('🎵 Audio playback started successfully')
-        } catch (error: unknown) {
-          console.error('🎵 Error playing audio:', error)
-          console.error('🎵 Play error details:', {
-            name: error instanceof Error ? error.name : 'Unknown',
-            message: error instanceof Error ? error.message : String(error),
-            audioSrc: audio.src,
-            readyState: audio.readyState,
-            networkState: audio.networkState
-          })
-          setPlayingRecording(null)
-          setAudioElement(null)
           
-          // Show user-friendly error
-          const errorMessage = error instanceof Error ? error.message : 'Unknown playback error'
-          alert(`Unable to play recording: ${errorMessage}. Please try downloading the recording instead.`)
+          let errorMessage = 'Failed to play recording'
+          const { MEDIA_ERR_ABORTED, MEDIA_ERR_NETWORK, MEDIA_ERR_DECODE, MEDIA_ERR_SRC_NOT_SUPPORTED } = error
+          
+          switch (error.code) {
+            case MEDIA_ERR_ABORTED:
+              errorMessage = 'Recording playback was aborted'
+              break
+            case MEDIA_ERR_NETWORK:
+              errorMessage = 'Network error while loading recording'
+              break
+            case MEDIA_ERR_DECODE:
+              errorMessage = 'Recording format not supported by your browser'
+              break
+            case MEDIA_ERR_SRC_NOT_SUPPORTED:
+              errorMessage = 'Recording format not supported. Try downloading instead.'
+              break
+          }
+          
+          // Show user-friendly error with format-specific advice
+          const toast = (window as any).__toast__ || console.error
+          if (typeof toast === 'function') {
+            toast({
+              title: "Recording Playback Error",
+              description: errorMessage,
+              variant: "destructive"
+            })
+          }
+        }
+        setPlayingRecording(null)
+        setAudioElement(null)
+      })
+
+      // Try to set the audio source with the stream URL
+      console.log('🎵 Setting audio source:', recordingData.recording.streamUrl)
+      audio.src = recordingData.recording.streamUrl
+      
+      // Set as currently playing and store reference
+      setPlayingRecording(call.id)
+      setAudioElement(audio)
+
+      // Attempt to play with comprehensive error handling
+      try {
+        console.log('🎵 Attempting to play audio...')
+        const playPromise = audio.play()
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('🎵 Audio playback started successfully')
+            })
+            .catch((error: unknown) => {
+              console.error('🎵 Play promise rejected:', error)
+              setPlayingRecording(null)
+              setAudioElement(null)
+              
+              const errorMessage = error instanceof Error ? error.message : String(error)
+              const toast = (window as any).__toast__ || console.error
+              if (typeof toast === 'function') {
+                toast({
+                  title: "Recording Playback Failed",
+                  description: `Unable to play recording: ${errorMessage}. Try downloading the recording instead.`,
+                  variant: "destructive"
+                })
+              }
+            })
+        }
+        
+      } catch (error: unknown) {
+        console.error('🎵 Error calling play():', error)
+        setPlayingRecording(null)
+        setAudioElement(null)
+        
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        const toast = (window as any).__toast__ || console.error
+        if (typeof toast === 'function') {
+          toast({
+            title: "Recording Playback Error",
+            description: `Failed to start playback: ${errorMessage}`,
+            variant: "destructive"
+          })
         }
       }
     }

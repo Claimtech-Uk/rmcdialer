@@ -57,89 +57,83 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
 
-    if (action === 'download') {
-      // Proxy the recording download with Twilio authentication
-      try {
-        const authHeader = `Basic ${Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64')}`;
-        
-        const recordingResponse = await fetch(callSession.recordingUrl, {
-          headers: {
-            'Authorization': authHeader,
-            'Accept': 'audio/wav,audio/mpeg,audio/*,*/*'
-          }
-        });
+    // Download recording from Twilio with authentication
+    const authHeader = `Basic ${Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64')}`;
+    
+    console.log(`📥 Fetching recording from Twilio: ${callSession.recordingUrl}`);
+    const recordingResponse = await fetch(callSession.recordingUrl, {
+      headers: {
+        'Authorization': authHeader,
+      },
+    });
 
-        if (!recordingResponse.ok) {
-          throw new Error(`Failed to fetch recording: ${recordingResponse.status}`);
-        }
-
-        // Get the audio data
-        const audioBuffer = await recordingResponse.arrayBuffer();
-        const contentType = recordingResponse.headers.get('content-type') || 'audio/wav';
-        
-        // Generate filename with call info
-        const fileName = `call-recording-${sessionId}-${callSession.twilioCallSid}.wav`;
-
-        // Return the audio file as a download
-        return new NextResponse(audioBuffer, {
-          status: 200,
-          headers: {
-            'Content-Type': contentType,
-            'Content-Disposition': `attachment; filename="${fileName}"`,
-            'Content-Length': audioBuffer.byteLength.toString(),
-            'Cache-Control': 'private, max-age=3600', // Cache for 1 hour
-          }
-        });
-
-      } catch (error: any) {
-        console.error('Failed to proxy recording download:', error);
-        return NextResponse.json(
-          { error: 'Failed to download recording', details: error.message },
-          { status: 500 }
-        );
-      }
+    if (!recordingResponse.ok) {
+      console.error(`❌ Failed to fetch recording from Twilio: ${recordingResponse.status} ${recordingResponse.statusText}`);
+      return NextResponse.json(
+        { error: 'Recording not available from Twilio' },
+        { status: 404 }
+      );
     }
 
+    // Get the recording buffer
+    const recordingBuffer = await recordingResponse.arrayBuffer();
+    
+    // Detect and set proper content type based on Twilio's response
+    const twilioContentType = recordingResponse.headers.get('content-type') || '';
+    console.log(`🎵 Twilio content-type: ${twilioContentType}`);
+    
+    let contentType = 'audio/wav'; // Default fallback
+    let fileExtension = 'wav';
+    
+    // Map Twilio content types to browser-compatible MIME types
+    if (twilioContentType.includes('mp3') || twilioContentType.includes('mpeg')) {
+      contentType = 'audio/mpeg';
+      fileExtension = 'mp3';
+    } else if (twilioContentType.includes('wav')) {
+      contentType = 'audio/wav';
+      fileExtension = 'wav';
+    } else if (twilioContentType.includes('ogg')) {
+      contentType = 'audio/ogg';
+      fileExtension = 'ogg';
+    } else if (twilioContentType.includes('webm')) {
+      contentType = 'audio/webm';
+      fileExtension = 'webm';
+    } else if (twilioContentType.includes('aac')) {
+      contentType = 'audio/aac';
+      fileExtension = 'aac';
+    }
+    
+    console.log(`🎵 Serving audio as: ${contentType} (${fileExtension})`);
+
+    // Stream the recording
     if (action === 'stream') {
-      // Proxy the recording for streaming/playback
-      try {
-        const authHeader = `Basic ${Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64')}`;
-        
-        const recordingResponse = await fetch(callSession.recordingUrl, {
-          headers: {
-            'Authorization': authHeader,
-            'Accept': 'audio/wav,audio/mpeg,audio/*,*/*',
-            'Range': request.headers.get('range') || ''
-          }
-        });
+      return new NextResponse(recordingBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': recordingBuffer.byteLength.toString(),
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'private, max-age=3600',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+          'Access-Control-Allow-Headers': 'Range, Content-Range, Content-Length',
+        },
+      });
+    }
 
-        if (!recordingResponse.ok) {
-          throw new Error(`Failed to fetch recording: ${recordingResponse.status}`);
-        }
-
-        // Forward the audio stream with proper headers for browser playback
-        const audioBuffer = await recordingResponse.arrayBuffer();
-        const contentType = recordingResponse.headers.get('content-type') || 'audio/wav';
-
-        return new NextResponse(audioBuffer, {
-          status: recordingResponse.status,
-          headers: {
-            'Content-Type': contentType,
-            'Accept-Ranges': 'bytes',
-            'Cache-Control': 'private, max-age=3600',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-            'Access-Control-Allow-Headers': 'Range, Content-Range, Content-Length',
-          }
-        });
-
-      } catch (error: any) {
-        console.error('Failed to proxy recording stream:', error);
-        return NextResponse.json(
-          { error: 'Failed to stream recording', details: error.message },
-          { status: 500 }
-        );
-      }
+    // Download the recording
+    if (action === 'download') {
+      const filename = `recording-${callSession.id}-${new Date(callSession.startedAt).toISOString().split('T')[0]}.${fileExtension}`;
+      
+      return new NextResponse(recordingBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': recordingBuffer.byteLength.toString(),
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Cache-Control': 'private, max-age=3600',
+        },
+      });
     }
 
     // Default: Return recording metadata
