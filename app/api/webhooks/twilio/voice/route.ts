@@ -265,7 +265,19 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
               } else {
                 // Still no agents - this is a deeper database issue
                 console.error('❌ NO AGENTS FOUND IN DATABASE - This indicates a serious setup issue');
-                sessionData.agentId = 1; // Hard fallback to ID 1
+                // Try to get ANY agent ID that actually exists in the database
+                const firstAgent = await prisma.agent.findFirst({
+                  select: { id: true },
+                  orderBy: { id: 'asc' }
+                });
+                if (firstAgent) {
+                  sessionData.agentId = firstAgent.id;
+                  console.log(`🔧 Using first available agent ID ${firstAgent.id} as emergency fallback`);
+                } else {
+                  // Complete fallback failure - skip call session creation
+                  console.error('❌ CRITICAL: No agents exist in database - cannot create call session');
+                  throw new Error('No agents exist in database for call session creation');
+                }
               }
             }
           } catch (agentLookupError) {
@@ -298,30 +310,32 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           });
 
           // Find a valid agent ID for call session tracking - robust fallback
-          let agentIdToUse = 1; // Default fallback
+          let agentIdToUse: number;
           
           if (validatedAgent?.agent?.id) {
             agentIdToUse = validatedAgent.agent.id;
           } else {
-            try {
-              const sessionAgent = await prisma.agent.findFirst({
-                where: { isActive: true },
-                select: { id: true }
+            // Must find an agent or throw error
+            const sessionAgent = await prisma.agent.findFirst({
+              where: { isActive: true },
+              select: { id: true }
+            });
+            
+            if (sessionAgent) {
+              agentIdToUse = sessionAgent.id;
+            } else {
+              // Try any agent that actually exists
+              const anyAgent = await prisma.agent.findFirst({
+                select: { id: true },
+                orderBy: { id: 'asc' }
               });
-              
-              if (sessionAgent) {
-                agentIdToUse = sessionAgent.id;
+              if (anyAgent) {
+                agentIdToUse = anyAgent.id;
               } else {
-                // Try any agent
-                const anyAgent = await prisma.agent.findFirst({
-                  select: { id: true }
-                });
-                if (anyAgent) {
-                  agentIdToUse = anyAgent.id;
-                }
+                // Complete failure - no agents exist
+                console.error('❌ CRITICAL: No agents exist for unknown caller session');
+                throw new Error('No agents exist in database for unknown caller session creation');
               }
-            } catch (error) {
-              console.error('❌ Error finding agent for unknown caller session:', error);
             }
           }
           console.log(`📍 Using agent ID ${agentIdToUse} for unknown caller session`);
