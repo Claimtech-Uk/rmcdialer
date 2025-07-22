@@ -240,49 +240,20 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           })
         };
 
-        // SIMPLIFIED APPROACH: Use first available agent or create without agent assignment
+        // Only set agentId if we have a validated agent
         if (validatedAgent?.agent?.id) {
           sessionData.agentId = validatedAgent.agent.id;
-          console.log(`✅ Using validated agent ID ${validatedAgent.agent.id}`);
         } else {
-          // Find ANY valid agent as fallback, but don't fail if none found
-          try {
-            const fallbackAgent = await prisma.agent.findFirst({
-              where: { isActive: true },
-              select: { id: true }
-            });
-            if (fallbackAgent) {
-              sessionData.agentId = fallbackAgent.id;
-              console.log(`📍 Using fallback agent ID ${fallbackAgent.id}`);
-            } else {
-              // CRITICAL FIX: Don't fail - just set first agent ID that exists
-              const anyAgent = await prisma.agent.findFirst({
-                select: { id: true }
-              });
-              if (anyAgent) {
-                sessionData.agentId = anyAgent.id;
-                console.log(`🔧 Using any available agent ID ${anyAgent.id} for call session creation`);
-              } else {
-                // Still no agents - this is a deeper database issue
-                console.error('❌ NO AGENTS FOUND IN DATABASE - This indicates a serious setup issue');
-                // Try to get ANY agent ID that actually exists in the database
-                const firstAgent = await prisma.agent.findFirst({
-                  select: { id: true },
-                  orderBy: { id: 'asc' }
-                });
-                if (firstAgent) {
-                  sessionData.agentId = firstAgent.id;
-                  console.log(`🔧 Using first available agent ID ${firstAgent.id} as emergency fallback`);
-                } else {
-                  // Complete fallback failure - skip call session creation
-                  console.error('❌ CRITICAL: No agents exist in database - cannot create call session');
-                  throw new Error('No agents exist in database for call session creation');
-                }
-              }
-            }
-          } catch (agentLookupError) {
-            console.error('❌ Error during agent lookup:', agentLookupError);
-            sessionData.agentId = 1; // Hard fallback
+          // For missed calls, find ANY valid agent ID as a safe fallback
+          const fallbackAgent = await prisma.agent.findFirst({
+            where: { isActive: true },
+            select: { id: true }
+          });
+          if (fallbackAgent) {
+            sessionData.agentId = fallbackAgent.id;
+            console.log(`📍 Using fallback agent ID ${fallbackAgent.id} for missed call tracking`);
+          } else {
+            throw new Error('No valid agents found in database - cannot create call session');
           }
         }
 
@@ -309,41 +280,23 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             }
           });
 
-          // Find a valid agent ID for call session tracking - robust fallback
-          let agentIdToUse: number;
-          
-          if (validatedAgent?.agent?.id) {
-            agentIdToUse = validatedAgent.agent.id;
-          } else {
-            // Must find an agent or throw error
-            const sessionAgent = await prisma.agent.findFirst({
-              where: { isActive: true },
-              select: { id: true }
-            });
-            
-            if (sessionAgent) {
-              agentIdToUse = sessionAgent.id;
-            } else {
-              // Try any agent that actually exists
-              const anyAgent = await prisma.agent.findFirst({
-                select: { id: true },
-                orderBy: { id: 'asc' }
-              });
-              if (anyAgent) {
-                agentIdToUse = anyAgent.id;
-              } else {
-                // Complete failure - no agents exist
-                console.error('❌ CRITICAL: No agents exist for unknown caller session');
-                throw new Error('No agents exist in database for unknown caller session creation');
-              }
-            }
+          // Find a valid agent ID for call session tracking
+          const sessionAgent = validatedAgent || await prisma.agent.findFirst({
+            where: { isActive: true },
+            select: { id: true, firstName: true, lastName: true }
+          });
+
+          if (!sessionAgent) {
+            throw new Error('No valid agents found in database for call session creation');
           }
+
+          const agentIdToUse = validatedAgent?.agentId || sessionAgent.id;
           console.log(`📍 Using agent ID ${agentIdToUse} for unknown caller session`);
 
           callSession = await prisma.callSession.create({
             data: {
               userId: BigInt(999999), // Special ID for unknown callers
-              agentId: agentIdToUse, // Already an Int from agent queries
+              agentId: Number(agentIdToUse), // Ensure proper number type
               callQueueId: unknownCallerQueue.id,
               twilioCallSid: callSid,
               status: validatedAgent ? 'ringing' : 'missed_call',
@@ -434,11 +387,6 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             <Parameter name="callSessionId" value="${callSession?.id || 'unknown'}" />
             ${callerInfo?.user ? `<Parameter name="callerName" value="${callerInfo.user.first_name} ${callerInfo.user.last_name}" />` : ''}
             ${callerInfo?.user ? `<Parameter name="userId" value="${callerInfo.user.id}" />` : ''}
-            ${callerInfo?.user ? `<Parameter name="userFirstName" value="${callerInfo.user.first_name || ''}" />` : ''}
-            ${callerInfo?.user ? `<Parameter name="userLastName" value="${callerInfo.user.last_name || ''}" />` : ''}
-            ${callerInfo?.user ? `<Parameter name="userEmail" value="${callerInfo.user.email_address || ''}" />` : ''}
-            <Parameter name="userClaims" value="${JSON.stringify(callerInfo?.claims || []).replace(/"/g, '&quot;')}" />
-            <Parameter name="userRequirements" value="${JSON.stringify(callerInfo?.requirements || []).replace(/"/g, '&quot;')}" />
         </Client>
     </Dial>
     <Say voice="alice">I'm sorry, the agent couldn't be reached right now. We'll have someone call you back as soon as possible. Thank you!</Say>

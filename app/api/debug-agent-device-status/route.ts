@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       results.recommendations.push(`❌ CRITICAL: Missing Twilio credentials: ${missingCredentials.join(', ')}`);
       results.recommendations.push('Agents will not be able to register devices without proper Twilio configuration');
     }
-
+    
     // Get all active agents
     const agents = await prisma.agent.findMany({
       where: { isActive: true },
@@ -77,8 +77,8 @@ export async function GET(request: NextRequest) {
 
     results.agentSessions = agentSessions.map(session => ({
       sessionId: session.id,
-      agentId: session.agentId,
-      status: session.status,
+        agentId: session.agentId,
+        status: session.status,
       loginAt: session.loginAt?.toISOString(),
       lastActivity: session.lastActivity?.toISOString(),
       currentCallSessionId: session.currentCallSessionId,
