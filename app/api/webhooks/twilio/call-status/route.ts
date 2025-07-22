@@ -50,8 +50,12 @@ export async function POST(request: NextRequest) {
       console.log(`🎯 Agent connection analysis: ${getDialStatusExplanation(DialCallStatus)}`);
     }
 
-    // Find the call session
-    const callSession = await prisma.callSession.findFirst({
+    // CRITICAL FIX: Enhanced call session lookup to handle multiple Call SIDs
+    // For inbound calls with <Dial><Client>, Twilio creates separate call legs:
+    // - Original Call SID (stored in database): CAf5af23956df181ca57ecf5034a4fd867
+    // - Agent Call SID (from webhook): layout-c86ba49b305af_YLSCyPMKUFeCKdwdb-1
+    
+    let callSession = await prisma.callSession.findFirst({
       where: { 
         twilioCallSid: CallSid 
       },
@@ -67,12 +71,67 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // If not found by direct CallSid, try alternative lookup strategies
     if (!callSession) {
-      console.warn(`⚠️ Call session not found for Twilio CallSid: ${CallSid}`);
+      console.log(`🔍 Call session not found for CallSid: ${CallSid}, trying alternative lookups...`);
+      
+      // Strategy 1: Check if this is an agent call leg for a recent inbound call
+      // Look for sessions created in the last 5 minutes that are still active
+      const recentInboundSessions = await prisma.callSession.findMany({
+        where: {
+          direction: 'inbound',
+          status: { in: ['ringing', 'initiated', 'connecting'] },
+          startedAt: {
+            gte: new Date(Date.now() - 5 * 60 * 1000) // Last 5 minutes
+          }
+        },
+        include: {
+          agent: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true
+            }
+          }
+        },
+        orderBy: { startedAt: 'desc' }
+      });
+
+      if (recentInboundSessions.length > 0) {
+        console.log(`🔍 Found ${recentInboundSessions.length} recent inbound sessions, using most recent one`);
+        callSession = recentInboundSessions[0];
+        
+        // Update the session with the agent call leg SID for future lookups
+        await prisma.callSession.update({
+          where: { id: callSession.id },
+          data: { 
+            twilioCallSid: CallSid,
+            updatedAt: new Date()
+          }
+        });
+        
+        console.log(`✅ Mapped agent CallSid ${CallSid} to session ${callSession.id}`);
+      }
+    }
+
+    if (!callSession) {
+      console.warn(`⚠️ Call session not found for Twilio CallSid: ${CallSid} after all lookup attempts`);
+      console.log(`🔍 Debug info:`, {
+        CallSid,
+        CallStatus,
+        Direction,
+        From,
+        To,
+        DialCallStatus: DialCallStatus || 'N/A',
+        DialCallSid: DialCallSid || 'N/A'
+      });
+      
       return NextResponse.json({ 
         success: false, 
-        error: 'Call session not found',
-        callSid: CallSid 
+        error: 'Call session not found after enhanced lookup',
+        callSid: CallSid,
+        searchAttempted: true
       }, { status: 404 });
     }
 
