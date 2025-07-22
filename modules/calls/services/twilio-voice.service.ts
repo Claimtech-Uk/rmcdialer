@@ -24,6 +24,10 @@ export interface IncomingCallInfo {
   to: string;
   accept: () => void;
   reject: () => void;
+  // Extended properties for inbound call context
+  callSessionId?: string;
+  callerName?: string;
+  userId?: string;
 }
 
 export interface OutgoingCallParams {
@@ -212,13 +216,33 @@ export class TwilioVoiceService {
       // Set up incoming call event handlers
       this.setupIncomingCallEventHandlers(call);
       
-      // Notify the UI about the incoming call
+      // Extract custom parameters passed from TwiML (for inbound calls)
+      const originalCallSid = call.parameters?.originalCallSid || twilioCallSid;
+      const callerPhone = call.parameters?.callerPhone || call.parameters?.From || 'Unknown';
+      const callSessionId = call.parameters?.callSessionId;
+      const callerName = call.parameters?.callerName;
+      const userId = call.parameters?.userId;
+      
+      console.log('🎯 Extracted call parameters:', {
+        originalCallSid,
+        agentCallSid: twilioCallSid,
+        callerPhone,
+        callSessionId,
+        callerName,
+        userId
+      });
+      
+      // Notify the UI about the incoming call with enriched information
       const incomingCallInfo: IncomingCallInfo = {
-        callSid: twilioCallSid,
-        from: call.parameters?.From || 'Unknown',
+        callSid: originalCallSid, // Use original caller's Call SID, not agent call leg
+        from: callerPhone,
         to: call.parameters?.To || '',
         accept: () => this.acceptIncomingCall(),
-        reject: () => this.rejectIncomingCall()
+        reject: () => this.rejectIncomingCall(),
+        // Add custom call context
+        callSessionId,
+        callerName,
+        userId
       };
       
       this.config.onIncomingCall?.(incomingCallInfo);

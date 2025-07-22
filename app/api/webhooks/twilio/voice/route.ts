@@ -380,7 +380,14 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           statusCallbackEvent="initiated ringing answered completed busy no-answer failed"
           statusCallbackMethod="POST"
           action="${statusCallbackUrl}">
-        <Client>${agentClientName}</Client>
+        <Client>
+            <Identity>${agentClientName}</Identity>
+            <Parameter name="originalCallSid" value="${callSid}" />
+            <Parameter name="callerPhone" value="${from}" />
+            <Parameter name="callSessionId" value="${callSession?.id || 'unknown'}" />
+            ${callerInfo?.user ? `<Parameter name="callerName" value="${callerInfo.user.first_name} ${callerInfo.user.last_name}" />` : ''}
+            ${callerInfo?.user ? `<Parameter name="userId" value="${callerInfo.user.id}" />` : ''}
+        </Client>
     </Dial>
     <Say voice="alice">I'm sorry, the agent couldn't be reached right now. We'll have someone call you back as soon as possible. Thank you!</Say>
     <Hangup/>

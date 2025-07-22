@@ -48,12 +48,95 @@ export function InboundCallInterface({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Lookup caller information from call session (more efficient!)
+  // Lookup caller information - prioritize direct session lookup over Call SID lookup
   useEffect(() => {
     if (incomingCall && !callerInfo && !isLoadingCaller) {
-      lookupCallerFromSession(incomingCall.callSid);
+      // If we have a call session ID from TwiML parameters, use that directly
+      if (incomingCall.callSessionId) {
+        lookupCallerFromSessionId(incomingCall.callSessionId);
+      } else {
+        // Fallback to Call SID lookup (for backwards compatibility)
+        lookupCallerFromSession(incomingCall.callSid);
+      }
     }
   }, [incomingCall, callerInfo, isLoadingCaller]);
+
+    // Direct session lookup by session ID (most efficient!)
+    const lookupCallerFromSessionId = async (sessionId: string) => {
+      setIsLoadingCaller(true);
+      try {
+        console.log('🔍 Looking up caller from call session ID:', sessionId);
+        
+        // Use the direct session lookup tRPC endpoint
+        const response = await fetch('/api/trpc/calls.getCallSession', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            json: {
+              sessionId: sessionId
+            }
+          })
+        });
+        
+        if (response.ok) {
+          const sessionData = await response.json();
+          
+          if (sessionData?.result?.data?.success && sessionData.result.data.session) {
+            const session = sessionData.result.data.session;
+            
+            // Extract user context from the call session's userClaimsContext
+            if (session.userClaimsContext) {
+              try {
+                const userContext = JSON.parse(session.userClaimsContext);
+                
+                if (userContext.knownCaller && userContext.callerName) {
+                  // Build caller info from stored context
+                  const [firstName, lastName] = userContext.callerName.split(' ');
+                  setCallerInfo({
+                    id: session.userId,
+                    first_name: firstName,
+                    last_name: lastName,
+                    phone_number: userContext.phoneNumber,
+                    email_address: undefined, // Not stored in context
+                    claims: userContext.claims || [],
+                    requirements: userContext.requirements || []
+                  });
+                  console.log('👤 Found caller from session ID:', userContext.callerName);
+                } else {
+                  console.log('❓ Unknown caller from session ID');
+                }
+              } catch (parseError) {
+                console.error('❌ Error parsing userClaimsContext:', parseError);
+              }
+            }
+          } else {
+            console.log('❓ Call session not found in database');
+          }
+        } else {
+          console.error('❌ Failed to fetch call session:', response.status, response.statusText);
+          
+          if (response.status === 500) {
+            toast({
+              title: "Database Error",
+              description: "Unable to load caller information from database",
+              variant: "destructive"
+            });
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error looking up caller from session ID:', error);
+        
+        toast({
+          title: "Lookup Failed",
+          description: "Network error while loading caller information",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoadingCaller(false);
+      }
+    };
 
     const lookupCallerFromSession = async (callSid: string) => {
     setIsLoadingCaller(true);
