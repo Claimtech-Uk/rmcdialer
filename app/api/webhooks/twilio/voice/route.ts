@@ -219,7 +219,9 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       // This prevents the race condition where agent is marked busy before connection is verified
       console.log(`📞 Attempting to dial agent ${availableAgent.agentId} - status will be updated on successful connection`);
 
-      const agentClientName = `agent-${availableAgent.agentId}`;
+      const agentClientName = `agent_${availableAgent.agentId}`;
+      console.log(`🎯 Dialing Twilio client: "${agentClientName}"`);
+      console.log(`👥 Agent details: ID=${availableAgent.agentId}, Name=${availableAgent.agent.firstName} ${availableAgent.agent.lastName}, Email=${availableAgent.agent.email}`);
       
       return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
