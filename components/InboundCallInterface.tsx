@@ -63,23 +63,115 @@ export function InboundCallInterface({
     }
   }, [incomingCall]);
 
-  // Lookup caller information - prioritize session UUID lookup (most efficient!)
+  // RELIABLE SOLUTION: Lookup caller using original Call SID (bypasses TwiML parameter issues)
   useEffect(() => {
     if (incomingCall && !callerInfo && !isLoadingCaller) {
       console.log('🔍 Starting caller lookup...');
+      console.log('🎯 Agent call details:', {
+        receivedCallSid: incomingCall.callSid,
+        callSessionId: incomingCall.callSessionId,
+        from: incomingCall.from
+      });
       
-      // PRIORITY 1: Use call session UUID from TwiML parameters (most reliable)
-      if (incomingCall.callSessionId && incomingCall.callSessionId !== 'unknown') {
-        console.log('✅ Using call session UUID:', incomingCall.callSessionId);
-        lookupCallerFromSessionId(incomingCall.callSessionId);
-      } else {
-        console.log('❌ No valid call session UUID, falling back to Call SID lookup');
-        console.log('Received callSessionId:', incomingCall.callSessionId);
-        // Fallback to Call SID lookup (should not be needed after agent ID fix)
-        lookupCallerFromSession(incomingCall.callSid);
-      }
+      // CRITICAL: Use original Call SID (passed via TwilioVoiceService originalCallSid)
+      // This bypasses unreliable TwiML parameter passing and directly finds the session
+      console.log('✅ Using original Call SID for session lookup:', incomingCall.callSid);
+      lookupCallerFromOriginalCallSid(incomingCall.callSid);
     }
   }, [incomingCall, callerInfo, isLoadingCaller]);
+
+    // RELIABLE SOLUTION: Lookup caller using original Call SID
+    const lookupCallerFromOriginalCallSid = async (originalCallSid: string) => {
+      setIsLoadingCaller(true);
+      try {
+        console.log('🔍 Looking up call session by original Call SID:', originalCallSid);
+        
+        // Use the Call SID to find the call session first
+        const sessionLookupResponse = await fetch('/api/trpc/calls.getCallSessionByCallSid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            json: { callSid: originalCallSid }
+          })
+        });
+        
+        if (sessionLookupResponse.ok) {
+          const sessionData = await sessionLookupResponse.json();
+          
+          if (sessionData?.result?.data?.success && sessionData.result.data.callSession) {
+            const session = sessionData.result.data.callSession;
+            console.log('✅ Found call session:', session.id);
+            
+            // Extract user details from userClaimsContext
+            if (session.userClaimsContext) {
+              try {
+                const userContext = JSON.parse(session.userClaimsContext);
+                console.log('📋 Parsed user context:', userContext);
+                
+                if (userContext.knownCaller && userContext.callerName) {
+                  const [firstName, lastName] = userContext.callerName.split(' ');
+                  setCallerInfo({
+                    id: session.userId,
+                    first_name: firstName,
+                    last_name: lastName,
+                    phone_number: userContext.phoneNumber,
+                    email_address: undefined,
+                    claims: userContext.claims || [],
+                    requirements: userContext.requirements || []
+                  });
+                  console.log('👤 Successfully loaded caller:', userContext.callerName);
+                } else if (userContext.unknownCaller) {
+                  console.log('❓ Unknown caller from phone:', userContext.phoneNumber);
+                  setCallerInfo({
+                    id: session.userId,
+                    first_name: 'Unknown',
+                    last_name: 'Caller',
+                    phone_number: userContext.phoneNumber,
+                    email_address: undefined,
+                    claims: [],
+                    requirements: []
+                  });
+                } else {
+                  console.warn('⚠️ Unexpected user context format:', userContext);
+                }
+              } catch (parseError) {
+                console.error('❌ Error parsing userClaimsContext:', parseError);
+                toast({
+                  title: "Parse Error",
+                  description: "Unable to parse caller information",
+                  variant: "destructive"
+                });
+              }
+            } else {
+              console.warn('⚠️ No userClaimsContext in call session');
+            }
+          } else {
+            console.log('❓ Call session not found for original Call SID:', originalCallSid);
+            toast({
+              title: "Session Not Found",
+              description: "Unable to locate call session for this call",
+              variant: "destructive"
+            });
+          }
+        } else {
+          console.error('❌ Failed to lookup call session:', sessionLookupResponse.status);
+          toast({
+            title: "Lookup Failed",
+            description: "Unable to retrieve call session information",
+            variant: "destructive"
+          });
+        }
+      } catch (error) {
+        console.error('❌ Error looking up caller by original Call SID:', error);
+        toast({
+          title: "Network Error",
+          description: "Failed to load caller information",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoadingCaller(false);
+      }
+    };
 
     // Direct session lookup by session ID (most efficient!)
     const lookupCallerFromSessionId = async (sessionId: string) => {
