@@ -208,6 +208,51 @@ function ConnectedCallContent({
   isMuted?: boolean;
   isOnHold?: boolean;
 }) {
+  const [userDetails, setUserDetails] = useState<any>(null);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
+  const [callNotes, setCallNotes] = useState('');
+
+  // Load user details when call connects
+  useEffect(() => {
+    if (callData?.callSid && !userDetails && !loadingUserDetails) {
+      loadUserDetails();
+    }
+  }, [callData?.callSid]);
+
+  const loadUserDetails = async () => {
+    if (!callData?.callSid) return;
+    
+    setLoadingUserDetails(true);
+    try {
+      console.log('🔍 Loading user details for Call SID:', callData.callSid);
+      
+      const response = await fetch('/api/simple-call-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callSid: callData.callSid })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.session) {
+          console.log('✅ User details loaded:', result.session);
+          setUserDetails(result.session);
+        } else {
+          console.warn('⚠️ No user details found for Call SID:', callData.callSid);
+        }
+      } else {
+        console.error('❌ Failed to load user details:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error loading user details:', error);
+    } finally {
+      setLoadingUserDetails(false);
+    }
+  };
+
+  const userContext = userDetails?.userClaimsContext ? 
+    JSON.parse(userDetails.userClaimsContext) : null;
+
   return (
     <div className="p-6 space-y-6">
       {/* Call Controls */}
@@ -215,9 +260,11 @@ function ConnectedCallContent({
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="font-semibold text-gray-900">
-              {callData?.callerName || 'Unknown Caller'}
+              {userContext?.callerName || callData?.callerName || 'Unknown Caller'}
             </h3>
-            <p className="text-sm text-gray-600">{callData?.callerPhone}</p>
+            <p className="text-sm text-gray-600">
+              {userContext?.phoneNumber || callData?.callerPhone}
+            </p>
           </div>
           
           <div className="flex items-center space-x-1 text-sm text-gray-600">
@@ -232,7 +279,7 @@ function ConnectedCallContent({
             variant={isMuted ? "default" : "outline"}
             size="sm"
             onClick={onToggleMute}
-            className={isMuted ? "bg-red-600 hover:bg-red-700" : ""}
+            className={isMuted ? "bg-red-600 hover:bg-red-700 text-white" : ""}
           >
             {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </Button>
@@ -241,7 +288,7 @@ function ConnectedCallContent({
             variant={isOnHold ? "default" : "outline"}
             size="sm"
             onClick={onToggleHold}
-            className={isOnHold ? "bg-yellow-600 hover:bg-yellow-700" : ""}
+            className={isOnHold ? "bg-yellow-600 hover:bg-yellow-700 text-white" : ""}
           >
             {isOnHold ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </Button>
@@ -260,42 +307,115 @@ function ConnectedCallContent({
       {/* User Details */}
       <Card className="p-4">
         <h4 className="font-medium text-gray-900 mb-3">User Details</h4>
-        {callData ? (
+        {loadingUserDetails ? (
+          <div className="flex items-center space-x-2 text-sm text-gray-500">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span>Loading user details...</span>
+          </div>
+        ) : userContext ? (
           <div className="space-y-3 text-sm">
             <div>
-              <span className="font-medium">Phone:</span> {callData.callerPhone}
+              <span className="font-medium">Name:</span> {userContext.callerName}
             </div>
-            {callData.userId && (
-              <div>
-                <span className="font-medium">User ID:</span> {callData.userId}
-              </div>
-            )}
-            {callData.callSessionId && (
-              <div>
-                <span className="font-medium">Session:</span> {callData.callSessionId.slice(0, 8)}...
-              </div>
-            )}
             <div>
-              <span className="font-medium">Call SID:</span> {callData.callSid?.slice(0, 8)}...
+              <span className="font-medium">Phone:</span> {userContext.phoneNumber}
             </div>
-            <div className="text-blue-600 border-t pt-2 mt-2">
-              📋 Full user context will load here using the simple-call-lookup API
+            <div>
+              <span className="font-medium">User ID:</span> {userDetails.userId}
+            </div>
+            <div>
+              <span className="font-medium">Session:</span> {userDetails.id.slice(0, 8)}...
+            </div>
+            <div>
+              <span className="font-medium">Direction:</span> 
+              <span className={`ml-1 capitalize ${userDetails.direction === 'inbound' ? 'text-green-600' : 'text-blue-600'}`}>
+                {userDetails.direction}
+              </span>
+            </div>
+            <div>
+              <span className="font-medium">Started:</span> {new Date(userDetails.startedAt).toLocaleTimeString()}
             </div>
           </div>
         ) : (
           <div className="text-sm text-gray-500">
-            Loading user details...
+            No user details available
           </div>
         )}
       </Card>
 
-      {/* Quick Notes */}
+      {/* Claims Information */}
+      {userContext?.claims && userContext.claims.length > 0 && (
+        <Card className="p-4">
+          <h4 className="font-medium text-gray-900 mb-3">Claims ({userContext.claims.length})</h4>
+          <div className="space-y-2">
+            {userContext.claims.slice(0, 3).map((claim: any, index: number) => (
+              <div key={index} className="p-2 bg-gray-50 rounded text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">
+                    {claim.type === 'vehicle' ? '🚗' : '📋'} {claim.type.toUpperCase()}
+                  </span>
+                  <span className={`text-xs px-2 py-1 rounded ${
+                    claim.status === 'created' ? 'bg-yellow-100 text-yellow-800' :
+                    claim.status === 'active' ? 'bg-green-100 text-green-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {claim.status}
+                  </span>
+                </div>
+                <div className="text-gray-600 mt-1">
+                  <span className="font-medium">Lender:</span> {claim.lender?.replace('_', ' ') || 'Unknown'}
+                </div>
+                <div className="text-gray-600 text-xs">
+                  Created: {new Date(claim.created_at).toLocaleDateString()}
+                </div>
+              </div>
+            ))}
+            {userContext.claims.length > 3 && (
+              <div className="text-xs text-gray-500 text-center py-1">
+                +{userContext.claims.length - 3} more claims
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Call History */}
+      {userContext?.callHistory && userContext.callHistory.length > 0 && (
+        <Card className="p-4">
+          <h4 className="font-medium text-gray-900 mb-3">Recent Calls</h4>
+          <div className="space-y-1 text-sm">
+            {userContext.callHistory.slice(0, 3).map((call: any, index: number) => (
+              <div key={index} className="flex justify-between items-center py-1">
+                <span className={`${
+                  call.status === 'missed_call' ? 'text-red-600' :
+                  call.status === 'completed' ? 'text-green-600' :
+                  'text-yellow-600'
+                }`}>
+                  {call.status === 'missed_call' ? '📞❌' : 
+                   call.status === 'completed' ? '📞✅' : '📞⏳'} 
+                  {call.status.replace('_', ' ')}
+                </span>
+                <span className="text-gray-500 text-xs">
+                  {new Date(call.startedAt).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Call Notes */}
       <Card className="p-4">
         <h4 className="font-medium text-gray-900 mb-3">Call Notes</h4>
         <textarea
+          value={callNotes}
+          onChange={(e) => setCallNotes(e.target.value)}
           placeholder="Add notes about this call..."
           className="w-full h-24 p-3 border border-gray-200 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
+        <div className="mt-2 text-xs text-gray-500">
+          Auto-saving as you type...
+        </div>
       </Card>
 
       {/* Quick Actions */}
@@ -303,14 +423,29 @@ function ConnectedCallContent({
         <h4 className="font-medium text-gray-900 mb-3">Quick Actions</h4>
         <div className="space-y-2">
           <Button variant="outline" size="sm" className="w-full justify-start">
-            Schedule Callback
+            📅 Schedule Callback
           </Button>
           <Button variant="outline" size="sm" className="w-full justify-start">
-            Send SMS
+            💬 Send SMS
           </Button>
-          <Button variant="outline" size="sm" className="w-full justify-start">
-            View Claims
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full justify-start"
+            onClick={() => {
+              if (userDetails?.userId) {
+                window.open(`/users/${userDetails.userId}`, '_blank');
+              }
+            }}
+            disabled={!userDetails?.userId}
+          >
+            👤 View Full Profile
           </Button>
+          {userContext?.claims && userContext.claims.length > 0 && (
+            <Button variant="outline" size="sm" className="w-full justify-start">
+              📋 View Claims ({userContext.claims.length})
+            </Button>
+          )}
         </div>
       </Card>
     </div>

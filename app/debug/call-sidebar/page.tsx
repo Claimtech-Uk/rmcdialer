@@ -176,9 +176,42 @@ export default function CallSidebarDebugPage() {
             <span>Smooth transitions (300ms ease-in-out)</span>
           </div>
           <div className="flex items-center space-x-2">
-            <span className="text-yellow-600">🚧</span>
-            <span>Integration with GlobalTwilioProvider (next step)</span>
+            <span className="text-green-600">✅</span>
+            <span>GlobalTwilioProvider integration</span>
           </div>
+          <div className="flex items-center space-x-2">
+            <span className="text-green-600">✅</span>
+            <span>Real user data loading via simple-call-lookup API</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="text-green-600">✅</span>
+            <span>Enhanced connected state with claims & call history</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="text-green-600">✅</span>
+            <span>Call duration timer & notes functionality</span>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Test Connected State</h2>
+        <p className="text-gray-600 mb-4">
+          To test the enhanced connected state, use the buttons above to simulate an incoming call, 
+          then accept it. The sidebar will show real user data loaded from the database.
+        </p>
+        
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <h3 className="font-medium text-blue-900 mb-2">Expected Connected Features:</h3>
+          <ul className="text-sm text-blue-800 space-y-1">
+            <li>• Real-time call duration timer</li>
+            <li>• User details from database (name, phone, claims)</li>
+            <li>• Claims information with status badges</li>
+            <li>• Recent call history</li>
+            <li>• Live note-taking functionality</li>
+            <li>• Quick actions (view profile, schedule callback)</li>
+            <li>• Enhanced call controls (mute, hold, end)</li>
+          </ul>
         </div>
       </Card>
 
