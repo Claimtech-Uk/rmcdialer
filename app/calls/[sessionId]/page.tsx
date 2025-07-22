@@ -23,15 +23,16 @@ function NewCallInterface({
   const router = useRouter();
   const { toast } = useToast();
 
-  // Fetch user context for the call
+  // Fetch user context for the call - PERFORMANCE OPTIMIZED
   const { data: userContextResponse, isLoading: userContextLoading, error: userContextError } = api.users.getUserContext.useQuery(
     { userId },
     { 
       enabled: !!userId,
-      retry: 1,
-      staleTime: 2 * 60 * 1000,
+      retry: 1, // Only retry once to avoid hanging
+      staleTime: 10 * 60 * 1000, // INCREASED: 10 minutes cache (was 2)
       refetchOnWindowFocus: false,
-      refetchOnMount: false
+      refetchOnMount: false, // Don't refetch on mount if cached
+      refetchInterval: false // ADDED: Disable auto-refetching
     }
   );
 
@@ -226,27 +227,29 @@ export default function CallSessionPage() {
   // Try to get user context - first try from URL params, then from session ID
   const userIdFromUrl = userId ? parseInt(userId) : null;
   
-  // Fetch user context from URL params if available with improved timeout and retry
+  // Fetch user context from URL params if available - PERFORMANCE OPTIMIZED
   const { data: userContextResponse, isLoading: userContextLoading, error: userContextError } = api.users.getUserContext.useQuery(
     { userId: userIdFromUrl || 0 },
     { 
       enabled: !!userIdFromUrl,
       retry: 1, // Reduced retries for faster failure
-      staleTime: 2 * 60 * 1000, // 2 minutes cache
+      staleTime: 10 * 60 * 1000, // INCREASED: 10 minutes cache (was 2)
       refetchOnWindowFocus: false, // Don't refetch on focus
-      refetchOnMount: false // Don't refetch on mount if cached
+      refetchOnMount: false, // Don't refetch on mount if cached
+      refetchInterval: false // ADDED: Disable auto-refetching
     }
   );
 
-  // Fallback: Get call session data if no URL params (includes user context)
+  // Fallback: Get call session data if no URL params (includes user context) - PERFORMANCE OPTIMIZED
   const { data: callSessionResponse, isLoading: sessionLoading, error: sessionError } = api.calls.getCallSession.useQuery(
     { sessionId },
     { 
       enabled: !userIdFromUrl && !!sessionId,
       retry: 1, // Reduced retries
-      staleTime: 2 * 60 * 1000, // 2 minutes cache
+      staleTime: 5 * 60 * 1000, // INCREASED: 5 minutes cache (was 2)
       refetchOnWindowFocus: false,
-      refetchOnMount: false
+      refetchOnMount: false, // Don't refetch on mount if cached
+      refetchInterval: false // ADDED: Disable auto-refetching
     }
   );
 

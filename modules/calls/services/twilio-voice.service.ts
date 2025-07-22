@@ -72,10 +72,10 @@ export class TwilioVoiceService {
       this.accessToken = accessToken;
       console.log(`🔑 Access token received (${development ? 'development' : 'production'} mode)`);
 
-      // Initialize Twilio Device using npm package
+      // Initialize Twilio Device using npm package with minimal configuration for performance
       this.device = new Device(accessToken, {
-        // Enable debug logs for troubleshooting
-        logLevel: 'debug'
+        // PERFORMANCE: Reduce debug logging in production to reduce network overhead
+        logLevel: development ? 'debug' : 'warn'
       });
 
       // Set up device event handlers

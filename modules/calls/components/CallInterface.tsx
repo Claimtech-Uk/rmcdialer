@@ -197,6 +197,12 @@ export function CallInterface({
   const [callSessionId, setCallSessionId] = useState<string>('');
   const [submittingOutcome, setSubmittingOutcome] = useState(false);
   const [expandedConversations, setExpandedConversations] = useState<Set<string>>(new Set());
+  
+  // PERFORMANCE: Lazy loading state for heavy queries
+  const [loadSmsConversations, setLoadSmsConversations] = useState(false);
+  const [loadUserDetails, setLoadUserDetails] = useState(false);
+  const [loadMagicLinkHistory, setLoadMagicLinkHistory] = useState(false);
+  
   const { toast } = useToast();
 
   // Get authenticated agent context from tRPC - with optimized settings
@@ -204,9 +210,10 @@ export function CallInterface({
     undefined,
     {
       retry: 1, // Only retry once to avoid hanging
-      staleTime: 5 * 60 * 1000, // 5 minutes cache
+      staleTime: 15 * 60 * 1000, // INCREASED: 15 minutes cache (was 5)
       refetchOnWindowFocus: false,
       refetchInterval: false,
+      refetchOnMount: false, // ADDED: Don't refetch on mount if cached
     }
   );
 
@@ -254,46 +261,50 @@ export function CallInterface({
     { userId: userContext.userId },
     { 
       enabled: !!userContext.userId,
-      staleTime: 15 * 60 * 1000, // 15 minutes - queue type rarely changes
+      staleTime: 30 * 60 * 1000, // INCREASED: 30 minutes - queue type rarely changes (was 15)
       refetchInterval: false,
       refetchOnWindowFocus: false,
+      refetchOnMount: false, // ADDED: Don't refetch on mount
     }
   );
 
-  // Fetch complete user details to get addresses
+  // Fetch complete user details to get addresses - CONDITIONAL LOADING
   const { data: userDetailsResponse, isLoading: userDetailsLoading } = api.users.getCompleteUserDetails.useQuery(
     { userId: userContext.userId },
     { 
-      enabled: !!userContext.userId,
-      staleTime: 10 * 60 * 1000, // 10 minutes - user details change infrequently
+      enabled: loadUserDetails && !!userContext.userId, // LAZY: Only enable when explicitly requested
+      staleTime: 30 * 60 * 1000, // INCREASED: 30 minutes - user details change infrequently (was 10)
       refetchInterval: false, // Disable auto-refetching
       refetchOnWindowFocus: false, // Don't refetch on window focus
+      refetchOnMount: false, // ADDED: Don't refetch on mount
     }
   );
 
-  // Fetch call history with detailed table
+  // Fetch call history with detailed table - LAZY LOADING
   const { data: callHistoryResponse, isLoading: callHistoryLoading, refetch: refetchCallHistory } = api.calls.getCallHistoryTable.useQuery(
     { 
       userId: userContext.userId,
       page: 1,
-      limit: 10
+      limit: 5 // REDUCED: Only load 5 recent calls (was 10)
     },
     {
       enabled: !!userContext.userId,
-      staleTime: 3 * 60 * 1000, // 3 minutes - call history can be cached longer
+      staleTime: 5 * 60 * 1000, // INCREASED: 5 minutes - call history can be cached longer (was 3)
       refetchInterval: false, // Disable auto-refetching
       refetchOnWindowFocus: false, // Don't refetch on window focus
+      refetchOnMount: false, // ADDED: Don't refetch on mount
     }
   );
 
-  // Fetch SMS conversations
+  // Fetch SMS conversations - CONDITIONAL LOADING
   const { data: smsConversationsResponse, isLoading: smsLoading } = api.communications.sms.getConversations.useQuery(
     { userId: userContext.userId },
     {
-      enabled: !!userContext.userId,
-      staleTime: 2 * 60 * 1000, // 2 minutes - SMS conversations can be cached
+      enabled: loadSmsConversations && !!userContext.userId, // LAZY: Only enable when SMS section is viewed
+      staleTime: 10 * 60 * 1000, // INCREASED: 10 minutes - SMS conversations can be cached longer (was 2)
       refetchInterval: false, // Disable auto-refetching  
       refetchOnWindowFocus: false, // Don't refetch on window focus
+      refetchOnMount: false, // ADDED: Don't refetch on mount
     }
   );
 
@@ -302,10 +313,11 @@ export function CallInterface({
   const { data: magicLinkHistoryResponse, isLoading: magicLinkLoading } = api.communications.magicLinks.getUserHistory.useQuery(
     { userId: userContext.userId },
     { 
-      enabled: false, // Disabled by default - will enable manually when needed
-      staleTime: 10 * 60 * 1000, // 10 minutes
+      enabled: loadMagicLinkHistory && !!userContext.userId, // LAZY: Only enable when magic link section is viewed
+      staleTime: 30 * 60 * 1000, // INCREASED: 30 minutes (was 10)
       refetchInterval: false,
       refetchOnWindowFocus: false,
+      refetchOnMount: false, // ADDED: Don't refetch on mount
     }
   );
 
@@ -897,16 +909,40 @@ export function CallInterface({
             </CardContent>
           </Card>
 
-          {/* SMS Conversations */}
+          {/* SMS Conversations - OPTIMIZED LAZY LOADING */}
           <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
-              <CardTitle className="flex items-center gap-2 text-slate-800">
-                <MessageSquare className="w-5 h-5 text-blue-600" />
-                SMS History
+              <CardTitle className="flex items-center justify-between text-slate-800">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-blue-600" />
+                  SMS History
+                </div>
+                {!loadSmsConversations && (
+                  <Button
+                    onClick={() => setLoadSmsConversations(true)}
+                    variant="outline"
+                    size="sm"
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    Load SMS Data
+                  </Button>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6">
-              {smsLoading ? (
+              {!loadSmsConversations ? (
+                <div className="text-center py-8">
+                  <MessageSquare className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 mb-4">SMS conversations not loaded to improve performance</p>
+                  <Button
+                    onClick={() => setLoadSmsConversations(true)}
+                    variant="outline"
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    Load SMS History
+                  </Button>
+                </div>
+              ) : smsLoading ? (
                 <div className="text-center py-4">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
                   <p className="text-sm text-slate-500 mt-2">Loading SMS history...</p>
@@ -1111,16 +1147,46 @@ export function CallInterface({
             </CardContent>
           </Card>
 
-          {/* Magic Link History */}
-          {magicLinkHistoryResponse?.data?.length && (
-            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
-                <CardTitle className="flex items-center gap-2 text-slate-800">
+          {/* Magic Link History - OPTIMIZED LAZY LOADING */}
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+              <CardTitle className="flex items-center justify-between text-slate-800">
+                <div className="flex items-center gap-2">
                   <Send className="w-5 h-5 text-blue-600" />
-                  Magic Links Sent
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
+                  Magic Links History
+                </div>
+                {!loadMagicLinkHistory && (
+                  <Button
+                    onClick={() => setLoadMagicLinkHistory(true)}
+                    variant="outline"
+                    size="sm"
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    Load History
+                  </Button>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              {!loadMagicLinkHistory ? (
+                <div className="text-center py-6">
+                  <Send className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 mb-3">Magic link history not loaded</p>
+                  <Button
+                    onClick={() => setLoadMagicLinkHistory(true)}
+                    variant="outline"
+                    size="sm"
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    Load History
+                  </Button>
+                </div>
+              ) : magicLinkLoading ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-sm text-slate-500 mt-2">Loading magic link history...</p>
+                </div>
+              ) : magicLinkHistoryResponse?.data?.length ? (
                 <div className="space-y-2 max-h-32 overflow-y-auto">
                   {magicLinkHistoryResponse.data.slice(0, 3).map((link: any, index: number) => (
                     <div key={index} className="flex justify-between items-center text-sm p-2 bg-gradient-to-r from-green-50/50 to-emerald-50/50 rounded-lg">
@@ -1134,9 +1200,11 @@ export function CallInterface({
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <p className="text-sm text-slate-500 text-center py-4">No magic links sent yet</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
