@@ -186,7 +186,23 @@ export class TwilioVoiceService {
     // Incoming call event - UPDATED to accept calls with AudioContext handling
     this.device.on('incoming', (call: Call) => {
       console.log('📞 Incoming call received from:', call.parameters?.From || 'Unknown');
-      console.log('📞 Call SID:', call.parameters?.CallSid);
+      console.log('📞 Raw Call object parameters:', call.parameters);
+      console.log('📞 Call SID from parameters:', call.parameters?.CallSid);
+      
+      // CRITICAL DEBUGGING: Check for valid Twilio Call SID format
+      const twilioCallSid = call.parameters?.CallSid || '';
+      if (!twilioCallSid.startsWith('CA') || twilioCallSid.length !== 34) {
+        console.error('🚨 INVALID TWILIO CALL SID FORMAT:', {
+          receivedCallSid: twilioCallSid,
+          expectedFormat: 'CA + 32 characters',
+          actualLength: twilioCallSid.length,
+          startsWithCA: twilioCallSid.startsWith('CA'),
+          allParameters: call.parameters
+        });
+        
+        // Still proceed but with a warning
+        console.warn('⚠️ Proceeding with invalid Call SID - this may cause database lookup failures');
+      }
       
       // CRITICAL: Handle AudioContext for incoming calls
       this.handleAudioContextGesture();
@@ -198,7 +214,7 @@ export class TwilioVoiceService {
       
       // Notify the UI about the incoming call
       const incomingCallInfo: IncomingCallInfo = {
-        callSid: call.parameters?.CallSid || '',
+        callSid: twilioCallSid,
         from: call.parameters?.From || 'Unknown',
         to: call.parameters?.To || '',
         accept: () => this.acceptIncomingCall(),
@@ -208,7 +224,7 @@ export class TwilioVoiceService {
       this.config.onIncomingCall?.(incomingCallInfo);
       this.config.onCallStatusChange?.({ 
         state: 'incoming',
-        callSid: call.parameters?.CallSid
+        callSid: twilioCallSid
       });
     });
 

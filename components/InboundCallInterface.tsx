@@ -60,6 +60,23 @@ export function InboundCallInterface({
     try {
       console.log('🔍 Looking up caller from call session:', callSid);
       
+      // CRITICAL FIX: Validate Call SID format before making request
+      if (!callSid || (!callSid.startsWith('CA') || callSid.length !== 34)) {
+        console.error('🚨 Invalid Call SID format - skipping database lookup:', {
+          callSid,
+          expectedFormat: 'CA + 32 characters',
+          actualLength: callSid?.length || 0
+        });
+        
+        toast({
+          title: "Call Information Unavailable",
+          description: "Unable to load caller details due to invalid call identifier",
+          variant: "destructive"
+        });
+        
+        return; // Skip the lookup entirely
+      }
+      
       // Use proper tRPC endpoint instead of debug endpoint
       const response = await fetch('/api/trpc/calls.getCallSessionByCallSid', {
         method: 'POST',
@@ -105,13 +122,27 @@ export function InboundCallInterface({
             }
           }
         } else {
-          console.log('❓ Call session not found');
+          console.log('❓ Call session not found in database');
         }
       } else {
         console.error('❌ Failed to fetch call session:', response.status, response.statusText);
+        
+        if (response.status === 500) {
+          toast({
+            title: "Database Error",
+            description: "Unable to load caller information from database",
+            variant: "destructive"
+          });
+        }
       }
     } catch (error) {
       console.error('❌ Error looking up caller from session:', error);
+      
+      toast({
+        title: "Lookup Failed",
+        description: "Network error while loading caller information",
+        variant: "destructive"
+      });
     } finally {
       setIsLoadingCaller(false);
     }

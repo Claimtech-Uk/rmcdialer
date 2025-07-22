@@ -394,6 +394,15 @@ export const callsRouter = createTRPCRouter({
       try {
         console.log(`🔍 Looking up call session by Twilio Call SID: ${input.callSid}`);
         
+        // CRITICAL: Validate Twilio Call SID format
+        if (!input.callSid.startsWith('CA') || input.callSid.length !== 34) {
+          console.error(`🚨 Invalid Twilio Call SID format: ${input.callSid}`);
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Invalid Twilio Call SID format. Expected format: CA + 32 characters. Received: ${input.callSid} (length: ${input.callSid.length})`
+          });
+        }
+        
         const session = await prisma.callSession.findFirst({
           where: { twilioCallSid: input.callSid },
           include: {
@@ -419,9 +428,10 @@ export const callsRouter = createTRPCRouter({
         });
 
         if (!session) {
+          console.log(`❓ No call session found for Call SID: ${input.callSid}`);
           throw new TRPCError({
             code: 'NOT_FOUND',
-            message: 'Call session not found for this Call SID'
+            message: `Call session not found for Call SID: ${input.callSid}. This may indicate the call was not properly recorded in the database.`
           });
         }
 
