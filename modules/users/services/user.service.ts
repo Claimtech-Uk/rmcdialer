@@ -1,6 +1,7 @@
 import { replicaDb } from '@/lib/mysql';
 import { prisma } from '@/lib/db';
 import { cacheService, CACHE_KEYS, CACHE_TTL } from '@/lib/redis';
+import { timeOperation, performanceMonitor } from '@/lib/monitoring/performance-monitor';
 import type { 
   UserCallContext, 
   ClaimContext,
@@ -213,57 +214,74 @@ export class UserService {
 
   /**
    * Get complete user context for calling
-   * Combines data from MySQL replica (user/claims) + PostgreSQL (call scores)
+   * OPTIMIZED: Combines data from MySQL replica (user/claims) + PostgreSQL (call scores)
    */
   async getUserCallContext(userId: number): Promise<UserCallContext | null> {
-    try {
-      // 1. Check cache first
-      const cacheKey = CACHE_KEYS.userContext(userId);
-      const cached = await cacheService.get(cacheKey);
-      if (cached) {
-        this.logger.debug(`Cache hit for user ${userId}`);
-        return cached as UserCallContext;
-      }
+    return timeOperation(
+      'getUserCallContext',
+      async () => {
+        try {
+          // 1. Check cache first with longer TTL for frequently accessed users
+          const cacheKey = CACHE_KEYS.userContext(userId);
+          const cached = await cacheService.get(cacheKey);
+          if (cached) {
+            this.logger.debug(`Cache hit for user ${userId}`);
+            return cached as UserCallContext;
+          }
 
-      this.logger.debug(`Cache miss for user ${userId}, fetching from databases`);
+          this.logger.debug(`Cache miss for user ${userId}, fetching from databases`);
 
-      // 2. Fetch from MySQL replica with timeout and fallback
-      let userData;
-      try {
-        // Set a 5-second timeout for the database query
-        userData = await Promise.race([
-          this.getUserDataFromReplicaSimplified(userId),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Database query timeout')), 5000)
-          )
-        ]);
-      } catch (dbError) {
-        this.logger.warn(`Database query failed for user ${userId}, using fallback:`, dbError);
-        // Create a minimal fallback context for the specific user
-        userData = await this.createFallbackUserData(userId);
-      }
+          // 2. Use optimized single-query approach with aggressive timeout
+          let userData;
+          try {
+            userData = await timeOperation(
+              'getUserDataOptimized',
+              () => Promise.race([
+                this.getUserDataOptimized(userId),
+                new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error('Database query timeout')), 2000) // Reduced to 2 seconds
+                )
+              ]),
+              { userId }
+            );
+          } catch (dbError) {
+            this.logger.warn(`Database query failed for user ${userId}, using fallback:`, dbError);
+            // Return cached fallback if available, otherwise create basic fallback
+            const fallbackKey = `${cacheKey}:fallback`;
+            const cachedFallback = await cacheService.get(fallbackKey);
+            if (cachedFallback) {
+              return cachedFallback as UserCallContext;
+            }
+            return this.createBasicFallbackContext(userId);
+          }
 
-      if (!userData) {
-        this.logger.warn(`User ${userId} not found in replica database`);
-        return null;
-      }
+          if (!userData) {
+            this.logger.warn(`User ${userId} not found in replica database`);
+            return null;
+          }
 
-      // 3. Merge data into context (without call scores for now)
-      const context = this.mergeUserContext(userData, null);
+          // 3. Merge data into context (skip call scores for now - we can fetch async)
+          const context = this.mergeUserContext(userData as UserDataFromReplica, null);
 
-      // 4. Cache result (shorter TTL for fallback data)
-      const ttl = userData.isFallback ? 60000 : CACHE_TTL.USER_CONTEXT; // 1 minute for fallback
-      await cacheService.set(cacheKey, context, ttl);
+          // 4. Cache result with longer TTL for better performance
+          await cacheService.set(cacheKey, context, CACHE_TTL.USER_CONTEXT * 2); // Double the cache time
 
-      this.logger.info(`User context built for ${userId}: ${context.claims.length} claims, ${context.claims.reduce((acc, c) => acc + c.requirements.length, 0)} requirements`);
+          // 5. Cache a fallback version for emergencies
+          const fallbackKey = `${cacheKey}:fallback`;
+          await cacheService.set(fallbackKey, context, CACHE_TTL.USER_CONTEXT * 4); // 4x cache time for fallback
 
-      return context;
+          this.logger.info(`User context built for ${userId}: ${context.claims.length} claims, ${context.claims.reduce((acc, c) => acc + c.requirements.length, 0)} requirements`);
 
-    } catch (error) {
-      this.logger.error(`Failed to get user context for ${userId}:`, error);
-      // Return a basic fallback context to prevent hanging
-      return this.createBasicFallbackContext(userId);
-    }
+          return context;
+
+        } catch (error) {
+          this.logger.error(`Failed to get user context for ${userId}:`, error);
+          // Return a basic fallback context to prevent hanging
+          return this.createBasicFallbackContext(userId);
+        }
+      },
+      { userId }
+    );
   }
 
   /**
@@ -783,6 +801,92 @@ export class UserService {
     } catch (error) {
       this.logger.error(`Failed to fetch simplified user ${userId} from replica:`, error);
       throw error; // Re-throw to be caught by the calling method
+    }
+  }
+
+  /**
+   * Optimized user data fetch with minimal queries and better performance
+   */
+  private async getUserDataOptimized(userId: number): Promise<UserDataFromReplica | null> {
+    try {
+      // Single optimized query - only fetch what we need for the call context
+      const userData = await replicaDb.user.findUnique({
+        where: { id: BigInt(userId) },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email_address: true,
+          phone_number: true,
+          status: true,
+          is_enabled: true,
+          introducer: true,
+          solicitor: true,
+          last_login: true,
+          current_signature_file_id: true,
+          // Optimized claims - only pending requirements for call context
+          claims: {
+            select: {
+              id: true,
+              type: true,
+              status: true,
+              lender: true,
+              solicitor: true,
+              client_last_updated_at: true,
+              requirements: {
+                where: { status: 'PENDING' }, // Only pending for call context
+                select: {
+                  id: true,
+                  type: true,
+                  status: true,
+                  claim_requirement_reason: true,
+                  claim_requirement_rejection_reason: true,
+                  created_at: true
+                }
+              },
+              // Skip vehicle packages for now - not needed for call context
+              vehiclePackages: {
+                select: {
+                  id: true,
+                  vehicle_registration: true,
+                  vehicle_make: true,
+                  vehicle_model: true,
+                  dealership_name: true,
+                  monthly_payment: true,
+                  contract_start_date: true,
+                  status: true
+                },
+                take: 3 // Limit to first 3 for performance
+              }
+            },
+            where: {
+              status: { not: 'complete' } // Only active claims
+            }
+          },
+          // Current address only - skip fetching all addresses for now
+          address: {
+            select: {
+              id: true,
+              type: true,
+              full_address: true,
+              post_code: true,
+              county: true
+            }
+          }
+        }
+      });
+
+      if (!userData) return null;
+
+      // Transform to match expected interface with minimal processing
+      return {
+        ...userData,
+        allAddresses: userData.address ? [userData.address] : [] // Use current address only
+      } as any;
+
+    } catch (error) {
+      this.logger.error(`Failed to fetch optimized user ${userId} from replica:`, error);
+      throw error;
     }
   }
 

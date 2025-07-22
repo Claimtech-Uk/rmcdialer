@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Phone, ArrowLeft, User, AlertCircle, Activity } from 'lucide-react';
+import { Phone, ArrowLeft, User, AlertCircle, Activity, Loader2 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent } from '@/modules/core/components/ui/card';
 import { CallInterface } from '@/modules/calls/components/CallInterface';
@@ -62,13 +62,19 @@ export default function CallSessionPage() {
   // Try to get user context - first try from URL params, then from session ID
   const userIdFromUrl = userId ? parseInt(userId) : null;
   
-  // Fetch user context from URL params if available
+  // Fetch user context from URL params if available with improved timeout and retry
   const { data: userContextResponse, isLoading: userContextLoading, error: userContextError } = api.users.getUserContext.useQuery(
     { userId: userIdFromUrl || 0 },
     { 
       enabled: !!userIdFromUrl,
-      retry: 2,
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 1, // Reduced retries for faster failure
+      staleTime: 2 * 60 * 1000, // 2 minutes cache
+      refetchOnWindowFocus: false, // Don't refetch on focus
+      refetchOnMount: false, // Don't refetch on mount if cached
+      // Custom timeout handling
+      meta: {
+        timeout: 5000 // 5 second timeout
+      }
     }
   );
 
@@ -77,8 +83,13 @@ export default function CallSessionPage() {
     { sessionId },
     { 
       enabled: !userIdFromUrl && !!sessionId,
-      retry: 2,
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 1, // Reduced retries
+      staleTime: 2 * 60 * 1000, // 2 minutes cache
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      meta: {
+        timeout: 5000 // 5 second timeout
+      }
     }
   );
 
@@ -86,6 +97,20 @@ export default function CallSessionPage() {
   const isLoading = userContextLoading || sessionLoading;
   const error = userContextError || sessionError;
   const userContextData = userContextResponse?.data || callSessionResponse?.userContext;
+
+  // Progressive timeout handling
+  const [loadingTimeout, setLoadingTimeout] = React.useState(false);
+  React.useEffect(() => {
+    if (isLoading) {
+      const timer = setTimeout(() => {
+        setLoadingTimeout(true);
+      }, 3000); // Show timeout message after 3 seconds
+      
+      return () => clearTimeout(timer);
+    } else {
+      setLoadingTimeout(false);
+    }
+  }, [isLoading]);
 
   // End call mutation to clear stuck call state
   const endCallMutation = api.calls.updateCallStatus.useMutation({
@@ -107,15 +132,30 @@ export default function CallSessionPage() {
     });
   };
 
-  // Loading state
+  // Loading state with progressive feedback
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <Card className="w-full max-w-md mx-auto border-0 shadow-xl bg-white/80 backdrop-blur-sm">
           <CardContent className="p-8 text-center">
-            <Activity className="w-8 h-8 animate-pulse text-blue-600 mx-auto mb-4" />
-            <h2 className="text-lg font-semibold mb-2 text-slate-800">Loading User Data</h2>
-            <p className="text-slate-600 mb-6">Fetching user context for call session...</p>
+            <Activity className={`w-8 h-8 ${loadingTimeout ? 'animate-pulse text-amber-500' : 'animate-spin text-blue-600'} mx-auto mb-4`} />
+            
+            {loadingTimeout ? (
+              <>
+                <h2 className="text-lg font-semibold mb-2 text-amber-700">Loading Taking Longer...</h2>
+                <p className="text-amber-600 mb-4">
+                  The system is working to load user data. This may take a moment due to database processing.
+                </p>
+                <div className="text-sm text-slate-500 mb-6">
+                  Session ID: {sessionId.slice(0, 8)}...
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-semibold mb-2 text-slate-800">Loading User Data</h2>
+                <p className="text-slate-600 mb-6">Fetching user context for call session...</p>
+              </>
+            )}
             
             <div className="space-y-3">
               <Button 
@@ -124,7 +164,14 @@ export default function CallSessionPage() {
                 className="w-full"
                 disabled={endCallMutation.isLoading}
               >
-                {endCallMutation.isLoading ? 'Ending Call...' : 'End Call & Exit'}
+                {endCallMutation.isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Ending Call...
+                  </>
+                ) : (
+                  'End Call & Exit'
+                )}
               </Button>
               <Button 
                 variant="outline"
@@ -135,6 +182,15 @@ export default function CallSessionPage() {
                 Back to Dashboard
               </Button>
             </div>
+            
+            {loadingTimeout && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-xs text-amber-700">
+                  💡 If this continues, the system may be processing a large amount of user data. 
+                  You can safely end the call and try again.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
