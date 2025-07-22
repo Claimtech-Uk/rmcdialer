@@ -70,11 +70,7 @@ export default function CallSessionPage() {
       retry: 1, // Reduced retries for faster failure
       staleTime: 2 * 60 * 1000, // 2 minutes cache
       refetchOnWindowFocus: false, // Don't refetch on focus
-      refetchOnMount: false, // Don't refetch on mount if cached
-      // Custom timeout handling
-      meta: {
-        timeout: 5000 // 5 second timeout
-      }
+      refetchOnMount: false // Don't refetch on mount if cached
     }
   );
 
@@ -86,10 +82,7 @@ export default function CallSessionPage() {
       retry: 1, // Reduced retries
       staleTime: 2 * 60 * 1000, // 2 minutes cache
       refetchOnWindowFocus: false,
-      refetchOnMount: false,
-      meta: {
-        timeout: 5000 // 5 second timeout
-      }
+      refetchOnMount: false
     }
   );
 
