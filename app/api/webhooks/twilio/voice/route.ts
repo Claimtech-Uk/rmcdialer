@@ -20,6 +20,29 @@ const TwilioVoiceWebhookSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     console.log('📞 Twilio Voice webhook received');
+    
+    // Emergency agent seeding check - ensure at least one agent exists
+    const agentCount = await prisma.agent.count();
+    if (agentCount === 0) {
+      console.warn('⚠️ No agents found in database - creating emergency fallback agent');
+      try {
+        const bcrypt = require('bcryptjs');
+        const emergencyAgent = await prisma.agent.create({
+          data: {
+            email: 'emergency@system.local',
+            passwordHash: await bcrypt.hash('emergency123', 12),
+            firstName: 'Emergency',
+            lastName: 'Agent',
+            role: 'agent',
+            isActive: true,
+            isAiAgent: false
+          }
+        });
+        console.log(`✅ Created emergency agent with ID ${emergencyAgent.id}`);
+      } catch (seedError) {
+        console.error('❌ Failed to create emergency agent:', seedError);
+      }
+    }
 
     // Parse form data from Twilio
     const formData = await request.formData();
@@ -107,11 +130,14 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       console.warn(`⚠️ Could not lookup caller ${from}:`, error);
     }
 
-    // 2. Find available agents
+    // 2. Find available agents with proper validation
     const availableAgents = await prisma.agentSession.findMany({
       where: {
         status: 'available',
-        logoutAt: null
+        logoutAt: null,
+        agent: {
+          isActive: true // Ensure agent record exists and is active
+        }
       },
       include: {
         agent: {
@@ -119,7 +145,8 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             id: true,
             firstName: true,
             lastName: true,
-            email: true
+            email: true,
+            isActive: true
           }
         }
       },
@@ -131,8 +158,26 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
 
     const availableAgent = availableAgents[0];
     console.log(`👥 Available agents: ${availableAgents.length}`);
+    
+    // Additional validation: ensure agent record actually exists
+    let validatedAgent = null;
+    if (availableAgent?.agent?.id) {
+      try {
+        const agentExists = await prisma.agent.findUnique({
+          where: { id: availableAgent.agentId, isActive: true }
+        });
+        if (agentExists) {
+          validatedAgent = availableAgent;
+          console.log(`✅ Validated agent ${availableAgent.agentId}: ${availableAgent.agent.firstName} ${availableAgent.agent.lastName}`);
+        } else {
+          console.warn(`⚠️ Agent session ${availableAgent.id} references non-existent agent ${availableAgent.agentId}`);
+        }
+      } catch (validationError) {
+        console.error(`❌ Failed to validate agent ${availableAgent.agentId}:`, validationError);
+      }
+    }
 
-    // 3. Create call session regardless of agent availability
+    // 3. Create call session regardless of agent availability - with proper agent validation
     let callSession;
     try {
       if (userId && callerInfo?.user) {
@@ -153,35 +198,56 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             userId: BigInt(userId),
             queueType: 'inbound_call',
             priorityScore: callerInfo.priorityScore || 0,
-            status: availableAgent ? 'assigned' : 'pending',
+            status: validatedAgent ? 'assigned' : 'pending',
             queueReason: `Inbound call from ${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
-            assignedToAgentId: availableAgent?.agentId || null,
-            assignedAt: availableAgent ? new Date() : null,
+            assignedToAgentId: validatedAgent?.agentId || null, // Use null instead of fallback
+            assignedAt: validatedAgent ? new Date() : null,
           }
         });
 
-        callSession = await prisma.callSession.create({
-          data: {
-            userId: BigInt(userId),
-            agentId: availableAgent?.agentId || 1,
-            callQueueId: inboundQueue.id,
-            twilioCallSid: callSid,
-            status: availableAgent ? 'ringing' : 'missed_call',
-            direction: 'inbound',
-            startedAt: new Date(),
-            callSource: 'inbound',
-            userClaimsContext: JSON.stringify({
-              knownCaller: true,
-              callerName: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
-              phoneNumber: from,
-              claims: callerInfo.claims,
-              requirements: callerInfo.requirements,
-              callHistory: callerInfo.callHistory
-            })
+        // Use validated agent ID or create without agent assignment for missed calls
+        const sessionData: any = {
+          userId: BigInt(userId),
+          callQueueId: inboundQueue.id,
+          twilioCallSid: callSid,
+          status: validatedAgent ? 'ringing' : 'missed_call',
+          direction: 'inbound',
+          startedAt: new Date(),
+          callSource: 'inbound',
+          userClaimsContext: JSON.stringify({
+            knownCaller: true,
+            callerName: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
+            phoneNumber: from,
+            claims: callerInfo.claims,
+            requirements: callerInfo.requirements,
+            callHistory: callerInfo.callHistory
+          })
+        };
+
+        // Only set agentId if we have a validated agent
+        if (validatedAgent?.agentId) {
+          sessionData.agentId = validatedAgent.agentId;
+        } else {
+          // For missed calls, find ANY valid agent ID as a safe fallback
+          const fallbackAgent = await prisma.agent.findFirst({
+            where: { isActive: true },
+            select: { id: true }
+          });
+          if (fallbackAgent) {
+            sessionData.agentId = fallbackAgent.id;
+            console.log(`📍 Using fallback agent ID ${fallbackAgent.id} for missed call tracking`);
+          } else {
+            throw new Error('No valid agents found in database - cannot create call session');
           }
+        }
+
+        callSession = await prisma.callSession.create({
+          data: sessionData
         });
+        
+        console.log(`📝 Created ${validatedAgent ? 'ringing' : 'missed'} call session ${callSession.id} for caller ${callerInfo.user.first_name} ${callerInfo.user.last_name}`);
       } else {
-        // Unknown caller - create basic session with proper queue
+        // Unknown caller - create basic session with proper validation
         console.log(`👤 Unknown caller ${from} - creating basic missed call record`);
         
         try {
@@ -198,35 +264,44 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             }
           });
 
-                      callSession = await prisma.callSession.create({
-              data: {
-                userId: BigInt(999999), // Special ID for unknown callers
-                agentId: availableAgent?.agentId || 1, // Use available agent or default to 1
-                callQueueId: unknownCallerQueue.id,
-                twilioCallSid: callSid,
-                status: availableAgent ? 'ringing' : 'missed_call',
-                direction: 'inbound',
-                startedAt: new Date(),
-                callSource: 'inbound',
-                userClaimsContext: JSON.stringify({
-                  unknownCaller: true,
-                  phoneNumber: from,
-                  searchAttempted: true,
-                  matchFound: false,
-                  missedCall: !availableAgent
-                })
-              }
-            });
+          // Find a valid agent ID for call session tracking
+          const sessionAgent = validatedAgent || await prisma.agent.findFirst({
+            where: { isActive: true },
+            select: { id: true, firstName: true, lastName: true }
+          });
+
+          if (!sessionAgent) {
+            throw new Error('No valid agents found in database for call session creation');
+          }
+
+          const agentIdToUse = validatedAgent?.agentId || sessionAgent.id;
+          console.log(`📍 Using agent ID ${agentIdToUse} for unknown caller session`);
+
+          callSession = await prisma.callSession.create({
+            data: {
+              userId: BigInt(999999), // Special ID for unknown callers
+              agentId: Number(agentIdToUse), // Ensure proper number type
+              callQueueId: unknownCallerQueue.id,
+              twilioCallSid: callSid,
+              status: validatedAgent ? 'ringing' : 'missed_call',
+              direction: 'inbound',
+              startedAt: new Date(),
+              callSource: 'inbound',
+              userClaimsContext: JSON.stringify({
+                unknownCaller: true,
+                phoneNumber: from,
+                searchAttempted: true,
+                matchFound: false,
+                missedCall: !validatedAgent
+              })
+            }
+          });
           
-          console.log(`📝 Created ${availableAgent ? 'ringing' : 'missed'} call session ${callSession.id} for unknown caller ${from}`);
+          console.log(`📝 Created ${validatedAgent ? 'ringing' : 'missed'} call session ${callSession.id} for unknown caller ${from}`);
         } catch (unknownCallerError) {
           console.error(`❌ Failed to create call session for unknown caller:`, unknownCallerError);
           // Continue without call session for unknown callers
           callSession = null;
-        }
-        
-        if (callSession) {
-          console.log(`📝 Created ${availableAgent ? 'ringing' : 'missed'} call session ${callSession.id} for unknown caller ${from}`);
         }
       }
 
@@ -241,20 +316,20 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
     }
 
     // 4. Generate appropriate TwiML response with caller context
-    if (availableAgent) {
+    if (validatedAgent) {
       const callerName = callerInfo?.user ? 
         `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 
         'Unknown Caller';
       
-      console.log(`✅ Routing call from ${callerName} to agent ${availableAgent.agent.firstName} ${availableAgent.agent.lastName}`);
+      console.log(`✅ Routing call from ${callerName} to agent ${validatedAgent.agent.firstName} ${validatedAgent.agent.lastName}`);
       
       // DO NOT update agent status here - let call-status webhook handle it when call actually connects
       // This prevents the race condition where agent is marked busy before connection is verified
-      console.log(`📞 Attempting to dial agent ${availableAgent.agentId} - status will be updated on successful connection`);
+      console.log(`📞 Attempting to dial agent ${validatedAgent.agentId} - status will be updated on successful connection`);
 
-      const agentClientName = `agent_${availableAgent.agentId}`;
+      const agentClientName = `agent_${validatedAgent.agentId}`;
       console.log(`🎯 Dialing Twilio client: "${agentClientName}"`);
-      console.log(`👥 Agent details: ID=${availableAgent.agentId}, Name=${availableAgent.agent.firstName} ${availableAgent.agent.lastName}, Email=${availableAgent.agent.email}`);
+      console.log(`👥 Agent details: ID=${validatedAgent.agentId}, Name=${validatedAgent.agent.firstName} ${validatedAgent.agent.lastName}, Email=${validatedAgent.agent.email}`);
       
       return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -554,4 +629,4 @@ export async function GET() {
     timestamp: new Date(),
     endpoint: 'POST /api/webhooks/twilio/voice'
   });
-} 
+}

@@ -19,54 +19,58 @@ const TwilioCallStatusSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('📞 Twilio Call Status webhook received');
-
-    // Parse form data from Twilio
-    const formData = await request.formData();
-    const webhookData = Object.fromEntries(formData.entries());
+    const webhookData = await request.formData();
     
-    console.log('📋 Call Status data:', {
-      CallSid: webhookData.CallSid,
-      CallStatus: webhookData.CallStatus,
-      Duration: webhookData.Duration,
-      CallDuration: webhookData.CallDuration,
-      From: webhookData.From,
-      To: webhookData.To,
-      Direction: webhookData.Direction
-    });
+    const CallSid = webhookData.get('CallSid') as string;
+    const CallStatus = webhookData.get('CallStatus') as string;
+    const Direction = webhookData.get('Direction') as string;
+    const Duration = webhookData.get('Duration') as string;
+    const From = webhookData.get('From') as string;
+    const To = webhookData.get('To') as string;
 
-    // Validate the webhook data
-    const validatedData = TwilioCallStatusSchema.parse(webhookData);
-    
-    const { 
-      CallSid, 
-      CallStatus, 
-      Duration, 
-      CallDuration,
+    console.log(`🔄 Call status webhook received:`, {
+      CallSid,
+      CallStatus,
+      Direction,
+      Duration,
       From,
       To,
-      Direction
-    } = validatedData;
+      timestamp: new Date().toISOString()
+    });
 
-    console.log(`📞 Call ${CallSid} status: ${CallStatus}`);
-
-    // Find the call session by Twilio Call SID
+    // Find the call session
     const callSession = await prisma.callSession.findFirst({
-      where: { twilioCallSid: CallSid }
+      where: { 
+        twilioCallSid: CallSid 
+      },
+      include: {
+        agent: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
+      }
     });
 
     if (!callSession) {
-      console.warn(`⚠️ Call status webhook for unknown call session: ${CallSid}`);
+      console.warn(`⚠️ Call session not found for Twilio CallSid: ${CallSid}`);
       return NextResponse.json({ 
         success: false, 
-        message: 'Call session not found' 
+        error: 'Call session not found',
+        callSid: CallSid 
       }, { status: 404 });
     }
 
+    console.log(`📍 Found call session ${callSession.id} for agent ${callSession.agent?.firstName} ${callSession.agent?.lastName}`);
+
     // Map Twilio status to our internal status
-    const statusMap: Record<string, string> = {
-      'queued': 'initiated',
+    const statusMapping: Record<string, string> = {
+      'initiated': 'initiated',
       'ringing': 'ringing', 
+      'answered': 'connected',
       'in-progress': 'connected',
       'completed': 'completed',
       'busy': 'no_answer',
@@ -75,7 +79,7 @@ export async function POST(request: NextRequest) {
       'canceled': 'failed'
     };
 
-    const ourStatus = statusMap[CallStatus] || 'failed';
+    const ourStatus = statusMapping[CallStatus] || CallStatus;
     
     // Prepare update data
     const updateData: any = {
@@ -95,10 +99,9 @@ export async function POST(request: NextRequest) {
     if (['completed', 'busy', 'failed', 'no-answer', 'canceled'].includes(CallStatus)) {
       updateData.endedAt = now;
       
-      // Get duration from Twilio (Duration or CallDuration field)
-      const twilioSeconds = Duration || CallDuration;
-      if (twilioSeconds) {
-        const durationSeconds = parseInt(twilioSeconds);
+      // Get duration from Twilio Duration field
+      if (Duration) {
+        const durationSeconds = parseInt(Duration);
         updateData.durationSeconds = durationSeconds;
         console.log(`⏱️ Call ${CallSid} duration: ${durationSeconds} seconds`);
         
@@ -172,13 +175,15 @@ export async function POST(request: NextRequest) {
       // Update call session to reflect missed call status
       const missedCallStatus = callSession.direction === 'inbound' ? 'missed_call' : 'no_answer';
       
+      console.log(`📞 Call ${CallSid} failed without connection - marking as ${missedCallStatus}`);
+      
       await prisma.callSession.update({
         where: { id: callSession.id },
         data: {
           status: missedCallStatus,
           endedAt: new Date(),
           lastOutcomeType: 'no_answer',
-          lastOutcomeNotes: `Agent unavailable - call ${CallStatus}`,
+          lastOutcomeNotes: `Agent unavailable - call ${CallStatus}. Direction: ${callSession.direction}, From: ${From}, To: ${To}`,
           lastOutcomeAt: new Date()
         }
       });
@@ -191,20 +196,40 @@ export async function POST(request: NextRequest) {
             status: callSession.direction === 'inbound' ? 'missed' : 'no_answer'
           }
         });
+        console.log(`📋 Updated queue entry ${callSession.callQueueId} status to ${callSession.direction === 'inbound' ? 'missed' : 'no_answer'}`);
       }
 
-      await prisma.agentSession.updateMany({
-        where: { 
-          agentId: callSession.agentId
-        },
-        data: { 
-          status: 'available', // Ensure agent is available for next call
-          currentCallSessionId: null,
-          lastActivity: new Date()
-        }
-      });
-      
-      console.log(`👤 Agent ${callSession.agentId} remains available - ${callSession.direction} call ${CallStatus} without connection (marked as ${missedCallStatus})`);
+      // Reset agent session to available (they should be able to take the next call)
+      if (callSession.agentId) {
+        const updatedSessions = await prisma.agentSession.updateMany({
+          where: { 
+            agentId: callSession.agentId
+          },
+          data: { 
+            status: 'available', // Ensure agent is available for next call
+            currentCallSessionId: null,
+            lastActivity: new Date()
+          }
+        });
+        
+        console.log(`👤 Reset ${updatedSessions.count} agent sessions for agent ${callSession.agentId} to available - ${callSession.direction} call ${CallStatus} without connection`);
+      }
+
+      // Add additional debugging for missed inbound calls
+      if (callSession.direction === 'inbound') {
+        console.log(`🔍 MISSED INBOUND CALL DEBUG:`, {
+          callSessionId: callSession.id,
+          twilioCallSid: CallSid,
+          from: From,
+          to: To,
+          agentId: callSession.agentId,
+          agentName: callSession.agent ? `${callSession.agent.firstName} ${callSession.agent.lastName}` : 'Unknown',
+          callStatus: CallStatus,
+          wasConnected: !!callSession.connectedAt,
+          duration: Duration || '0',
+          missedCallReason: `Agent client dial failed: ${CallStatus}`
+        });
+      }
     }
 
     return NextResponse.json({ 
