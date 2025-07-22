@@ -21,6 +21,7 @@ interface GlobalTwilioState {
   // Actions
   acceptIncomingCall: () => void;
   rejectIncomingCall: () => void;
+  endCall: () => void;
   getDevice: () => TwilioVoiceService | null;
   reinitialize: () => Promise<void>;
   
@@ -144,6 +145,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
           } else if (status.state === 'connected') {
             setIsInCall(true);
             setCurrentCallSid(status.callSid || null);
+            setIncomingCall(null); // Clear incoming call when connected
           } else if (status.state === 'disconnected') {
             setIsInCall(false);
             setCurrentCallSid(null);
@@ -220,12 +222,15 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
   const acceptIncomingCall = useCallback(() => {
     if (twilioService && incomingCall) {
       console.log('✅ Accepting global incoming call');
-      twilioService.acceptIncomingCall();
-      setIncomingCall(null);
       
+      // Accept the Twilio call - this will trigger status change to 'connected'
+      twilioService.acceptIncomingCall();
+      
+      // Note: We no longer navigate away - the call interface will be shown via the new InboundCallInterface
+      // The incomingCall state will be cleared when the call status changes to 'connected'
       toast({
         title: "Call Connected",
-        description: "You are now connected to the caller",
+        description: "Connected to caller",
       });
     }
   }, [twilioService, incomingCall, toast]);
@@ -242,6 +247,30 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
       });
     }
   }, [twilioService, incomingCall, toast]);
+
+  const endCall = useCallback(() => {
+    if (twilioService && (isInCall || incomingCall)) {
+      console.log('📞 Ending current call');
+      
+      if (isInCall) {
+        // End active call
+        twilioService.hangUp();
+      } else if (incomingCall) {
+        // Reject incoming call
+        twilioService.rejectIncomingCall();
+      }
+      
+      // Clear call states
+      setIncomingCall(null);
+      setIsInCall(false);
+      setCurrentCallSid(null);
+      
+      toast({
+        title: "Call Ended",
+        description: "The call has been ended",
+      });
+    }
+  }, [twilioService, isInCall, incomingCall, toast]);
 
   const getDevice = useCallback(() => {
     if (!isEnabled) {
@@ -298,6 +327,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
     currentCallSid,
     acceptIncomingCall,
     rejectIncomingCall,
+    endCall,
     getDevice,
     reinitialize,
     isEnabled

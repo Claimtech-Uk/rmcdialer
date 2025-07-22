@@ -385,6 +385,85 @@ export const callsRouter = createTRPCRouter({
       }
     }),
 
+  // Get call session by Twilio Call SID (for inbound call interface)
+  getCallSessionByCallSid: protectedProcedure
+    .input(z.object({
+      callSid: z.string().min(1) // Twilio Call SID
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        console.log(`🔍 Looking up call session by Twilio Call SID: ${input.callSid}`);
+        
+        const session = await prisma.callSession.findFirst({
+          where: { twilioCallSid: input.callSid },
+          include: {
+            agent: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true
+              }
+            },
+            callOutcomes: {
+              include: {
+                recordedByAgent: {
+                  select: {
+                    firstName: true,
+                    lastName: true
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        if (!session) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Call session not found for this Call SID'
+          });
+        }
+
+        // Check permissions - agents can only see their own calls
+        if (ctx.agent.role === 'agent' && session.agentId !== ctx.agent.id) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Access denied'
+          });
+        }
+
+        console.log(`✅ Found call session: ${session.id} for user ${session.userId}`);
+
+        return {
+          success: true,
+          callSession: {
+            id: session.id,
+            userId: Number(session.userId), // Convert BigInt to number
+            agentId: session.agentId,
+            twilioCallSid: session.twilioCallSid,
+            status: session.status,
+            direction: session.direction,
+            startedAt: session.startedAt,
+            connectedAt: session.connectedAt,
+            endedAt: session.endedAt,
+            userClaimsContext: session.userClaimsContext,
+            agent: session.agent,
+            callOutcomes: session.callOutcomes
+          }
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        console.error(`❌ Failed to get call session by Call SID ${input.callSid}:`, error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to get call session'
+        });
+      }
+    }),
+
   // Get recording information for a call session
   getRecording: protectedProcedure
     .input(z.object({

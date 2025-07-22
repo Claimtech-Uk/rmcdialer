@@ -314,6 +314,54 @@ export const usersRouter = createTRPCRouter({
         console.error('Failed to get test user:', error);
         throw new Error(`Failed to get test user: ${error.message}`);
       }
+    }),
+
+  /**
+   * Lookup user by phone number for inbound call identification
+   * Returns basic user data if found
+   */
+  getUserByPhoneNumber: protectedProcedure
+    .input(z.object({
+      phoneNumber: z.string().min(1)
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        console.log(`🔍 Looking up user by phone: ${input.phoneNumber}`);
+        
+        // Use the UserService method that handles phone number normalization
+        const user = await userService.getUserByPhoneNumber(input.phoneNumber);
+        
+        if (!user) {
+          console.log(`❓ No user found for phone: ${input.phoneNumber}`);
+          return {
+            success: false,
+            data: null,
+            message: `No user found for phone number ${input.phoneNumber}`
+          };
+        }
+
+        // Log access for audit trail
+        console.log(`Agent ${ctx.agent.id} looked up user ${Number(user.id)} by phone ${input.phoneNumber}`);
+
+        // CRITICAL FIX: Convert BigInt to number for JSON serialization
+        const userForSerialization = {
+          ...user,
+          id: Number(user.id), // Convert BigInt to number
+          created_at: user.created_at?.toISOString() || null,
+          last_login: user.last_login?.toISOString() || null,
+          date_of_birth: user.date_of_birth?.toISOString() || null
+        };
+
+        return {
+          success: true,
+          data: userForSerialization,
+          message: `User found: ${user.first_name} ${user.last_name}`
+        };
+
+      } catch (error: any) {
+        console.error(`Failed to lookup user by phone ${input.phoneNumber}:`, error);
+        throw new Error(`Failed to lookup user by phone: ${error.message}`);
+      }
     })
 });
 

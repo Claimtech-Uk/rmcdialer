@@ -6,6 +6,7 @@ import { GlobalTwilioProvider } from '@/lib/providers/GlobalTwilioProvider'
 import { GlobalIncomingCallHandler } from '@/components/GlobalIncomingCallHandler'
 import { FloatingCallStatus } from '@/components/FloatingCallStatus'
 import { GlobalErrorBoundary } from '@/components/GlobalErrorBoundary'
+import { AudioUnlockHelper } from '@/components/AudioUnlockHelper'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -40,6 +41,9 @@ export default function RootLayout({
               </GlobalErrorBoundary>
               <GlobalErrorBoundary>
                 <FloatingCallStatus />
+              </GlobalErrorBoundary>
+              <GlobalErrorBoundary>
+                <AudioUnlockHelper />
               </GlobalErrorBoundary>
               <Toaster />
             </GlobalTwilioProvider>

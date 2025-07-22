@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/trpc/client';
 import { 
   ArrowLeft,
@@ -27,6 +27,8 @@ import { Badge } from '@/modules/core/components/ui/badge';
 import { Alert, AlertDescription } from '@/modules/core/components/ui/alert';
 import { useToast } from '@/modules/core/hooks/use-toast';
 import { CallHistoryTable } from '@/modules/calls/components/CallHistoryTable';
+import { CallInterface } from '@/modules/calls/components/CallInterface';
+import { useState, useEffect } from 'react';
 
 // Component to display individual conversation with message history
 function ConversationDetail({ conversation }: { conversation: any }) {
@@ -181,8 +183,14 @@ function ConversationDetail({ conversation }: { conversation: any }) {
 export default function UserDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const userId = params.userId as string;
+
+  // Detect inbound call from URL parameters
+  const isInboundCall = searchParams.get('inbound_call') === 'true';
+  const callSid = searchParams.get('call_sid');
+  const [showCallInterface, setShowCallInterface] = useState(false);
 
   // Fetch user details
   const { 
@@ -195,6 +203,19 @@ export default function UserDetailPage() {
   );
 
   const userDetails = userDetailsResponse?.data;
+
+  // Automatically show call interface for inbound calls
+  useEffect(() => {
+    if (isInboundCall && userDetails) {
+      console.log('🎯 Inbound call detected - showing call interface');
+      setShowCallInterface(true);
+      
+      toast({
+        title: "📞 Inbound Call Active",
+        description: `Connected to ${userDetails.user.firstName} ${userDetails.user.lastName}`,
+      });
+    }
+  }, [isInboundCall, userDetails, toast]);
 
   // Determine queue type for this user
   const { data: queueType } = api.users.determineUserQueueType.useQuery(
@@ -435,6 +456,65 @@ export default function UserDetailPage() {
             </Button>
           </div>
         </div>
+
+        {/* Inbound Call Interface - Show when call is active */}
+        {showCallInterface && (
+          <Card className="border-l-4 border-l-green-500 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-xl">
+            <CardHeader className="bg-gradient-to-r from-green-500 to-emerald-600 text-white">
+              <CardTitle className="flex items-center gap-2">
+                <Phone className="w-6 h-6 animate-pulse" />
+                {isInboundCall ? 'Inbound Call Active' : 'Call Session Active'}
+                {callSid && (
+                  <Badge className="bg-white/20 text-emerald-100 border-emerald-200">
+                    SID: {callSid.slice(-8)}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <CallInterface
+                userContext={{
+                  userId: user.id,
+                  firstName: user.firstName,
+                  lastName: user.lastName,
+                  email: user.email,
+                  phoneNumber: user.phoneNumber,
+                  claims: userDetails.claims.map(claim => ({
+                    id: claim.id,
+                    type: claim.type,
+                    status: claim.status,
+                    lender: claim.lender,
+                    requirements: claim.requirements.map(req => ({
+                      id: req.id,
+                      type: req.type,
+                      status: req.status,
+                      reason: req.reason || ''
+                    }))
+                  })),
+                  callScore: { 
+                    currentScore: 0, 
+                    totalAttempts: 0 
+                  }
+                }}
+                onCallComplete={(outcome) => {
+                  console.log('📞 Call completed:', outcome);
+                  setShowCallInterface(false);
+                  
+                  // Clear URL parameters
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete('inbound_call');
+                  url.searchParams.delete('call_sid');
+                  window.history.replaceState({}, '', url.pathname + url.search);
+                  
+                  toast({
+                    title: "Call Completed",
+                    description: `Call with ${user.firstName} ${user.lastName} has ended`,
+                  });
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Personal Info */}

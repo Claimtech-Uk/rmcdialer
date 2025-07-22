@@ -363,8 +363,8 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       console.log(`🔍 Agent lookup chain: Phone ${from} → User ${callerInfo?.user?.first_name} → Agent Session ${validatedAgent.id} → Agent Record ${validatedAgent.agent.id} → Twilio Client "${agentClientName}"`);
       console.log(`⚠️ If this fails, check: 1) Is agent device registered? 2) Is device online? 3) Is identity format correct?`);
       
-      // Add detailed webhook URLs for debugging
-      const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://rmcdialer.vercel.app';
+      // FIXED: Use consistent production URL for webhooks (deployment-specific URLs don't receive webhooks properly)
+      const baseUrl = 'https://rmcdialer.vercel.app';
       const recordingCallbackUrl = `${baseUrl}/api/webhooks/twilio/recording`;
       const statusCallbackUrl = `${baseUrl}/api/webhooks/twilio/call-status`;
       
@@ -377,8 +377,9 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           record="record-from-answer" 
           recordingStatusCallback="${recordingCallbackUrl}"
           statusCallback="${statusCallbackUrl}"
-          statusCallbackEvent="initiated ringing answered completed"
-          statusCallbackMethod="POST">
+          statusCallbackEvent="initiated ringing answered completed busy no-answer failed"
+          statusCallbackMethod="POST"
+          action="${statusCallbackUrl}">
         <Client>${agentClientName}</Client>
     </Dial>
     <Say voice="alice">I'm sorry, the agent couldn't be reached right now. We'll have someone call you back as soon as possible. Thank you!</Say>

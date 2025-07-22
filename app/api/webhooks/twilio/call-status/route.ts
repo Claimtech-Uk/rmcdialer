@@ -78,6 +78,13 @@ export async function POST(request: NextRequest) {
 
     console.log(`📍 Found call session ${callSession.id} for agent ${callSession.agent?.firstName} ${callSession.agent?.lastName}`);
 
+    // CRITICAL FIX: For inbound calls with Dial, prioritize DialCallStatus over parent CallStatus
+    // This is because we care about agent connection status, not parent call status
+    const effectiveStatus = DialCallStatus || CallStatus;
+    const isDialEvent = !!DialCallStatus;
+    
+    console.log(`🎯 Status processing: Parent="${CallStatus}", Dial="${DialCallStatus || 'N/A'}", Using="${effectiveStatus}", IsDialEvent=${isDialEvent}`);
+
     // Map Twilio status to our internal status
     const statusMapping: Record<string, string> = {
       'initiated': 'initiated',
@@ -91,7 +98,7 @@ export async function POST(request: NextRequest) {
       'canceled': 'failed'
     };
 
-    const ourStatus = statusMapping[CallStatus] || CallStatus;
+    const ourStatus = statusMapping[effectiveStatus] || effectiveStatus;
     
     // Prepare update data
     const updateData: any = {
@@ -100,15 +107,15 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date()
     };
 
-    // Set timing based on status
+    // Set timing based on effective status (prioritizing dial status for inbound calls)
     const now = new Date();
     
-    if (CallStatus === 'in-progress' && !callSession.connectedAt) {
+    if (['answered', 'in-progress'].includes(effectiveStatus) && !callSession.connectedAt) {
       updateData.connectedAt = now;
-      console.log(`✅ Call ${CallSid} connected at ${now.toISOString()}`);
+      console.log(`✅ Call ${CallSid} connected at ${now.toISOString()} (effective status: ${effectiveStatus})`);
     }
 
-    if (['completed', 'busy', 'failed', 'no-answer', 'canceled'].includes(CallStatus)) {
+    if (['completed', 'busy', 'failed', 'no-answer', 'canceled'].includes(effectiveStatus)) {
       updateData.endedAt = now;
       
       // Get duration from Twilio Duration field
@@ -126,7 +133,7 @@ export async function POST(request: NextRequest) {
         }
       }
       
-      console.log(`🔚 Call ${CallSid} ended with status: ${CallStatus} -> ${ourStatus}`);
+      console.log(`🔚 Call ${CallSid} ended with effective status: ${effectiveStatus} -> ${ourStatus} (parent: ${CallStatus}, dial: ${DialCallStatus || 'N/A'})`);
     }
 
     // Update the call session
@@ -137,14 +144,16 @@ export async function POST(request: NextRequest) {
 
     console.log(`📝 Updated call session ${callSession.id}:`, {
       status: ourStatus,
+      effectiveStatus: effectiveStatus,
+      isDialEvent: isDialEvent,
       durationSeconds: updateData.durationSeconds,
       talkTimeSeconds: updateData.talkTimeSeconds,
       connectedAt: updateData.connectedAt,
       endedAt: updateData.endedAt
     });
 
-    // Update agent session based on call status
-    if (CallStatus === 'in-progress') {
+    // Update agent session based on effective call status (prioritizing dial status for inbound calls)
+    if (['answered', 'in-progress'].includes(effectiveStatus)) {
       // Call connected - now mark agent as on_call (this fixes the race condition)
       await prisma.agentSession.updateMany({
         where: { 
@@ -183,11 +192,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle failed dial attempts - ensure agent stays available if call never connected
-    if (['busy', 'failed', 'no-answer', 'canceled'].includes(CallStatus) && !callSession.connectedAt) {
+    if (['busy', 'failed', 'no-answer', 'canceled'].includes(effectiveStatus) && !callSession.connectedAt) {
       // Update call session to reflect missed call status
       const missedCallStatus = callSession.direction === 'inbound' ? 'missed_call' : 'no_answer';
       
-      console.log(`📞 Call ${CallSid} failed without connection - marking as ${missedCallStatus}`);
+      console.log(`📞 Call ${CallSid} failed without connection - marking as ${missedCallStatus} (effective status: ${effectiveStatus})`);
       
       await prisma.callSession.update({
         where: { id: callSession.id },
@@ -195,7 +204,7 @@ export async function POST(request: NextRequest) {
           status: missedCallStatus,
           endedAt: new Date(),
           lastOutcomeType: 'no_answer',
-          lastOutcomeNotes: `Agent unavailable - call ${CallStatus}. Direction: ${callSession.direction}, From: ${From}, To: ${To}`,
+          lastOutcomeNotes: `Agent unavailable - call ${effectiveStatus}. Direction: ${callSession.direction}, From: ${From}, To: ${To}, DialStatus: ${DialCallStatus || 'N/A'}`,
           lastOutcomeAt: new Date()
         }
       });
@@ -224,7 +233,7 @@ export async function POST(request: NextRequest) {
           }
         });
         
-        console.log(`👤 Reset ${updatedSessions.count} agent sessions for agent ${callSession.agentId} to available - ${callSession.direction} call ${CallStatus} without connection`);
+        console.log(`👤 Reset ${updatedSessions.count} agent sessions for agent ${callSession.agentId} to available - ${callSession.direction} call ${effectiveStatus} without connection`);
       }
 
       // Add additional debugging for missed inbound calls
@@ -236,10 +245,12 @@ export async function POST(request: NextRequest) {
           to: To,
           agentId: callSession.agentId,
           agentName: callSession.agent ? `${callSession.agent.firstName} ${callSession.agent.lastName}` : 'Unknown',
-          callStatus: CallStatus,
+          parentCallStatus: CallStatus,
+          dialCallStatus: DialCallStatus || 'N/A',
+          effectiveStatus: effectiveStatus,
           wasConnected: !!callSession.connectedAt,
           duration: Duration || '0',
-          missedCallReason: `Agent client dial failed: ${CallStatus}`
+          missedCallReason: `Agent client dial failed: ${effectiveStatus}`
         });
       }
     }
