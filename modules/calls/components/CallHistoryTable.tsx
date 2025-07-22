@@ -61,7 +61,7 @@ export function CallHistoryTable({
 
   // Recording Player Component
   const RecordingPlayer = ({ call }: { call: CallHistoryEntry }) => {
-    const { data: recordingData, isLoading: recordingLoading } = api.calls.getRecording.useQuery(
+    const { data: recordingData, isLoading: recordingLoading, error: recordingError } = api.calls.getRecording.useQuery(
       { sessionId: call.id },
       { 
         enabled: !!call.twilioCallSid,
@@ -70,47 +70,98 @@ export function CallHistoryTable({
     )
 
     const handlePlayRecording = async () => {
+      console.log('🎵 RecordingPlayer: Play recording clicked for call:', call.id)
+      console.log('🎵 Recording data:', recordingData)
+      
       if (!recordingData?.hasRecording || !recordingData.recording?.streamUrl) {
+        console.warn('🎵 No recording data available:', { hasRecording: recordingData?.hasRecording, streamUrl: recordingData?.recording?.streamUrl })
         return
       }
 
       if (playingRecording === call.id) {
         // Stop current recording
+        console.log('🎵 Stopping current recording')
         if (audioElement) {
           audioElement.pause()
           audioElement.currentTime = 0
         }
         setPlayingRecording(null)
+        setAudioElement(null)
       } else {
         // Stop any other recording
         if (audioElement) {
+          console.log('🎵 Stopping previous audio')
           audioElement.pause()
         }
 
-        // Play this recording using our proxied stream URL
-        const audio = new Audio(recordingData.recording.streamUrl)
-        audio.onended = () => setPlayingRecording(null)
-        audio.onerror = () => {
-          console.error('Failed to play recording')
+        // Create new audio element with better error handling and debugging
+        console.log('🎵 Creating new audio element with URL:', recordingData.recording.streamUrl)
+        
+        const audio = new Audio()
+        
+        // Add comprehensive event listeners for debugging
+        audio.addEventListener('loadstart', () => console.log('🎵 Audio: loadstart'))
+        audio.addEventListener('loadeddata', () => console.log('🎵 Audio: loadeddata'))
+        audio.addEventListener('canplay', () => console.log('🎵 Audio: canplay'))
+        audio.addEventListener('canplaythrough', () => console.log('🎵 Audio: canplaythrough'))
+        audio.addEventListener('playing', () => console.log('🎵 Audio: playing'))
+        audio.addEventListener('pause', () => console.log('🎵 Audio: pause'))
+        audio.addEventListener('ended', () => {
+          console.log('🎵 Audio: ended')
           setPlayingRecording(null)
-        }
+          setAudioElement(null)
+        })
+        
+        audio.addEventListener('error', (e) => {
+          console.error('🎵 Audio error:', e)
+          console.error('🎵 Audio error details:', {
+            error: audio.error,
+            networkState: audio.networkState,
+            readyState: audio.readyState,
+            src: audio.src
+          })
+          setPlayingRecording(null)
+          setAudioElement(null)
+        })
+
+        // Set the source and preload
+        audio.preload = 'auto'
+        audio.src = recordingData.recording.streamUrl
         
         setAudioElement(audio)
         setPlayingRecording(call.id)
         
         try {
+          console.log('🎵 Attempting to play audio...')
           await audio.play()
-        } catch (error) {
-          console.error('Error playing audio:', error)
+          console.log('🎵 Audio playback started successfully')
+        } catch (error: unknown) {
+          console.error('🎵 Error playing audio:', error)
+          console.error('🎵 Play error details:', {
+            name: error instanceof Error ? error.name : 'Unknown',
+            message: error instanceof Error ? error.message : String(error),
+            audioSrc: audio.src,
+            readyState: audio.readyState,
+            networkState: audio.networkState
+          })
           setPlayingRecording(null)
+          setAudioElement(null)
+          
+          // Show user-friendly error
+          const errorMessage = error instanceof Error ? error.message : 'Unknown playback error'
+          alert(`Unable to play recording: ${errorMessage}. Please try downloading the recording instead.`)
         }
       }
     }
 
     const handleDownloadRecording = () => {
+      console.log('🎵 Download recording clicked')
       if (recordingData?.hasRecording && recordingData.recording?.downloadUrl) {
+        console.log('🎵 Opening download URL:', recordingData.recording.downloadUrl)
         // Use our proxied download URL - this will trigger a file download
         window.open(recordingData.recording.downloadUrl, '_blank')
+      } else {
+        console.warn('🎵 No download URL available:', recordingData)
       }
     }
 
@@ -119,6 +170,16 @@ export function CallHistoryTable({
         <div className="flex items-center gap-2 text-xs text-gray-500">
           <Volume2 className="h-3 w-3 animate-pulse" />
           <span>Checking...</span>
+        </div>
+      )
+    }
+
+    if (recordingError) {
+      console.error('🎵 Recording query error:', recordingError)
+      return (
+        <div className="flex items-center gap-2 text-xs text-red-500">
+          <Volume2 className="h-3 w-3" />
+          <span>Error loading</span>
         </div>
       )
     }
