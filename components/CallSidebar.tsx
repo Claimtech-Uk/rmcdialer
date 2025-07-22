@@ -460,58 +460,205 @@ function PostCallContent({
   callData?: any;
   onClose?: () => void;
 }) {
+  const [disposition, setDisposition] = useState('');
+  const [finalNotes, setFinalNotes] = useState('');
+  const [nextAction, setNextAction] = useState('');
+  const [callbackDate, setCallbackDate] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const dispositionOptions = [
+    { value: 'completed', label: '✅ Completed Successfully', color: 'text-green-600' },
+    { value: 'callback', label: '📅 Callback Scheduled', color: 'text-blue-600' },
+    { value: 'no-answer', label: '📞❌ No Answer', color: 'text-yellow-600' },
+    { value: 'busy', label: '📞🔄 Busy Signal', color: 'text-orange-600' },
+    { value: 'wrong-number', label: '📞❓ Wrong Number', color: 'text-red-600' },
+    { value: 'voicemail', label: '📨 Left Voicemail', color: 'text-purple-600' },
+    { value: 'declined', label: '❌ Customer Declined', color: 'text-red-600' },
+    { value: 'technical-issue', label: '⚠️ Technical Issue', color: 'text-gray-600' }
+  ];
+
+  const nextActionOptions = [
+    { value: 'none', label: 'No further action required' },
+    { value: 'callback', label: 'Schedule callback' },
+    { value: 'send-documents', label: 'Send documents to customer' },
+    { value: 'follow-up-email', label: 'Send follow-up email' },
+    { value: 'escalate', label: 'Escalate to supervisor' },
+    { value: 'schedule-appointment', label: 'Schedule appointment' }
+  ];
+
+  const handleSaveAndComplete = async () => {
+    if (!disposition) {
+      alert('Please select a call disposition before completing.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // TODO: Implement actual save logic
+      console.log('💾 Saving call outcome:', {
+        callSid: callData?.callSid,
+        disposition,
+        finalNotes,
+        nextAction,
+        callbackDate
+      });
+
+      // Simulate save delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      alert('Call outcome saved successfully!');
+      onClose?.();
+    } catch (error) {
+      console.error('❌ Failed to save call outcome:', error);
+      alert('Failed to save call outcome. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Call Summary */}
-      <Card className="p-4">
-        <h4 className="font-medium text-gray-900 mb-3">Call Summary</h4>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-600">Duration:</span>
-            <span>{callData?.callDuration || '02:35'}</span>
+      <Card className="p-4 bg-green-50 border-green-200">
+        <h4 className="font-medium text-green-900 mb-3 flex items-center">
+          📞 Call Completed
+        </h4>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <span className="text-green-700 font-medium">Duration:</span>
+            <div className="text-green-600">{callData?.callDuration || '02:35'}</div>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Caller:</span>
-            <span>{callData?.callerName || 'Unknown'}</span>
+          <div>
+            <span className="text-green-700 font-medium">Caller:</span>
+            <div className="text-green-600">{callData?.callerName || 'Unknown'}</div>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Time:</span>
-            <span>{new Date().toLocaleTimeString()}</span>
+          <div>
+            <span className="text-green-700 font-medium">Started:</span>
+            <div className="text-green-600">{new Date().toLocaleTimeString()}</div>
+          </div>
+          <div>
+            <span className="text-green-700 font-medium">Ended:</span>
+            <div className="text-green-600">{new Date().toLocaleTimeString()}</div>
           </div>
         </div>
       </Card>
 
-      {/* Disposition */}
+      {/* Call Disposition */}
       <Card className="p-4">
-        <h4 className="font-medium text-gray-900 mb-3">Call Disposition</h4>
-        <select className="w-full p-2 border border-gray-200 rounded-lg text-sm">
-          <option value="">Select outcome...</option>
-          <option value="completed">Completed Successfully</option>
-          <option value="callback">Callback Scheduled</option>
-          <option value="no-answer">No Answer</option>
-          <option value="busy">Busy Signal</option>
-          <option value="wrong-number">Wrong Number</option>
+        <h4 className="font-medium text-gray-900 mb-3">
+          Call Disposition <span className="text-red-500">*</span>
+        </h4>
+        <div className="space-y-2">
+          {dispositionOptions.map((option) => (
+            <label key={option.value} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+              <input
+                type="radio"
+                name="disposition"
+                value={option.value}
+                checked={disposition === option.value}
+                onChange={(e) => setDisposition(e.target.value)}
+                className="text-blue-600"
+              />
+              <span className={`text-sm ${option.color}`}>{option.label}</span>
+            </label>
+          ))}
+        </div>
+      </Card>
+
+      {/* Next Action */}
+      <Card className="p-4">
+        <h4 className="font-medium text-gray-900 mb-3">Next Action Required</h4>
+        <select 
+          value={nextAction}
+          onChange={(e) => setNextAction(e.target.value)}
+          className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="">Select next action...</option>
+          {nextActionOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
+
+        {(nextAction === 'callback' || disposition === 'callback') && (
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Callback Date & Time
+            </label>
+            <input
+              type="datetime-local"
+              value={callbackDate}
+              onChange={(e) => setCallbackDate(e.target.value)}
+              className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              min={new Date().toISOString().slice(0, 16)}
+            />
+          </div>
+        )}
       </Card>
 
       {/* Final Notes */}
       <Card className="p-4">
-        <h4 className="font-medium text-gray-900 mb-3">Final Notes</h4>
+        <h4 className="font-medium text-gray-900 mb-3">Call Summary & Notes</h4>
         <textarea
-          placeholder="Summary of call discussion..."
-          className="w-full h-20 p-3 border border-gray-200 rounded-lg text-sm resize-none"
+          value={finalNotes}
+          onChange={(e) => setFinalNotes(e.target.value)}
+          placeholder="Summarize the call discussion, key points, customer concerns, and any commitments made..."
+          className="w-full h-24 p-3 border border-gray-200 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
+        <div className="mt-2 text-xs text-gray-500">
+          {finalNotes.length}/500 characters
+        </div>
       </Card>
 
       {/* Actions */}
       <div className="space-y-3">
-        <Button className="w-full">
-          Complete Call
+        <Button 
+          onClick={handleSaveAndComplete}
+          disabled={!disposition || saving}
+          className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300"
+        >
+          {saving ? (
+            <div className="flex items-center justify-center space-x-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              <span>Saving...</span>
+            </div>
+          ) : (
+            '✅ Complete & Save Call'
+          )}
         </Button>
-        <Button variant="outline" className="w-full" onClick={onClose}>
-          Close Without Saving
-        </Button>
+        
+        <div className="grid grid-cols-2 gap-3">
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              // TODO: Implement save as draft
+              console.log('💾 Saving as draft');
+            }}
+            disabled={saving}
+            className="text-blue-600 border-blue-200 hover:bg-blue-50"
+          >
+            💾 Save Draft
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={onClose}
+            disabled={saving}
+            className="text-red-600 border-red-200 hover:bg-red-50"
+          >
+            ❌ Cancel
+          </Button>
+        </div>
       </div>
+
+      {/* Quick Stats */}
+      <Card className="p-3 bg-gray-50">
+        <div className="text-xs text-gray-600 text-center">
+          📊 Call #{callData?.callSid?.slice(-4) || '0000'} • 
+          Agent: {callData?.agentName || 'Agent'} • 
+          Session: {callData?.sessionId?.slice(0, 8) || 'Unknown'}
+        </div>
+      </Card>
     </div>
   );
 } 

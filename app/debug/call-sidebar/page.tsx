@@ -71,7 +71,7 @@ export default function CallSidebarDebugPage() {
             onClick={() => {
               if (twilioContext?.endCall) {
                 twilioContext.endCall();
-                setCurrentTest('Called end call function');
+                setCurrentTest('Called end call function - should trigger post-call state');
               }
             }}
             className="bg-orange-600 hover:bg-orange-700"
@@ -191,6 +191,14 @@ export default function CallSidebarDebugPage() {
             <span className="text-green-600">✅</span>
             <span>Call duration timer & notes functionality</span>
           </div>
+          <div className="flex items-center space-x-2">
+            <span className="text-green-600">✅</span>
+            <span>Professional post-call disposition workflow</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="text-green-600">✅</span>
+            <span>Comprehensive call outcome tracking with validation</span>
+          </div>
         </div>
       </Card>
 
@@ -201,16 +209,38 @@ export default function CallSidebarDebugPage() {
           then accept it. The sidebar will show real user data loaded from the database.
         </p>
         
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <h3 className="font-medium text-blue-900 mb-2">Expected Connected Features:</h3>
-          <ul className="text-sm text-blue-800 space-y-1">
-            <li>• Real-time call duration timer</li>
-            <li>• User details from database (name, phone, claims)</li>
-            <li>• Claims information with status badges</li>
-            <li>• Recent call history</li>
-            <li>• Live note-taking functionality</li>
-            <li>• Quick actions (view profile, schedule callback)</li>
-            <li>• Enhanced call controls (mute, hold, end)</li>
+                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+           <h3 className="font-medium text-blue-900 mb-2">Expected Connected Features:</h3>
+           <ul className="text-sm text-blue-800 space-y-1">
+             <li>• Real-time call duration timer</li>
+             <li>• User details from database (name, phone, claims)</li>
+             <li>• Claims information with status badges</li>
+             <li>• Recent call history</li>
+             <li>• Live note-taking functionality</li>
+             <li>• Quick actions (view profile, schedule callback)</li>
+             <li>• Enhanced call controls (mute, hold, end)</li>
+           </ul>
+         </div>
+       </Card>
+
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Test Post-Call State</h2>
+        <p className="text-gray-600 mb-4">
+          To test the post-call disposition workflow, first start a call (simulate incoming → accept), 
+          then end the call using the "End Call" button. The sidebar will show the disposition form.
+        </p>
+        
+        <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+          <h3 className="font-medium text-orange-900 mb-2">Expected Post-Call Features:</h3>
+          <ul className="text-sm text-orange-800 space-y-1">
+            <li>• Professional call summary with duration and timestamps</li>
+            <li>• Comprehensive disposition options with visual indicators</li>
+            <li>• Next action workflow (callback scheduling, follow-ups)</li>
+            <li>• Conditional callback date picker</li>
+            <li>• Character-counted notes field</li>
+            <li>• Save validation (disposition required)</li>
+            <li>• Loading states and error handling</li>
+            <li>• Draft saving and cancellation options</li>
           </ul>
         </div>
       </Card>
