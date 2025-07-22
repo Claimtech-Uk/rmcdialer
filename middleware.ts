@@ -10,6 +10,18 @@ export function middleware(request: NextRequest) {
     console.log('🔓 Webhook bypass: Allowing unauthenticated access to', request.nextUrl.pathname)
     return NextResponse.next()
   }
+
+  // SECURITY: Block debug/test endpoints in production if no auth token
+  const isDebugPath = request.nextUrl.pathname.startsWith('/api/debug-') || 
+                     request.nextUrl.pathname.startsWith('/api/test-')
+  
+  if (isDebugPath && process.env.NODE_ENV === 'production') {
+    const debugToken = request.headers.get('x-debug-token')
+    if (!debugToken || debugToken !== process.env.DEBUG_ACCESS_TOKEN) {
+      console.log('🚫 Debug endpoint blocked in production:', request.nextUrl.pathname)
+      return NextResponse.json({ error: 'Debug endpoints disabled in production' }, { status: 403 })
+    }
+  }
   
   // Protect dashboard routes
   const protectedPaths = ['/queue', '/calls', '/sms', '/magic-links', '/profile', '/dashboard']

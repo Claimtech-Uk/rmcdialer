@@ -322,22 +322,45 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         'Unknown Caller';
       
       console.log(`✅ Routing call from ${callerName} to agent ${validatedAgent.agent.firstName} ${validatedAgent.agent.lastName}`);
+      console.log(`📊 Agent Session Details:`, {
+        agentSessionId: validatedAgent.id,
+        agentId: validatedAgent.agentId,
+        status: validatedAgent.status,
+        loginAt: validatedAgent.loginAt,
+        lastActivity: validatedAgent.lastActivity,
+        currentCallSessionId: validatedAgent.currentCallSessionId
+      });
+      console.log(`👤 Agent Record Details:`, {
+        agentRecordId: validatedAgent.agent.id,
+        firstName: validatedAgent.agent.firstName,
+        lastName: validatedAgent.agent.lastName,
+        email: validatedAgent.agent.email,
+        isActive: validatedAgent.agent.isActive
+      });
       
       // DO NOT update agent status here - let call-status webhook handle it when call actually connects
       // This prevents the race condition where agent is marked busy before connection is verified
       console.log(`📞 Attempting to dial agent ${validatedAgent.agentId} - status will be updated on successful connection`);
 
       const agentClientName = `agent_${validatedAgent.agentId}`;
-      console.log(`🎯 Dialing Twilio client: "${agentClientName}"`);
-      console.log(`👥 Agent details: ID=${validatedAgent.agentId}, Name=${validatedAgent.agent.firstName} ${validatedAgent.agent.lastName}, Email=${validatedAgent.agent.email}`);
+      console.log(`🎯 CRITICAL: Dialing Twilio client identity: "${agentClientName}"`);
+      console.log(`🔍 Agent lookup chain: Phone ${from} → User ${callerInfo?.user?.first_name} → Agent Session ${validatedAgent.id} → Agent Record ${validatedAgent.agent.id} → Twilio Client "${agentClientName}"`);
+      console.log(`⚠️ If this fails, check: 1) Is agent device registered? 2) Is device online? 3) Is identity format correct?`);
+      
+      // Add detailed webhook URLs for debugging
+      const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://rmcdialer.vercel.app';
+      const recordingCallbackUrl = `${baseUrl}/api/webhooks/twilio/recording`;
+      const statusCallbackUrl = `${baseUrl}/api/webhooks/twilio/call-status`;
+      
+      console.log(`📡 Webhook URLs: Recording=${recordingCallbackUrl}, Status=${statusCallbackUrl}`);
       
       return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Hello${callerInfo?.user ? ' ' + callerInfo.user.first_name : ''}! Please hold while we connect you to an available agent.</Say>
+    <Say voice="alice">Hello${callerInfo?.user ? ' ' + callerInfo.user.first_name : ''}! Welcome to R M C Dialler. Please hold while we connect you to an available agent.</Say>
     <Dial timeout="30" 
           record="record-from-answer" 
-          recordingStatusCallback="https://rmcdialer.vercel.app/api/webhooks/twilio/recording"
-          statusCallback="https://rmcdialer.vercel.app/api/webhooks/twilio/call-status"
+          recordingStatusCallback="${recordingCallbackUrl}"
+          statusCallback="${statusCallbackUrl}"
           statusCallbackEvent="initiated ringing answered completed"
           statusCallbackMethod="POST">
         <Client>${agentClientName}</Client>

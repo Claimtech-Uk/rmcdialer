@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
     const Duration = webhookData.get('Duration') as string;
     const From = webhookData.get('From') as string;
     const To = webhookData.get('To') as string;
+    const DialCallStatus = webhookData.get('DialCallStatus') as string;
+    const DialCallSid = webhookData.get('DialCallSid') as string;
+    const RecordingUrl = webhookData.get('RecordingUrl') as string;
 
     console.log(`🔄 Call status webhook received:`, {
       CallSid,
@@ -35,8 +38,17 @@ export async function POST(request: NextRequest) {
       Duration,
       From,
       To,
+      DialCallStatus: DialCallStatus || 'N/A',
+      DialCallSid: DialCallSid || 'N/A',
+      RecordingUrl: RecordingUrl || 'N/A',
       timestamp: new Date().toISOString()
     });
+    
+    // CRITICAL: Log dial-specific status for agent connection debugging
+    if (DialCallStatus) {
+      console.log(`📞 DIAL ATTEMPT RESULT: Status="${DialCallStatus}", DialSid="${DialCallSid}"`);
+      console.log(`🎯 Agent connection analysis: ${getDialStatusExplanation(DialCallStatus)}`);
+    }
 
     // Find the call session
     const callSession = await prisma.callSession.findFirst({
@@ -248,6 +260,24 @@ export async function POST(request: NextRequest) {
       success: false, 
       error: error.message || 'Failed to process call status webhook'
     }, { status: 500 });
+  }
+}
+
+// Helper function to explain dial status results for debugging
+function getDialStatusExplanation(dialStatus: string): string {
+  switch (dialStatus) {
+    case 'completed':
+      return '✅ Agent answered and call connected successfully';
+    case 'busy':
+      return '📞 Agent device was busy (already on another call)';
+    case 'no-answer':
+      return '⏰ Agent device didn\'t answer within timeout period (30s)';
+    case 'failed':
+      return '❌ Dial attempt failed - likely device not registered or network issue';
+    case 'canceled':
+      return '🚫 Dial attempt was canceled before completion';
+    default:
+      return `❓ Unknown dial status: ${dialStatus}`;
   }
 }
 
