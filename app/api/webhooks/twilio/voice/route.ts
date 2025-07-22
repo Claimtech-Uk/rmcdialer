@@ -164,7 +164,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
     if (availableAgent?.agent?.id) {
       try {
         const agentExists = await prisma.agent.findUnique({
-          where: { id: availableAgent.agentId, isActive: true }
+          where: { id: availableAgent.agent.id, isActive: true }
         });
         if (agentExists) {
           validatedAgent = availableAgent;
@@ -241,8 +241,8 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         };
 
         // Only set agentId if we have a validated agent
-        if (validatedAgent?.agentId) {
-          sessionData.agentId = validatedAgent.agentId;
+        if (validatedAgent?.agent?.id) {
+          sessionData.agentId = validatedAgent.agent.id;
         } else {
           // For missed calls, find ANY valid agent ID as a safe fallback
           const fallbackAgent = await prisma.agent.findFirst({
