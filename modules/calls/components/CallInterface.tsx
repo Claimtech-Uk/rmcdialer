@@ -594,13 +594,12 @@ export function CallInterface({
         sessionId: sessionId,
         outcomeType: outcome.outcomeType,
         outcomeNotes: outcome.outcomeNotes || '',
-        callbackDateTime: outcome.callbackDateTime,
-        callbackReason: outcome.callbackReason,
         magicLinkSent: outcome.magicLinkSent || false,
         smsSent: outcome.smsSent || false,
+        callbackScheduled: outcome.callbackScheduled || false,
         documentsRequested: outcome.documentsRequested,
-        scoreAdjustment: outcome.scoreAdjustment,
-        nextCallDelayHours: outcome.nextCallDelayHours
+        nextCallDelayHours: outcome.nextCallDelayHours,
+        followUpRequired: outcome.followUpRequired || false
       });
       
       setShowOutcomeModal(false);
