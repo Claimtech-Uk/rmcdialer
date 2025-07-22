@@ -288,14 +288,12 @@ export default function UserDetailPage() {
     try {
       // NEW APPROACH: Navigate to call page immediately with user context
       // Let the CallInterface handle both Twilio call AND database session creation
-      const callPageUrl = `/calls/new?userId=${userId}&phone=${encodeURIComponent(user.phoneNumber)}&name=${encodeURIComponent(`${user.firstName} ${user.lastName}`)}`;
-      
       toast({
         title: "Starting Call",
         description: `Preparing to call ${user.firstName} ${user.lastName}`,
       });
       
-      router.push(callPageUrl);
+      router.push(`/calls/new?userId=${userId}&phone=${encodeURIComponent(user.phoneNumber)}&name=${encodeURIComponent(`${user.firstName} ${user.lastName}`)}`);
     } catch (error: any) {
       console.error('Navigation failed:', error);
       toast({
