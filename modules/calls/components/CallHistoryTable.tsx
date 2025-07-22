@@ -6,8 +6,9 @@ import { Badge } from '@/modules/core/components/ui/badge'
 import { Button } from '@/modules/core/components/ui/button'
 import { Input } from '@/modules/core/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/modules/core/components/ui/select'
-import { Clock, Phone, MessageSquare, Calendar, User, Filter, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { Clock, Phone, MessageSquare, Calendar, User, Filter, ChevronDown, ChevronUp, RefreshCw, Play, Pause, Volume2, Download } from 'lucide-react'
 import { format, subDays, isAfter, isBefore } from 'date-fns'
+import { api } from '@/lib/trpc/client'
 import type { CallHistoryEntry } from '../types/call.types'
 
 interface CallHistoryTableProps {
@@ -55,6 +56,116 @@ export function CallHistoryTable({
   const [sortBy, setSortBy] = useState<'date' | 'duration' | 'outcome'>('date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [expandedCall, setExpandedCall] = useState<string | null>(null)
+  const [playingRecording, setPlayingRecording] = useState<string | null>(null)
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null)
+
+  // Recording Player Component
+  const RecordingPlayer = ({ call }: { call: CallHistoryEntry }) => {
+    const { data: recordingData, isLoading: recordingLoading } = api.calls.getRecording.useQuery(
+      { sessionId: call.id },
+      { 
+        enabled: !!call.twilioCallSid,
+        staleTime: 10 * 60 * 1000 // Cache for 10 minutes
+      }
+    )
+
+    const handlePlayRecording = async () => {
+      if (!recordingData?.hasRecording || !recordingData.recording?.url) {
+        return
+      }
+
+      if (playingRecording === call.id) {
+        // Stop current recording
+        if (audioElement) {
+          audioElement.pause()
+          audioElement.currentTime = 0
+        }
+        setPlayingRecording(null)
+      } else {
+        // Stop any other recording
+        if (audioElement) {
+          audioElement.pause()
+        }
+
+        // Play this recording
+        const audio = new Audio(recordingData.recording.url)
+        audio.onended = () => setPlayingRecording(null)
+        audio.onerror = () => {
+          console.error('Failed to play recording')
+          setPlayingRecording(null)
+        }
+        
+        setAudioElement(audio)
+        setPlayingRecording(call.id)
+        
+        try {
+          await audio.play()
+        } catch (error) {
+          console.error('Error playing audio:', error)
+          setPlayingRecording(null)
+        }
+      }
+    }
+
+    const handleDownloadRecording = () => {
+      if (recordingData?.hasRecording && recordingData.recording?.url) {
+        window.open(recordingData.recording.url, '_blank')
+      }
+    }
+
+    if (recordingLoading) {
+      return (
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <Volume2 className="h-3 w-3 animate-pulse" />
+          <span>Checking...</span>
+        </div>
+      )
+    }
+
+    if (!recordingData?.hasRecording) {
+      return (
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <Volume2 className="h-3 w-3" />
+          <span>No recording</span>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handlePlayRecording}
+          className="h-6 w-6 hover:bg-blue-100 transition-colors"
+          title={playingRecording === call.id ? 'Stop recording' : 'Play recording'}
+        >
+          {playingRecording === call.id ? (
+            <Pause className="h-3 w-3 text-blue-600" />
+          ) : (
+            <Play className="h-3 w-3 text-green-600" />
+          )}
+        </Button>
+        
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleDownloadRecording}
+          className="h-6 w-6 hover:bg-gray-100 transition-colors"
+          title="Download recording"
+        >
+          <Download className="h-3 w-3 text-gray-600" />
+        </Button>
+
+        <span className="text-xs text-green-600 font-medium">
+          {recordingData.recording?.durationSeconds ? 
+            formatDuration(recordingData.recording.durationSeconds) : 
+            'Available'
+          }
+        </span>
+      </div>
+    )
+  }
 
   // Filter and sort calls
   const filteredAndSortedCalls = useMemo(() => {
@@ -124,14 +235,48 @@ export function CallHistoryTable({
   }, [calls, filters, sortBy, sortOrder])
 
   const formatDuration = (seconds: number | null | undefined) => {
-    if (!seconds) return 'N/A'
+    if (!seconds || seconds === 0) return 'N/A'
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const formatTalkTime = (talkTimeSeconds: number | null | undefined, durationSeconds: number | null | undefined) => {
+    // If we have talk time, use it
+    if (talkTimeSeconds && talkTimeSeconds > 0) {
+      return formatDuration(talkTimeSeconds)
+    }
+    
+    // If we have duration but no talk time, and duration > 0, assume it was connected
+    if (durationSeconds && durationSeconds > 0) {
+      return formatDuration(durationSeconds) + ' (est.)'
+    }
+    
+    return 'No talk time'
+  }
+
   const getOutcomeDisplay = (outcome: string) => {
-    return outcome.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    // Handle the case where outcome is 'no_outcome' or empty
+    if (!outcome || outcome === 'no_outcome') {
+      return 'No Outcome'
+    }
+    
+    // Map common outcomes to better display names
+    const outcomeMap: Record<string, string> = {
+      'contacted': 'Contacted',
+      'no_answer': 'No Answer',
+      'voicemail': 'Voicemail',
+      'busy': 'Busy',
+      'wrong_number': 'Wrong Number',
+      'not_interested': 'Not Interested',
+      'callback_requested': 'Callback Requested',
+      'documents_discussed': 'Documents Discussed',
+      'magic_link_sent': 'Magic Link Sent',
+      'left_voicemail': 'Left Voicemail',
+      'failed': 'Failed'
+    }
+    
+    return outcomeMap[outcome] || outcome.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
 
   const uniqueOutcomes = Array.from(new Set(calls.map(call => call.outcome)))
@@ -306,13 +451,18 @@ export function CallHistoryTable({
                           {formatDuration(call.durationSeconds)}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {call.talkTimeSeconds ? formatDuration(call.talkTimeSeconds) + ' talk' : 'No talk time'}
+                          {formatTalkTime(call.talkTimeSeconds, call.durationSeconds)}
                         </div>
                       </div>
 
-                      <Badge className={OUTCOME_COLORS[call.outcome] || 'bg-gray-100 text-gray-800'}>
-                        {getOutcomeDisplay(call.outcome)}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge className={OUTCOME_COLORS[call.outcome] || 'bg-gray-100 text-gray-800'}>
+                          {getOutcomeDisplay(call.outcome)}
+                        </Badge>
+                        
+                        {/* Recording Player */}
+                        <RecordingPlayer call={call} />
+                      </div>
 
                       <Button
                         variant="ghost"

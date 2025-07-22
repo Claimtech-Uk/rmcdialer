@@ -598,7 +598,22 @@ export const callsRouter = createTRPCRouter({
             ...(filters.endDate && { startedAt: { lte: filters.endDate } }),
             ...(filters.status && { status: filters.status })
           },
-          include: {
+          select: {
+            id: true,
+            userId: true,
+            agentId: true,
+            status: true,
+            direction: true,
+            startedAt: true,
+            connectedAt: true,
+            endedAt: true,
+            durationSeconds: true,
+            talkTimeSeconds: true,
+            twilioCallSid: true,
+            recordingUrl: true,
+            recordingSid: true,
+            recordingStatus: true,
+            recordingDurationSeconds: true,
             agent: {
               select: {
                 firstName: true,
@@ -606,6 +621,15 @@ export const callsRouter = createTRPCRouter({
               }
             },
             callOutcomes: {
+              select: {
+                outcomeType: true,
+                outcomeNotes: true,
+                magicLinkSent: true,
+                smsSent: true,
+                nextCallDelayHours: true,
+                documentsRequested: true,
+                createdAt: true
+              },
               orderBy: { createdAt: 'desc' },
               take: 1
             }
@@ -638,6 +662,29 @@ export const callsRouter = createTRPCRouter({
           const user = userMap.get(Number(session.userId));
           const outcome = session.callOutcomes[0];
           
+          // Smart outcome determination - if call has duration but no outcome, infer it was connected
+          let smartOutcome = outcome?.outcomeType;
+          if (!smartOutcome || smartOutcome === 'no_outcome') {
+            if (session.durationSeconds && session.durationSeconds > 0) {
+              // Call had duration, likely was answered
+              smartOutcome = 'contacted';
+            } else if (session.status === 'no_answer') {
+              smartOutcome = 'no_answer';
+            } else if (session.status === 'failed') {
+              smartOutcome = 'failed';
+            } else {
+              smartOutcome = 'no_outcome';
+            }
+          }
+
+          // Improved talk time calculation
+          let calculatedTalkTime = session.talkTimeSeconds;
+          if (!calculatedTalkTime && session.durationSeconds && session.durationSeconds > 0) {
+            // If we have call duration but no talk time, use duration as talk time
+            // This happens when webhook provides duration but talk time calculation fails
+            calculatedTalkTime = session.durationSeconds;
+          }
+          
           return {
             id: session.id,
             userId: Number(session.userId),
@@ -648,14 +695,18 @@ export const callsRouter = createTRPCRouter({
             startedAt: session.startedAt,
             endedAt: session.endedAt,
             durationSeconds: session.durationSeconds,
-            talkTimeSeconds: session.talkTimeSeconds,
-            outcome: outcome?.outcomeType || 'no_outcome',
+            talkTimeSeconds: calculatedTalkTime,
+            outcome: smartOutcome,
             outcomeNotes: outcome?.outcomeNotes,
             magicLinkSent: outcome?.magicLinkSent || false,
             smsSent: outcome?.smsSent || false,
             nextCallDelay: outcome?.nextCallDelayHours,
             documentsRequested: outcome?.documentsRequested ? JSON.parse(outcome.documentsRequested) : [],
-            twilioCallSid: session.twilioCallSid
+            twilioCallSid: session.twilioCallSid,
+            recordingUrl: session.recordingUrl,
+            recordingStatus: session.recordingStatus,
+            recordingDurationSeconds: session.recordingDurationSeconds,
+            status: session.status
           };
         });
 

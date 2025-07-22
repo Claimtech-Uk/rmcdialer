@@ -227,6 +227,10 @@ export interface CallHistoryEntry {
   nextCallDelay?: number;
   documentsRequested?: string[];
   twilioCallSid?: string;
+  recordingUrl?: string;
+  recordingStatus?: 'in-progress' | 'completed' | 'absent' | 'failed';
+  recordingDurationSeconds?: number;
+  status?: string;
 }
 
 export interface GetCallbacksOptions {
