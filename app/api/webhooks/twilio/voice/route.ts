@@ -181,30 +181,63 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           }
         });
       } else {
-        // Unknown caller - create basic session
-        callSession = await prisma.callSession.create({
-          data: {
-            userId: BigInt(999999), // Special ID for unknown callers
-            agentId: availableAgent?.agentId || 1,
-            callQueueId: crypto.randomUUID(),
-            twilioCallSid: callSid,
-            status: availableAgent ? 'ringing' : 'missed_call',
-            direction: 'inbound',
-            startedAt: new Date(),
-            callSource: 'inbound',
-            userClaimsContext: JSON.stringify({
-              unknownCaller: true,
-              phoneNumber: from,
-              searchAttempted: true,
-              matchFound: false
-            })
-          }
-        });
+        // Unknown caller - create basic session with proper queue
+        console.log(`👤 Unknown caller ${from} - creating basic missed call record`);
+        
+        try {
+          // Create a basic queue entry for unknown caller
+          const unknownCallerQueue = await prisma.callQueue.create({
+            data: {
+              userId: BigInt(999999), // Special ID for unknown callers
+              queueType: 'inbound_call',
+              priorityScore: 0,
+              status: 'missed',
+              queueReason: `Inbound call from unknown number ${from}`,
+              assignedToAgentId: null, // No agent assigned for missed calls
+              assignedAt: null,
+            }
+          });
+
+                      callSession = await prisma.callSession.create({
+              data: {
+                userId: BigInt(999999), // Special ID for unknown callers
+                agentId: availableAgent?.agentId || 1, // Use available agent or default to 1
+                callQueueId: unknownCallerQueue.id,
+                twilioCallSid: callSid,
+                status: availableAgent ? 'ringing' : 'missed_call',
+                direction: 'inbound',
+                startedAt: new Date(),
+                callSource: 'inbound',
+                userClaimsContext: JSON.stringify({
+                  unknownCaller: true,
+                  phoneNumber: from,
+                  searchAttempted: true,
+                  matchFound: false,
+                  missedCall: !availableAgent
+                })
+              }
+            });
+          
+          console.log(`📝 Created ${availableAgent ? 'ringing' : 'missed'} call session ${callSession.id} for unknown caller ${from}`);
+        } catch (unknownCallerError) {
+          console.error(`❌ Failed to create call session for unknown caller:`, unknownCallerError);
+          // Continue without call session for unknown callers
+          callSession = null;
+        }
+        
+        if (callSession) {
+          console.log(`📝 Created ${availableAgent ? 'ringing' : 'missed'} call session ${callSession.id} for unknown caller ${from}`);
+        }
       }
 
-      console.log(`📝 Created call session ${callSession.id} for inbound call`);
+      if (callSession) {
+        console.log(`📝 Created call session ${callSession.id} for inbound call`);
+      } else {
+        console.warn(`⚠️ No call session created for inbound call from ${from}`);
+      }
     } catch (error) {
       console.error(`❌ Failed to create call session:`, error);
+      callSession = null;
     }
 
     // 4. Generate appropriate TwiML response with caller context

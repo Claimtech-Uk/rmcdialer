@@ -169,6 +169,30 @@ export async function POST(request: NextRequest) {
 
     // Handle failed dial attempts - ensure agent stays available if call never connected
     if (['busy', 'failed', 'no-answer', 'canceled'].includes(CallStatus) && !callSession.connectedAt) {
+      // Update call session to reflect missed call status
+      const missedCallStatus = callSession.direction === 'inbound' ? 'missed_call' : 'no_answer';
+      
+      await prisma.callSession.update({
+        where: { id: callSession.id },
+        data: {
+          status: missedCallStatus,
+          endedAt: new Date(),
+          lastOutcomeType: 'no_answer',
+          lastOutcomeNotes: `Agent unavailable - call ${CallStatus}`,
+          lastOutcomeAt: new Date()
+        }
+      });
+      
+      // Update queue status for missed calls
+      if (callSession.callQueueId) {
+        await prisma.callQueue.update({
+          where: { id: callSession.callQueueId },
+          data: { 
+            status: callSession.direction === 'inbound' ? 'missed' : 'no_answer'
+          }
+        });
+      }
+
       await prisma.agentSession.updateMany({
         where: { 
           agentId: callSession.agentId
@@ -180,7 +204,7 @@ export async function POST(request: NextRequest) {
         }
       });
       
-      console.log(`👤 Agent ${callSession.agentId} remains available - dial attempt failed without connection`);
+      console.log(`👤 Agent ${callSession.agentId} remains available - ${callSession.direction} call ${CallStatus} without connection (marked as ${missedCallStatus})`);
     }
 
     return NextResponse.json({ 
