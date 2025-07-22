@@ -15,8 +15,8 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Direct database query - no complex validation
-    const session = await prisma.callSession.findFirst({
+    // Direct database query - try original Call SID first
+    let session = await prisma.callSession.findFirst({
       where: { 
         twilioCallSid: callSid 
       },
@@ -26,9 +26,42 @@ export async function POST(request: NextRequest) {
         userClaimsContext: true,
         status: true,
         direction: true,
-        startedAt: true
+        startedAt: true,
+        twilioCallSid: true
       }
     });
+    
+    // If not found, this might be an agent call leg SID - try mapping logic
+    if (!session) {
+      console.log('🔍 Session not found for CallSid:', callSid, '- trying agent call leg mapping...');
+      
+      // Look for recent inbound sessions (last 5 minutes) that might match this agent call leg
+      const recentInboundSessions = await prisma.callSession.findMany({
+        where: {
+          direction: 'inbound',
+          status: { in: ['ringing', 'initiated', 'connecting', 'connected'] },
+          startedAt: {
+            gte: new Date(Date.now() - 5 * 60 * 1000) // Last 5 minutes
+          }
+        },
+        select: {
+          id: true,
+          userId: true,
+          userClaimsContext: true,
+          status: true,
+          direction: true,
+          startedAt: true,
+          twilioCallSid: true
+        },
+        orderBy: { startedAt: 'desc' }
+      });
+
+      if (recentInboundSessions.length > 0) {
+        console.log(`✅ Found ${recentInboundSessions.length} recent inbound sessions, using most recent for agent SID: ${callSid}`);
+        session = recentInboundSessions[0];
+        console.log(`🔗 Mapped agent CallSid ${callSid} to original session ${session.id} (original SID: ${session.twilioCallSid})`);
+      }
+    }
     
     if (!session) {
       console.log('❓ No session found for Call SID:', callSid);

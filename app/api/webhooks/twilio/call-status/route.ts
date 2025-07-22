@@ -102,16 +102,8 @@ export async function POST(request: NextRequest) {
         console.log(`🔍 Found ${recentInboundSessions.length} recent inbound sessions, using most recent one`);
         callSession = recentInboundSessions[0];
         
-        // Update the session with the agent call leg SID for future lookups
-        await prisma.callSession.update({
-          where: { id: callSession.id },
-          data: { 
-            twilioCallSid: CallSid,
-            updatedAt: new Date()
-          }
-        });
-        
-        console.log(`✅ Mapped agent CallSid ${CallSid} to session ${callSession.id}`);
+        // We found the session via mapping - no need to update database
+        console.log(`✅ Mapped agent CallSid ${CallSid} to original session ${callSession.id} (original: ${callSession.twilioCallSid})`);
       }
     }
 
