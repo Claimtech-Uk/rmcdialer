@@ -11,7 +11,9 @@ import {
   RefreshCw,
   PenTool,
   AlertTriangle,
-  Calendar
+  Calendar,
+  Layout,
+  Maximize2
 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
@@ -21,8 +23,11 @@ import { useToast } from '@/modules/core/hooks/use-toast';
 import { QueueType } from '@/modules/queue/types/queue.types';
 import { getFriendlyLenderName, getShortLenderName } from '@/lib/utils/lender-names';
 import { formatRelativeTime } from '@/lib/utils';
-// UserDetailsModal import removed - now navigating directly to user detail pages
+import { CallPreviewPanel } from '@/components/CallPreviewPanel';
+import { useGlobalCall } from '@/hooks/useGlobalCall';
+import { isFeatureEnabled } from '@/lib/config/features';
 import InPageCallInterface from './InPageCallInterface';
+import type { UserCallContext } from '@/modules/calls/types/call.types';
 
 interface QueueConfig {
   type: QueueType;
@@ -75,15 +80,21 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
   const config = queueConfigs[queueType];
   const IconComponent = config.icon;
   
+  // Global call management
+  const { currentCall, isCallActive } = useGlobalCall();
+  const isEnhancedQueueEnabled = isFeatureEnabled('ENHANCED_QUEUE');
+  
   const [filters, setFilters] = useState({
     status: 'pending' as 'pending' | 'assigned' | 'completed',
     limit: 20,
     page: 1
   });
 
-  // Modal state removed - now navigating directly to user detail pages
+  // Enhanced queue state
+  const [selectedUser, setSelectedUser] = useState<UserCallContext | null>(null);
+  const [previewMode, setPreviewMode] = useState<'side' | 'overlay' | 'hidden'>('side');
 
-  // Call state for in-page calling
+  // Legacy call state for in-page calling (when enhanced queue is disabled)
   const [activeCall, setActiveCall] = useState<{
     userId: number;
     name: string;
@@ -134,6 +145,61 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
       // Error handling is done in onError callback
       console.error('Call next user failed:', error);
     }
+  };
+
+  // Enhanced queue functions
+  const handleSelectUser = (userContext: any) => {
+    if (!isEnhancedQueueEnabled) return;
+    
+    // Handle both nested and flat user data formats
+    const user = userContext.user || userContext;
+    const claims = userContext.claims || [];
+    
+    // Convert user data to UserCallContext format (flat structure)
+    const convertedUserContext: UserCallContext = {
+      userId: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email || user.emailAddress || '',
+      phoneNumber: user.phoneNumber,
+      address: user.address ? {
+        fullAddress: user.address.fullAddress || '',
+        postCode: user.address.postCode || '',
+        county: user.address.county || ''
+      } : undefined,
+      claims: claims.map((claim: any) => ({
+        id: claim.id,
+        type: claim.type || '',
+        status: claim.status || '',
+        lender: claim.lender || '',
+        requirements: claim.requirements || []
+      })),
+      callScore: {
+        currentScore: 0,
+        totalAttempts: 0
+      }
+    };
+    
+    setSelectedUser(convertedUserContext);
+    
+    console.log('📋 User selected for preview:', convertedUserContext);
+  };
+
+  const handleClosePreview = () => {
+    setSelectedUser(null);
+  };
+
+  const getQueueInfo = () => {
+    const totalUsers = users.length;
+    const currentPosition = selectedUser 
+      ? users.findIndex((u: any) => u.id === selectedUser.userId) + 1 
+      : 0;
+    
+    return {
+      queueType: config.title,
+      position: currentPosition,
+      totalInQueue: totalUsers
+    };
   };
 
   const startCall = (userId: number, firstName: string, lastName: string, phoneNumber: string) => {
@@ -244,8 +310,9 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="space-y-6 p-6">
-        {/* Queue Header */}
+      <div className={`p-6 ${isEnhancedQueueEnabled && selectedUser && previewMode === 'side' ? 'grid grid-cols-[1fr_400px] gap-6' : 'space-y-6'}`}>
+        <div className="space-y-6">
+          {/* Queue Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className={`w-16 h-16 ${config.gradient} rounded-xl flex items-center justify-center shadow-lg`}>
@@ -450,32 +517,28 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                           variant="outline"
                           className="w-full justify-center border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 px-4 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-md"
                           onClick={() => {
-                            console.log('VIEW DETAILS CLICKED - FULL USER OBJECT:', userContext);
-                            console.log('VIEW DETAILS CLICKED - USER ID:', user.id);
-                            console.log('VIEW DETAILS CLICKED - USER KEYS:', Object.keys(user));
-                            
-                            const userId = user.id;
-                            const targetUrl = `/users/${userId}`;
-                            
-                            console.log('Attempting navigation to user details page:', targetUrl);
-                            
-                            if (userId) {
-                              console.log('User ID is valid, navigating to user detail page');
-                              try {
-                                router.push(targetUrl as any);
-                                console.log('router.push called successfully for user details');
-                                
-                                setTimeout(() => {
-                                  console.log('Current window location after navigation attempt:', window.location.href);
-                                }, 100);
-                                
-                              } catch (error) {
-                                console.error('Error during user details navigation:', error);
-                                alert(`Navigation error: ${error}`);
-                              }
+                            if (isEnhancedQueueEnabled) {
+                              // Enhanced queue: Use preview panel
+                              handleSelectUser(user);
+                              console.log('📋 Enhanced queue: User selected for preview');
                             } else {
-                              console.error('User ID is undefined or falsy:', userId);
-                              alert('Error: User ID is undefined');
+                              // Legacy: Navigate to user details page
+                              console.log('VIEW DETAILS CLICKED - USER ID:', user.id);
+                              const userId = user.id;
+                              const targetUrl = `/users/${userId}`;
+                              
+                              if (userId) {
+                                try {
+                                  router.push(targetUrl as any);
+                                  console.log('router.push called successfully for user details');
+                                } catch (error) {
+                                  console.error('Error during user details navigation:', error);
+                                  alert(`Navigation error: ${error}`);
+                                }
+                              } else {
+                                console.error('User ID is undefined or falsy:', userId);
+                                alert('Error: User ID is undefined');
+                              }
                             }
                           }}
                         >
@@ -487,36 +550,28 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
                           size="default"
                           className="w-full justify-center bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg px-4 font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-xl border-0"
                           onClick={() => {
-                            console.log('CALL NOW CLICKED - FULL USER OBJECT:', userContext);
-                            console.log('CALL NOW CLICKED - USER ID:', user.id);
-                            console.log('CALL NOW CLICKED - USER KEYS:', Object.keys(user));
-                            
-                            const userId = user.id;
-                            const targetUrl = `/users/${userId}`;
-                            
-                            console.log('Attempting navigation to:', targetUrl);
-                            console.log('Router object:', router);
-                            
-                            alert(`Call Now clicked for user ${userId}. Check console for navigation details.`);
-                            
-                            if (userId) {
-                              console.log('User ID is valid, calling router.push');
-                              try {
-                                router.push(targetUrl as any);
-                                console.log('router.push called successfully');
-                                
-                                // Add a slight delay to see if navigation occurs
-                                setTimeout(() => {
-                                  console.log('Current window location after navigation attempt:', window.location.href);
-                                }, 100);
-                                
-                              } catch (error) {
-                                console.error('Error during router.push:', error);
-                                alert(`Navigation error: ${error}`);
-                              }
+                            if (isEnhancedQueueEnabled) {
+                              // Enhanced queue: Select user and show call options
+                              handleSelectUser(user);
+                              console.log('🚀 Enhanced queue: User selected for calling');
                             } else {
-                              console.error('User ID is undefined or falsy:', userId);
-                              alert('Error: User ID is undefined');
+                              // Legacy: Navigate to user details page for calling
+                              console.log('CALL NOW CLICKED - USER ID:', user.id);
+                              const userId = user.id;
+                              const targetUrl = `/users/${userId}`;
+                              
+                              if (userId) {
+                                try {
+                                  router.push(targetUrl as any);
+                                  console.log('router.push called successfully');
+                                } catch (error) {
+                                  console.error('Error during router.push:', error);
+                                  alert(`Navigation error: ${error}`);
+                                }
+                              } else {
+                                console.error('User ID is undefined or falsy:', userId);
+                                alert('Error: User ID is undefined');
+                              }
                             }
                           }}
                         >
@@ -532,8 +587,6 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
           </CardContent>
         </Card>
 
-        {/* User Details Modal removed - now navigating directly to user detail pages */}
-
         {/* In-Page Call Interface */}
         {activeCall && (
           <InPageCallInterface 
@@ -541,6 +594,37 @@ export default function QueuePageTemplate({ queueType }: QueuePageTemplateProps)
             onEndCall={endCall}
             onOpenFullInterface={openFullInterface}
           />
+        )}
+        </div>
+
+        {/* Enhanced Queue - Call Preview Panel */}
+        {isEnhancedQueueEnabled && selectedUser && previewMode === 'side' && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-lg font-semibold text-slate-700">
+              <Layout className="w-5 h-5" />
+              Call Preview
+            </div>
+            <CallPreviewPanel 
+              userContext={selectedUser}
+              queueInfo={getQueueInfo()}
+              onClose={handleClosePreview}
+              mode="full"
+            />
+          </div>
+        )}
+
+        {/* Enhanced Queue - Overlay Preview */}
+        {isEnhancedQueueEnabled && selectedUser && previewMode === 'overlay' && (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md">
+              <CallPreviewPanel 
+                userContext={selectedUser}
+                queueInfo={getQueueInfo()}
+                onClose={handleClosePreview}
+                mode="full"
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>

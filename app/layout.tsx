@@ -2,6 +2,10 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { TRPCProvider } from '@/lib/trpc/provider'
+import { GlobalTwilioProvider } from '@/lib/providers/GlobalTwilioProvider'
+import { GlobalIncomingCallHandler } from '@/components/GlobalIncomingCallHandler'
+import { FloatingCallStatus } from '@/components/FloatingCallStatus'
+import { GlobalErrorBoundary } from '@/components/GlobalErrorBoundary'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -28,8 +32,18 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <TRPCProvider>
-          {children}
-          <Toaster />
+          <GlobalErrorBoundary>
+            <GlobalTwilioProvider>
+              {children}
+              <GlobalErrorBoundary>
+                <GlobalIncomingCallHandler />
+              </GlobalErrorBoundary>
+              <GlobalErrorBoundary>
+                <FloatingCallStatus />
+              </GlobalErrorBoundary>
+              <Toaster />
+            </GlobalTwilioProvider>
+          </GlobalErrorBoundary>
         </TRPCProvider>
       </body>
     </html>
