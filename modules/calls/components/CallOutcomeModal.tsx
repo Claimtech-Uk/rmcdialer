@@ -107,15 +107,44 @@ export function CallOutcomeModal({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Set default callback time to tomorrow at 10 AM when callback is selected
+  const handleOutcomeChange = (outcomeType: string) => {
+    setSelectedOutcome(outcomeType);
+    
+    if (outcomeType === 'callback_requested' && !callbackDateTime) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(10, 0, 0, 0); // Default to 10 AM
+      setCallbackDateTime(tomorrow.toISOString().slice(0, 16));
+    }
+  };
+
   const handleSubmit = async () => {
     if (!selectedOutcome) return;
+
+    // Validation for callback scheduling
+    if (selectedOutcome === 'callback_requested') {
+      if (!callbackDateTime) {
+        alert('Please select a callback date and time');
+        return;
+      }
+      
+      const callbackDate = new Date(callbackDateTime);
+      const now = new Date();
+      
+      if (callbackDate <= now) {
+        alert('Callback must be scheduled for a future date and time');
+        return;
+      }
+    }
 
     const outcome: CallOutcomeOptions = {
       outcomeType: selectedOutcome as any,
       outcomeNotes: notes.trim() || undefined,
       ...(selectedOutcome === 'callback_requested' && callbackDateTime && {
         callbackDateTime: new Date(callbackDateTime),
-        callbackReason: callbackReason.trim() || 'Customer requested callback'
+        callbackReason: callbackReason.trim() || 'Customer requested callback',
+        callbackScheduled: true
       })
     };
 
@@ -158,7 +187,7 @@ export function CallOutcomeModal({
                 return (
                   <button
                     key={outcome.type}
-                    onClick={() => setSelectedOutcome(outcome.type)}
+                    onClick={() => handleOutcomeChange(outcome.type)}
                     className={`p-3 rounded-lg border-2 transition-all text-left ${
                       isSelected
                         ? 'border-blue-500 bg-blue-50'
@@ -179,40 +208,87 @@ export function CallOutcomeModal({
 
           {/* Callback Scheduling */}
           {selectedOutcome === 'callback_requested' && (
-            <div className="border rounded-lg p-4 bg-purple-50">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
+            <div className="border rounded-lg p-4 bg-purple-50 border-purple-200">
+              <h3 className="font-semibold mb-3 flex items-center gap-2 text-purple-800">
                 <Calendar className="w-4 h-4" />
                 Schedule Callback
               </h3>
               
+              <div className="mb-4 p-3 bg-purple-100 rounded-lg">
+                <p className="text-sm text-purple-700 mb-2">
+                  📞 <strong>A callback will be created for {userContext.firstName} {userContext.lastName}</strong>
+                </p>
+                <p className="text-xs text-purple-600">
+                  The customer will appear in the callback queue at the scheduled time for the preferred agent to call back.
+                </p>
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="callback-datetime">Callback Date & Time *</Label>
+                  <Label htmlFor="callback-datetime" className="text-sm font-medium mb-1 block">
+                    Callback Date & Time <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="callback-datetime"
                     type="datetime-local"
                     value={callbackDateTime}
                     onChange={(e) => setCallbackDateTime(e.target.value)}
-                    min={new Date().toISOString().slice(0, 16)}
+                    min={new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16)} // Minimum 1 hour from now
                     className="mt-1"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Customer expects to be called at this time
+                  </p>
                 </div>
+                
                 <div>
-                  <Label htmlFor="callback-reason">Reason for Callback</Label>
+                  <Label htmlFor="callback-reason" className="text-sm font-medium mb-1 block">
+                    Reason for Callback
+                  </Label>
                   <select
                     id="callback-reason"
                     value={callbackReason}
                     onChange={(e) => setCallbackReason(e.target.value)}
-                    className="mt-1 w-full p-2 border rounded-lg"
+                    className="mt-1 w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   >
                     <option value="">Select reason...</option>
                     <option value="Customer requested specific time">Customer requested specific time</option>
                     <option value="Need to gather documents">Need to gather documents</option>
                     <option value="Discuss with family/partner">Discuss with family/partner</option>
                     <option value="Financial review needed">Financial review needed</option>
-                    <option value="Technical questions">Technical questions</option>
+                    <option value="Technical questions about claim">Technical questions about claim</option>
+                    <option value="Preferred agent not available">Preferred agent not available</option>
+                    <option value="Customer was busy">Customer was busy</option>
+                    <option value="Follow up on previous discussion">Follow up on previous discussion</option>
                     <option value="Other">Other (specify in notes)</option>
                   </select>
+                </div>
+              </div>
+              
+              {/* Quick time suggestions */}
+              <div className="mt-3">
+                <Label className="text-sm font-medium mb-2 block">Quick Time Options:</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: 'Tomorrow 10 AM', hours: 24 + 10 - new Date().getHours() },
+                    { label: 'Tomorrow 2 PM', hours: 24 + 14 - new Date().getHours() },
+                    { label: 'Tomorrow 5 PM', hours: 24 + 17 - new Date().getHours() },
+                    { label: 'Next Week', hours: 7 * 24 }
+                  ].map((option) => {
+                    const suggestedTime = new Date(Date.now() + option.hours * 60 * 60 * 1000);
+                    return (
+                      <Button
+                        key={option.label}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCallbackDateTime(suggestedTime.toISOString().slice(0, 16))}
+                        className="text-xs border-purple-200 text-purple-700 hover:bg-purple-100"
+                      >
+                        {option.label}
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -250,18 +326,22 @@ export function CallOutcomeModal({
           
           <Button
             onClick={handleSubmit}
-            disabled={!selectedOutcome || isSubmitting || (selectedOutcome === 'callback_requested' && !callbackDateTime)}
+            disabled={
+              !selectedOutcome || 
+              isSubmitting || 
+              (selectedOutcome === 'callback_requested' && !callbackDateTime)
+            }
             className="bg-blue-600 hover:bg-blue-700"
           >
             {isSubmitting ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                Saving...
+                {selectedOutcome === 'callback_requested' ? 'Scheduling Callback...' : 'Saving...'}
               </>
             ) : (
               <>
                 <Send className="w-4 h-4 mr-2" />
-                Save Outcome
+                {selectedOutcome === 'callback_requested' ? 'Schedule Callback' : 'Save Outcome'}
               </>
             )}
           </Button>

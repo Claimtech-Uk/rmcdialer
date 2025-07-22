@@ -614,7 +614,9 @@ export function CallInterface({
         magicLinkSent: outcome.magicLinkSent || false,
         smsSent: outcome.smsSent || false,
         documentsRequested: outcome.documentsRequested,
-        nextCallDelayHours: outcome.nextCallDelayHours
+        nextCallDelayHours: outcome.nextCallDelayHours,
+        callbackDateTime: outcome.callbackDateTime,
+        callbackReason: outcome.callbackReason
       });
       
       setShowOutcomeModal(false);
@@ -1131,9 +1133,16 @@ export function CallInterface({
                 size="default"
                 responsive="nowrap"
                 className="w-full justify-start border-2 border-slate-300 hover:bg-slate-100 shadow-md hover:shadow-lg transition-all duration-200"
+                onClick={() => {
+                  // TODO: Open callback management modal
+                  toast({
+                    title: "Callback Management",
+                    description: "Callback management feature coming soon",
+                  });
+                }}
               >
                 <Calendar className="w-4 h-4 mr-2 flex-shrink-0" />
-                Schedule Callback
+                View Scheduled Callbacks
               </Button>
               <Button 
                 variant="outline" 

@@ -140,16 +140,21 @@ export interface CallOutcome {
   createdAt: Date;
 }
 
+// Call outcome options for disposition
 export interface CallOutcomeOptions {
   outcomeType: 'contacted' | 'no_answer' | 'busy' | 'wrong_number' | 'not_interested' | 'callback_requested' | 'left_voicemail' | 'failed';
   outcomeNotes?: string;
-  nextCallDelayHours?: number;
   magicLinkSent?: boolean;
   smsSent?: boolean;
+  callbackScheduled?: boolean;
+  nextCallDelayHours?: number;
   documentsRequested?: string[];
+  followUpRequired?: boolean;
+  scoreAdjustment?: number;
+  
+  // Callback-specific fields
   callbackDateTime?: Date;
   callbackReason?: string;
-  scoreAdjustment?: number;
 }
 
 export interface CallOutcomeWithDetails extends CallOutcome {

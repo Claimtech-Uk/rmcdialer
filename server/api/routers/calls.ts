@@ -53,7 +53,10 @@ const RecordOutcomeSchema = z.object({
   callbackScheduled: z.boolean().default(false),
   nextCallDelayHours: z.number().int().min(0).max(8760).optional(),
   documentsRequested: z.array(z.string()).optional(),
-  followUpRequired: z.boolean().default(false)
+  followUpRequired: z.boolean().default(false),
+  // Callback-specific fields
+  callbackDateTime: z.date().optional(),
+  callbackReason: z.string().optional()
 });
 
 const CallHistoryFiltersSchema = z.object({
