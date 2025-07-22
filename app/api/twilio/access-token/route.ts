@@ -85,10 +85,10 @@ function generateTwilioAccessToken(
   // Create identity for this agent (used by Twilio to identify the caller)
   const identity = `agent_${agentId}`;
 
-  // Twilio Voice Grant for outbound calling
+  // Twilio Voice Grant for both outbound calling AND incoming calls
   const voiceGrant = {
     outgoing_application_sid: twimlAppSid,
-    incoming_allow: false // We don't want agents to receive calls directly
+    incoming_allow: true // ✅ FIXED: Enable incoming calls for agents
   };
 
   // Generate JWT token using Twilio's official AccessToken
@@ -97,10 +97,10 @@ function generateTwilioAccessToken(
     ttl: 3600
   });
 
-  // Add voice grant
+  // Add voice grant with incoming calls enabled
   const grant = new VoiceGrant({
     outgoingApplicationSid: twimlAppSid,
-    incomingAllow: false
+    incomingAllow: true // ✅ FIXED: Enable incoming calls for agents
   });
   accessToken.addGrant(grant);
 
@@ -119,10 +119,10 @@ function generateMockToken(agentId: string | number, agentEmail: string): string
     ttl: 3600
   });
 
-  // Add mock voice grant
+  // Add mock voice grant with incoming calls enabled
   const mockGrant = new VoiceGrant({
     outgoingApplicationSid: 'MOCK_TWIML_APP_SID',
-    incomingAllow: false
+    incomingAllow: true // ✅ FIXED: Enable incoming calls for mock tokens too
   });
   mockAccessToken.addGrant(mockGrant);
 
