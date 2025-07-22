@@ -80,26 +80,26 @@ export function InboundCallInterface({
     }
   }, [incomingCall, callerInfo, isLoadingCaller]);
 
-    // RELIABLE SOLUTION: Lookup caller using original Call SID
+    // RELIABLE SOLUTION: Lookup caller using original Call SID (bypasses tRPC complexity)
     const lookupCallerFromOriginalCallSid = async (originalCallSid: string) => {
       setIsLoadingCaller(true);
       try {
         console.log('🔍 Looking up call session by original Call SID:', originalCallSid);
         
-        // Use the Call SID to find the call session first
-        const sessionLookupResponse = await fetch('/api/trpc/calls.getCallSessionByCallSid', {
+        // Use SIMPLE API endpoint - bypasses all tRPC validation complexity
+        const sessionLookupResponse = await fetch('/api/simple-call-lookup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            json: { callSid: originalCallSid }
+            callSid: originalCallSid
           })
         });
         
         if (sessionLookupResponse.ok) {
           const sessionData = await sessionLookupResponse.json();
           
-          if (sessionData?.result?.data?.success && sessionData.result.data.callSession) {
-            const session = sessionData.result.data.callSession;
+          if (sessionData?.success && sessionData.session) {
+            const session = sessionData.session;
             console.log('✅ Found call session:', session.id);
             
             // Extract user details from userClaimsContext
