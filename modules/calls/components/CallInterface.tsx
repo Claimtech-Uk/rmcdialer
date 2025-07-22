@@ -442,15 +442,9 @@ export function CallInterface({
     console.log('✅ Accepting incoming call');
     acceptIncomingCall();
     
-    // Create call session for accepted incoming call if we don't have one
-    if (!callSessionId && incomingCallInfo) {
-      console.log('📝 Creating call session for accepted incoming call');
-      initiateCallMutation.mutate({
-        userId: 999999, // Unknown caller ID - will be handled by backend
-        direction: 'inbound',
-        phoneNumber: incomingCallInfo.from
-      });
-    }
+    // Note: Database session creation will happen when isInCall becomes true
+    // This ensures consistent architecture for both inbound and outbound calls
+    console.log('📝 Incoming call accepted - database session will be created when call connects');
   };
 
   // Handle incoming call rejection
@@ -481,18 +475,28 @@ export function CallInterface({
       showOutcomeModal
     });
 
-    // Track when we enter a call
+    // CORRECT ARCHITECTURE: Only create database session when call is actually active
     if (isInCall && !wasInCall) {
-      console.log('📞 Call started - setting wasInCall to true');
+      console.log('📞 Call connected - Twilio confirmed active call');
       setWasInCall(true);
       
-      // If we don't have a session ID yet, this is a manual call - create a session
+      // NOW create database session (only when call is actually connected)
       if (!callSessionId) {
-        console.log('🆔 Manual call detected - creating call session in database');
+        console.log('📋 Call is active - creating database session to track it');
+        toast({
+          title: "Call Connected",
+          description: "Creating call tracking record...",
+        });
+        
+        // Determine call direction and user ID
+        const direction = incomingCallInfo ? 'inbound' : 'outbound';
+        const userId = incomingCallInfo ? 999999 : userContext.userId; // Unknown caller for inbound
+        const phoneNumber = incomingCallInfo ? incomingCallInfo.from : userContext.phoneNumber;
+        
         initiateCallMutation.mutate({
-          userId: userContext.userId,
-          direction: 'outbound',
-          phoneNumber: userContext.phoneNumber
+          userId,
+          direction,
+          phoneNumber
         });
       }
     }
@@ -508,18 +512,15 @@ export function CallInterface({
 
   const handleMakeCall = async () => {
     try {
-      // 1. Create call session in database first
-      console.log('📋 Creating call session in database...');
-      const callSessionResult = await initiateCallMutation.mutateAsync({
-        userId: userContext.userId,
-        phoneNumber: userContext.phoneNumber,
-        direction: 'outbound'
+      // CORRECT ARCHITECTURE: Start Twilio call FIRST, create DB session only when call connects
+      console.log('📞 Starting Twilio call...');
+      
+      toast({
+        title: "Starting Call",
+        description: `Calling ${userContext.firstName} ${userContext.lastName}...`,
       });
       
-              console.log('✅ Call session created:', callSessionResult.callSession.id);
-      
-      // 2. Then start the actual Twilio call
-      console.log('📞 Starting Twilio call...');
+      // 1. Start the actual Twilio call FIRST (no database changes yet)
       await makeCall({
         phoneNumber: userContext.phoneNumber,
         userContext: {
@@ -530,9 +531,13 @@ export function CallInterface({
         }
       });
       
-      console.log('✅ Call started successfully');
+      console.log('✅ Twilio call initiated - database session will be created when call connects');
+      
+      // Note: Database session creation now happens in the useEffect when call connects
+      // This prevents orphaned sessions for failed/unanswered calls
+      
     } catch (error: any) {
-      console.error('❌ Failed to start call:', error);
+      console.error('❌ Failed to start Twilio call:', error);
       toast({
         title: "Call Failed",
         description: error.message || "Could not start call",
@@ -558,13 +563,13 @@ export function CallInterface({
     try {
       let sessionId = callSessionId;
       
-      // If no session ID exists (race condition), create one now
+      // SAFETY NET: If no session ID exists (should be rare with new architecture)
       if (!sessionId || sessionId === '') {
-        console.log('⚠️ No session ID available - creating call session now');
+        console.warn('⚠️ EDGE CASE: No session ID available when submitting outcome - this should rarely happen with the new architecture');
         
         toast({
           title: "Creating Call Session",
-          description: "Initializing call tracking...",
+          description: "Initializing call tracking for completed call...",
         });
         
         const result = await initiateCallMutation.mutateAsync({
@@ -573,7 +578,7 @@ export function CallInterface({
           phoneNumber: userContext.phoneNumber
         });
         
-                 sessionId = result.callSession.id;
+        sessionId = result.callSession.id;
         setCallSessionId(sessionId);
         console.log('✅ Created call session for outcome:', sessionId);
       }
