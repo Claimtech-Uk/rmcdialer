@@ -63,21 +63,17 @@ export function InboundCallInterface({
     }
   }, [incomingCall]);
 
-  // Lookup caller information - prioritize direct session lookup over Call SID lookup
+  // Lookup caller information - prioritize original Call SID lookup
   useEffect(() => {
     if (incomingCall && !callerInfo && !isLoadingCaller) {
       console.log('🔍 Starting caller lookup...');
       
-      // If we have a call session ID from TwiML parameters, use that directly
-      if (incomingCall.callSessionId && incomingCall.callSessionId !== 'unknown') {
-        console.log('✅ Using call session ID:', incomingCall.callSessionId);
-        lookupCallerFromSessionId(incomingCall.callSessionId);
-      } else {
-        console.log('❌ No valid call session ID, falling back to Call SID lookup');
-        console.log('Received callSessionId:', incomingCall.callSessionId);
-        // Fallback to Call SID lookup (for backwards compatibility)
-        lookupCallerFromSession(incomingCall.callSid);
-      }
+      // CRITICAL FIX: Use original Call SID from TwiML parameters (always reliable)
+      // The agent receives the original caller's SID via TwiML parameters
+      const originalCallSid = incomingCall.callSid; // This is set to originalCallSid in TwilioVoiceService
+      
+      console.log('✅ Using original Call SID for lookup:', originalCallSid);
+      lookupCallerFromSession(originalCallSid);
     }
   }, [incomingCall, callerInfo, isLoadingCaller]);
 
