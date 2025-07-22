@@ -215,15 +215,9 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       
       console.log(`✅ Routing call from ${callerName} to agent ${availableAgent.agent.firstName} ${availableAgent.agent.lastName}`);
       
-      // Update agent session with caller context
-      await prisma.agentSession.update({
-        where: { id: availableAgent.id },
-        data: {
-          status: 'on_call',
-          currentCallSessionId: callSession?.id,
-          lastActivity: new Date()
-        }
-      });
+      // DO NOT update agent status here - let call-status webhook handle it when call actually connects
+      // This prevents the race condition where agent is marked busy before connection is verified
+      console.log(`📞 Attempting to dial agent ${availableAgent.agentId} - status will be updated on successful connection`);
 
       const agentClientName = `agent-${availableAgent.agentId}`;
       
@@ -238,7 +232,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           statusCallbackMethod="POST">
         <Client>${agentClientName}</Client>
     </Dial>
-    <Say voice="alice">The agent is not available right now. We'll have someone call you back shortly. Thank you!</Say>
+    <Say voice="alice">I'm sorry, the agent couldn't be reached right now. We'll have someone call you back as soon as possible. Thank you!</Say>
     <Hangup/>
 </Response>`, {
         status: 200,

@@ -128,6 +128,24 @@ export async function POST(request: NextRequest) {
       endedAt: updateData.endedAt
     });
 
+    // Update agent session based on call status
+    if (CallStatus === 'in-progress') {
+      // Call connected - now mark agent as on_call (this fixes the race condition)
+      await prisma.agentSession.updateMany({
+        where: { 
+          agentId: callSession.agentId,
+          status: 'available' // Only update if currently available
+        },
+        data: { 
+          status: 'on_call',
+          currentCallSessionId: callSession.id,
+          lastActivity: new Date()
+        }
+      });
+      
+      console.log(`👤 Agent ${callSession.agentId} marked as on_call - call successfully connected`);
+    }
+
     // Update agent session if call completed
     if (['completed', 'failed', 'no_answer'].includes(ourStatus)) {
       await prisma.agentSession.updateMany({
@@ -147,6 +165,22 @@ export async function POST(request: NextRequest) {
       });
       
       console.log(`👤 Agent ${callSession.agentId} marked as available after call completion`);
+    }
+
+    // Handle failed dial attempts - ensure agent stays available if call never connected
+    if (['busy', 'failed', 'no-answer', 'canceled'].includes(CallStatus) && !callSession.connectedAt) {
+      await prisma.agentSession.updateMany({
+        where: { 
+          agentId: callSession.agentId
+        },
+        data: { 
+          status: 'available', // Ensure agent is available for next call
+          currentCallSessionId: null,
+          lastActivity: new Date()
+        }
+      });
+      
+      console.log(`👤 Agent ${callSession.agentId} remains available - dial attempt failed without connection`);
     }
 
     return NextResponse.json({ 
