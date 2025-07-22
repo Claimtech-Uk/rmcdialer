@@ -313,7 +313,7 @@ export default function Sidebar({ children }: SidebarProps) {
       )}
 
       {/* Main Content */}
-      <div className="lg:pl-64 flex flex-col flex-1">
+      <div className="lg:pl-64 flex flex-col flex-1" id="main-content-container">
         {/* Mobile Header */}
         <div className="lg:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-2 flex items-center justify-between">
           <button

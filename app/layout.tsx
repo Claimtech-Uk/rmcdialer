@@ -7,6 +7,7 @@ import { GlobalIncomingCallHandler } from '@/components/GlobalIncomingCallHandle
 import { FloatingCallStatus } from '@/components/FloatingCallStatus'
 import { GlobalErrorBoundary } from '@/components/GlobalErrorBoundary'
 import { AudioUnlockHelper } from '@/components/AudioUnlockHelper'
+import { LayoutManager } from '@/components/LayoutManager'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -35,7 +36,9 @@ export default function RootLayout({
         <TRPCProvider>
           <GlobalErrorBoundary>
             <GlobalTwilioProvider>
-              {children}
+              <LayoutManager>
+                {children}
+              </LayoutManager>
               <GlobalErrorBoundary>
                 <GlobalIncomingCallHandler />
               </GlobalErrorBoundary>

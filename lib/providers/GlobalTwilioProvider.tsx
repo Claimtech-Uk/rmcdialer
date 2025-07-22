@@ -31,6 +31,8 @@ interface GlobalTwilioState {
 
 const GlobalTwilioContext = createContext<GlobalTwilioState | null>(null);
 
+export { GlobalTwilioContext };
+
 export function GlobalTwilioProvider({ children }: { children: React.ReactNode }) {
   // Check if global Twilio is enabled
   const isEnabled = isFeatureEnabled('GLOBAL_TWILIO');
