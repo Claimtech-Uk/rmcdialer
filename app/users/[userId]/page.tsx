@@ -253,6 +253,28 @@ export default function UserDetailPage() {
     }
   });
 
+  // Add the proper call initiation mutation
+  const initiateCallMutation = api.calls.initiateCall.useMutation({
+    onSuccess: (result) => {
+      const { callSession } = result;
+      toast({
+        title: "Call Session Created",
+        description: `Starting call to ${user.firstName} ${user.lastName}`,
+      });
+      
+      // Navigate to the call page with the REAL session ID
+      router.push(`/calls/${callSession.id}?userId=${userId}&phone=${encodeURIComponent(user.phoneNumber)}&name=${encodeURIComponent(`${user.firstName} ${user.lastName}`)}`);
+    },
+    onError: (error) => {
+      console.error('Failed to initiate call:', error);
+      toast({
+        title: "Call Failed",
+        description: error.message || "Failed to initiate call session",
+        variant: "destructive"
+      });
+    }
+  });
+
   const handleStartCall = async () => {
     if (!user.phoneNumber) {
       toast({ 
@@ -264,23 +286,15 @@ export default function UserDetailPage() {
     }
 
     try {
-      // Generate a unique session ID for this call
-      const sessionId = `call_${Date.now()}_${parseInt(userId)}`;
-      
-      // Navigate to the dedicated call session page
-      router.push(`/calls/${sessionId}?userId=${userId}&phone=${encodeURIComponent(user.phoneNumber)}&name=${encodeURIComponent(`${user.firstName} ${user.lastName}`)}`);
-      
-      toast({
-        title: "Starting Call Session",
-        description: `Preparing to call ${user.firstName} ${user.lastName}`,
+      // Use the proper call initiation flow through tRPC
+      await initiateCallMutation.mutateAsync({
+        userId: parseInt(userId),
+        direction: 'outbound',
+        phoneNumber: user.phoneNumber
       });
     } catch (error: any) {
-      console.error('Failed to start call session:', error);
-      toast({
-        title: "Session Failed",
-        description: error.message || "Failed to start call session",
-        variant: "destructive"
-      });
+      // Error handling is done in the mutation's onError callback
+      console.error('Call initiation failed:', error);
     }
   };
 

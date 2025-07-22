@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '@/lib/trpc/server';
 import { TRPCError } from '@trpc/server';
+import { callSessionValidation } from '@/lib/validation/call-session';
 import {
   CallService,
   type CallSessionOptions,
@@ -33,8 +34,9 @@ const InitiateCallSchema = z.object({
   direction: z.enum(['outbound', 'inbound']).default('outbound')
 });
 
+// Enhanced schema with UUID validation
 const UpdateCallStatusSchema = z.object({
-  sessionId: z.string().uuid(),
+  sessionId: callSessionValidation.schema.shape.id, // Use our UUID validation
   status: z.enum(['initiated', 'connecting', 'ringing', 'connected', 'completed', 'failed', 'no_answer']).optional(),
   twilioCallSid: z.string().optional(),
   connectedAt: z.date().optional(),
@@ -43,19 +45,15 @@ const UpdateCallStatusSchema = z.object({
 });
 
 const RecordOutcomeSchema = z.object({
-  sessionId: z.string().uuid(),
-  outcomeType: z.enum([
-    'contacted', 'no_answer', 'busy', 'wrong_number', 'not_interested', 
-    'callback_requested', 'left_voicemail', 'failed'
-  ]),
+  sessionId: callSessionValidation.schema.shape.id, // Use our UUID validation
+  outcomeType: z.enum(['contacted', 'no_answer', 'busy', 'wrong_number', 'not_interested', 'callback_requested', 'left_voicemail', 'failed']),
   outcomeNotes: z.string().optional(),
-  nextCallDelayHours: z.number().min(0).max(168).optional(), // Max 1 week
-  magicLinkSent: z.boolean().optional(),
-  smsSent: z.boolean().optional(),
+  magicLinkSent: z.boolean().default(false),
+  smsSent: z.boolean().default(false),
+  callbackScheduled: z.boolean().default(false),
+  nextCallDelayHours: z.number().int().min(0).max(8760).optional(),
   documentsRequested: z.array(z.string()).optional(),
-  callbackDateTime: z.date().optional(),
-  callbackReason: z.string().optional(),
-  scoreAdjustment: z.number().optional()
+  followUpRequired: z.boolean().default(false)
 });
 
 const CallHistoryFiltersSchema = z.object({
@@ -96,6 +94,20 @@ const TwilioWebhookSchema = z.object({
   RecordingUrl: z.string().optional(),
   Digits: z.string().optional()
 });
+
+// Add validation middleware for session ID parameters
+const validateSessionId = (sessionId: string, context: string) => {
+  try {
+    return callSessionValidation.validateWithContext(sessionId, context);
+  } catch (error: any) {
+    console.error(`🚨 [tRPC VALIDATION] ${context}:`, error.message);
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Invalid call session ID: ${error.message}`,
+      cause: error
+    });
+  }
+};
 
 export const callsRouter = createTRPCRouter({
   // Initiate a new call session
@@ -152,9 +164,16 @@ export const callsRouter = createTRPCRouter({
     .mutation(async ({ input, ctx }) => {
       try {
         const { sessionId, ...updateData } = input;
+        
+        // Validate session ID format
+        validateSessionId(sessionId, 'updateCallStatus');
+        
         const session = await callService.updateCallStatus(sessionId, updateData);
         return session;
       } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Failed to update call status'
@@ -168,9 +187,16 @@ export const callsRouter = createTRPCRouter({
     .mutation(async ({ input, ctx }) => {
       try {
         const { sessionId, ...outcomeData } = input;
+        
+        // Validate session ID format
+        validateSessionId(sessionId, 'recordOutcome');
+        
         const outcome = await callService.recordCallOutcome(sessionId, ctx.agent.id, outcomeData);
         return outcome;
       } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Failed to record call outcome'
@@ -291,10 +317,13 @@ export const callsRouter = createTRPCRouter({
   // Get call session by ID (for detailed view)
   getCallSession: protectedProcedure
     .input(z.object({
-      sessionId: z.string().uuid()
+      sessionId: callSessionValidation.schema.shape.id // Use our UUID validation
     }))
     .query(async ({ input, ctx }) => {
       try {
+        // Validate session ID format
+        validateSessionId(input.sessionId, 'getCallSession');
+        
         const session = await prisma.callSession.findUnique({
           where: { id: input.sessionId },
           include: {
@@ -464,14 +493,20 @@ export const callsRouter = createTRPCRouter({
   // Force end a call session (for stuck calls)
   forceEndCall: protectedProcedure
     .input(z.object({
-      sessionId: z.string().uuid(),
+      sessionId: callSessionValidation.schema.shape.id, // Use our UUID validation
       reason: z.string().optional().default('Force ended by agent')
     }))
     .mutation(async ({ input, ctx }) => {
       try {
+        // Validate session ID format
+        validateSessionId(input.sessionId, 'forceEndCall');
+        
         await callService.forceEndCall(input.sessionId, ctx.agent.id, input.reason);
         return { success: true, message: 'Call session force ended' };
       } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: error instanceof Error ? error.message : 'Failed to force end call'

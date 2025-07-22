@@ -6,16 +6,58 @@ import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent } from '@/modules/core/components/ui/card';
 import { CallInterface } from '@/modules/calls/components/CallInterface';
 import { api } from '@/lib/trpc/client';
+import { callSessionValidation } from '@/lib/validation/call-session';
+import React from 'react';
+import { useToast } from '@/modules/core/hooks/use-toast';
 
 export default function CallSessionPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { toast } = useToast();
   
   const sessionId = params.sessionId as string;
   const userId = searchParams.get('userId');
   const phoneNumber = searchParams.get('phone');
   const userName = searchParams.get('name');
+
+  // Validate session ID early
+  React.useEffect(() => {
+    if (sessionId) {
+      try {
+        // Validate the session ID format
+        callSessionValidation.validateWithContext(sessionId, 'Call Session Page Load');
+      } catch (error: any) {
+        console.error('❌ Invalid session ID detected:', error.message);
+        
+        // If it's a legacy format, redirect appropriately
+        if (callSessionValidation.detectLegacyFormat(sessionId)) {
+          toast({
+            title: "Invalid Call Session",
+            description: "This call session format is no longer supported. Please start a new call.",
+            variant: "destructive"
+          });
+          
+          // Redirect to user page if we have userId, otherwise to dashboard
+          if (userId) {
+            router.replace(`/users/${userId}`);
+          } else {
+            router.replace('/dashboard');
+          }
+          return;
+        }
+        
+        // For other invalid formats, show error and redirect
+        toast({
+          title: "Invalid Session ID",
+          description: "The call session ID is not valid. Redirecting...",
+          variant: "destructive"
+        });
+        router.replace('/dashboard');
+        return;
+      }
+    }
+  }, [sessionId, userId, router]);
 
   // Try to get user context - first try from URL params, then from session ID
   const userIdFromUrl = userId ? parseInt(userId) : null;
