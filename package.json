@@ -28,6 +28,7 @@
     "check-deployments": "npx vercel ls"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.850.0",
     "@aws-sdk/client-sqs": "^3.848.0",
     "@hookform/resolvers": "^3.3.2",
     "@prisma/client": "^5.7.1",
