@@ -581,17 +581,49 @@ function ConnectedCallContent({
       {/* Quick Actions */}
       <Card className="p-4">
         <h4 className="font-medium text-gray-900 mb-3">Quick Actions</h4>
-        <div className="space-y-2">
-          <Button variant="outline" size="sm" className="w-full justify-start">
-            📅 Schedule Callback
-          </Button>
-          <Button variant="outline" size="sm" className="w-full justify-start">
-            💬 Send SMS
-          </Button>
+        <div className="space-y-3">
           <Button 
             variant="outline" 
-            size="sm" 
-            className="w-full justify-start"
+            size="default"
+            className="w-full justify-start px-4 py-3 text-left hover:bg-blue-50 hover:border-blue-300 transition-colors"
+            onClick={() => {
+              // TODO: Implement schedule callback functionality
+              if (userDetails?.userId) {
+                alert(`Scheduling callback for user ${userDetails.userId}`);
+              }
+            }}
+            disabled={!userDetails?.userId}
+          >
+            <span className="mr-3 text-lg">📅</span>
+            <div className="flex flex-col items-start">
+              <span className="font-medium">Schedule Callback</span>
+              <span className="text-xs text-gray-500">Set up follow-up call</span>
+            </div>
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="default"
+            className="w-full justify-start px-4 py-3 text-left hover:bg-green-50 hover:border-green-300 transition-colors"
+            onClick={() => {
+              // TODO: Implement SMS functionality
+              if (userDetails?.userId) {
+                window.open(`/sms?userId=${userDetails.userId}`, '_blank');
+              }
+            }}
+            disabled={!userDetails?.userId}
+          >
+            <span className="mr-3 text-lg">💬</span>
+            <div className="flex flex-col items-start">
+              <span className="font-medium">Send SMS</span>
+              <span className="text-xs text-gray-500">Send text message</span>
+            </div>
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="default"
+            className="w-full justify-start px-4 py-3 text-left hover:bg-purple-50 hover:border-purple-300 transition-colors"
             onClick={() => {
               if (userDetails?.userId) {
                 window.open(`/users/${userDetails.userId}`, '_blank');
@@ -599,11 +631,52 @@ function ConnectedCallContent({
             }}
             disabled={!userDetails?.userId}
           >
-            👤 View Full Profile
+            <span className="mr-3 text-lg">👤</span>
+            <div className="flex flex-col items-start">
+              <span className="font-medium">View Full Profile</span>
+              <span className="text-xs text-gray-500">Complete user details</span>
+            </div>
           </Button>
+          
           {userContext?.claims && userContext.claims.length > 0 && (
-            <Button variant="outline" size="sm" className="w-full justify-start">
-              📋 View Claims ({userContext.claims.length})
+            <Button 
+              variant="outline" 
+              size="default"
+              className="w-full justify-start px-4 py-3 text-left hover:bg-orange-50 hover:border-orange-300 transition-colors"
+              onClick={() => {
+                if (userDetails?.userId) {
+                  window.open(`/claims?userId=${userDetails.userId}`, '_blank');
+                }
+              }}
+              disabled={!userDetails?.userId}
+            >
+              <span className="mr-3 text-lg">📋</span>
+              <div className="flex flex-col items-start">
+                <span className="font-medium">View Claims ({userContext.claims.length})</span>
+                <span className="text-xs text-gray-500">Active claims & documents</span>
+              </div>
+            </Button>
+          )}
+          
+          {userContext?.requirements && userContext.requirements.filter((req: any) => req.status !== 'completed').length > 0 && (
+            <Button 
+              variant="outline" 
+              size="default"
+              className="w-full justify-start px-4 py-3 text-left hover:bg-red-50 hover:border-red-300 transition-colors"
+              onClick={() => {
+                if (userDetails?.userId) {
+                  window.open(`/queue/requirements?userId=${userDetails.userId}`, '_blank');
+                }
+              }}
+              disabled={!userDetails?.userId}
+            >
+              <span className="mr-3 text-lg">⚠️</span>
+              <div className="flex flex-col items-start">
+                <span className="font-medium">Review Requirements</span>
+                <span className="text-xs text-gray-500">
+                  {userContext.requirements.filter((req: any) => req.status !== 'completed').length} outstanding items
+                </span>
+              </div>
             </Button>
           )}
         </div>
