@@ -25,6 +25,9 @@ interface GlobalTwilioState {
   getDevice: () => TwilioVoiceService | null;
   reinitialize: () => Promise<void>;
   
+  // Debug/Testing
+  simulateIncomingCall: (mockCallData?: Partial<IncomingCallInfo>) => void;
+  
   // Status
   isEnabled: boolean;
 }
@@ -304,6 +307,48 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
     await initializeTwilio();
   }, [twilioService, initializeTwilio]);
 
+  const simulateIncomingCall = useCallback((mockCallData?: Partial<IncomingCallInfo>) => {
+    if (!isEnabled) {
+      console.warn('⚠️ Cannot simulate call - Global Twilio is disabled');
+      return;
+    }
+
+    console.log('🧪 Simulating incoming call for debug purposes');
+    
+    // Create mock incoming call with defaults
+    const mockCall: IncomingCallInfo = {
+      callSid: 'CA_mock_call_sid_12345',
+      from: '+447738585850',
+      to: '+447488879172',
+      callerName: 'James Campbell',
+      userId: '2064',
+      callSessionId: 'aec62188-825d-4bc4-b1f8-99f8ebca97b4',
+      accept: () => {
+        console.log('🎭 Mock call accepted');
+        setIncomingCall(null);
+        setIsInCall(true);
+        setCurrentCallSid('CA_mock_connected_12345');
+      },
+      reject: () => {
+        console.log('🎭 Mock call rejected');
+        setIncomingCall(null);
+      },
+      // Override with any provided mock data
+      ...mockCallData
+    };
+
+    // Set the incoming call state
+    setIncomingCall(mockCall);
+    
+    // Show notification like real incoming call
+    toast({
+      title: "📞 Simulated Incoming Call",
+      description: `Test call from ${mockCall.callerName || mockCall.from}`,
+    });
+    
+    console.log('✅ Mock incoming call set:', mockCall);
+  }, [isEnabled, toast]);
+
   // Show debug info in development
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
@@ -332,6 +377,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
     endCall,
     getDevice,
     reinitialize,
+    simulateIncomingCall,
     isEnabled
   };
 

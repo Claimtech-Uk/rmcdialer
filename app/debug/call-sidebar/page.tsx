@@ -10,21 +10,14 @@ export default function CallSidebarDebugPage() {
   const twilioContext = useContext(GlobalTwilioContext);
 
   const simulateIncomingCall = () => {
-    // This is for testing - in real scenario this comes from Twilio webhooks
-    const mockIncomingCall = {
-      callSid: 'CA_mock_call_sid_12345',
-      from: '+447738585850',
-      to: '+447488879172',
-      callerName: 'James Campbell',
-      userId: '2064',
-      callSessionId: 'aec62188-825d-4bc4-b1f8-99f8ebca97b4',
-      accept: () => console.log('Mock accept'),
-      reject: () => console.log('Mock reject')
-    };
-    
-    // Simulate setting incoming call in the context (for demo purposes)
-    console.log('🎯 Simulating incoming call:', mockIncomingCall);
-    setCurrentTest('Simulated incoming call (check console)');
+    if (twilioContext?.simulateIncomingCall) {
+      console.log('🎯 Using GlobalTwilioProvider.simulateIncomingCall()');
+      twilioContext.simulateIncomingCall();
+      setCurrentTest('Simulated incoming call - sidebar should appear!');
+    } else {
+      console.warn('⚠️ GlobalTwilioProvider not available or simulateIncomingCall method missing');
+      setCurrentTest('❌ Failed to simulate call - provider not ready');
+    }
   };
 
   const clearCallState = () => {

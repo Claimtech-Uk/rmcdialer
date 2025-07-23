@@ -59,16 +59,13 @@ export function CallSidebar({
 
   return (
     <>
-      {/* Mobile Overlay */}
-      <div className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40" onClick={onClose} />
-      
       {/* Desktop: Fixed Right Sidebar */}
       <div className={`
+        hidden lg:block
         fixed right-0 top-0 h-full bg-white shadow-xl border-l border-gray-200 z-50
         transform transition-transform duration-300 ease-in-out
         ${sidebarWidth()}
         ${isExpanded ? 'translate-x-0' : 'translate-x-full'}
-        lg:translate-x-0
       `}>
         {/* Sidebar Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
@@ -120,6 +117,83 @@ export function CallSidebar({
           )}
         </div>
       </div>
+
+      {/* Mobile: Bottom Sheet */}
+      <div className="lg:hidden fixed inset-0 z-50">
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 bg-black/50 transition-opacity duration-300 opacity-100"
+          onClick={onClose}
+        />
+        
+        {/* Bottom Sheet Container */}
+        <div 
+          className={`
+            absolute bottom-0 left-0 right-0 bg-white 
+            transition-transform duration-300 ease-in-out translate-y-0
+            ${callState === 'ringing' ? 'h-80' : callState === 'connected' ? 'h-[85vh]' : 'h-96'}
+            rounded-t-2xl shadow-2xl overflow-hidden
+          `}
+        >
+          {/* Mobile Handle */}
+          <div className="flex justify-center pt-2 pb-1">
+            <div className="w-8 h-1 bg-gray-300 rounded-full" />
+          </div>
+
+          {/* Mobile Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center space-x-2">
+              <Phone className="w-5 h-5 text-blue-600" />
+              <span className="font-semibold text-gray-900">
+                {callState === 'ringing' && 'Incoming Call'}
+                {callState === 'connected' && 'Active Call'}  
+                {callState === 'ended' && 'Call Summary'}
+              </span>
+            </div>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="h-8 w-8 p-0"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* Mobile Content */}
+          <div className="h-full pb-20 overflow-y-auto">
+            {callState === 'ringing' && (
+              <RingingCallContent
+                callData={callData}
+                onAccept={onAcceptCall}
+                onDecline={onDeclineCall}
+                isMobile={true}
+              />
+            )}
+            
+            {callState === 'connected' && (
+              <ConnectedCallContent
+                callData={callData}
+                onEndCall={onEndCall}
+                onToggleMute={onToggleMute}
+                onToggleHold={onToggleHold}
+                isMuted={isMuted}
+                isOnHold={isOnHold}
+                isMobile={true}
+              />
+            )}
+            
+            {callState === 'ended' && (
+              <PostCallContent
+                callData={callData}
+                onClose={onClose}
+                isMobile={true}
+              />
+            )}
+          </div>
+        </div>
+      </div>
     </>
   );
 }
@@ -128,25 +202,27 @@ export function CallSidebar({
 function RingingCallContent({ 
   callData, 
   onAccept, 
-  onDecline 
+  onDecline,
+  isMobile = false
 }: {
   callData?: any;
   onAccept?: () => void;
   onDecline?: () => void;
+  isMobile?: boolean;
 }) {
   return (
-    <div className="p-6 space-y-6">
+    <div className={`${isMobile ? 'p-4 space-y-4' : 'p-6 space-y-6'}`}>
       {/* Caller Info */}
-      <Card className="p-6 text-center">
-        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <User className="w-8 h-8 text-blue-600" />
+      <Card className={`${isMobile ? 'p-4' : 'p-6'} text-center`}>
+        <div className={`${isMobile ? 'w-12 h-12' : 'w-16 h-16'} bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4`}>
+          <User className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8'} text-blue-600`} />
         </div>
         
-        <h3 className="text-lg font-semibold text-gray-900 mb-1">
+        <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-semibold text-gray-900 mb-1`}>
           {callData?.callerName || 'Unknown Caller'}
         </h3>
         
-        <p className="text-gray-600 mb-2">
+        <p className={`text-gray-600 mb-2 ${isMobile ? 'text-sm' : ''}`}>
           {callData?.callerPhone || 'No phone number'}
         </p>
         
@@ -157,8 +233,8 @@ function RingingCallContent({
 
       {/* Quick User Preview */}
       {callData?.userId && (
-        <Card className="p-4">
-          <h4 className="font-medium text-gray-900 mb-2">Quick Preview</h4>
+        <Card className={`${isMobile ? 'p-3' : 'p-4'}`}>
+          <h4 className={`font-medium text-gray-900 mb-2 ${isMobile ? 'text-sm' : ''}`}>Quick Preview</h4>
           <div className="text-sm text-gray-600 space-y-1">
             <div>User ID: {callData.userId}</div>
             {callData.callSessionId && (
@@ -170,11 +246,11 @@ function RingingCallContent({
       )}
 
       {/* Action Buttons */}
-      <div className="flex space-x-3">
+      <div className={`flex space-x-3 ${isMobile ? 'pt-2' : ''}`}>
         <Button 
           onClick={onDecline}
           variant="outline" 
-          className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+          className={`flex-1 text-red-600 border-red-200 hover:bg-red-50 ${isMobile ? 'h-12 text-base' : ''}`}
         >
           <PhoneOff className="w-4 h-4 mr-2" />
           Decline
@@ -182,7 +258,7 @@ function RingingCallContent({
         
         <Button 
           onClick={onAccept}
-          className="flex-1 bg-green-600 hover:bg-green-700"
+          className={`flex-1 bg-green-600 hover:bg-green-700 ${isMobile ? 'h-12 text-base' : ''}`}
         >
           <Phone className="w-4 h-4 mr-2" />
           Accept
@@ -199,7 +275,8 @@ function ConnectedCallContent({
   onToggleMute, 
   onToggleHold,
   isMuted,
-  isOnHold 
+  isOnHold,
+  isMobile = false
 }: {
   callData?: any;
   onEndCall?: () => void;
@@ -207,6 +284,7 @@ function ConnectedCallContent({
   onToggleHold?: () => void;
   isMuted?: boolean;
   isOnHold?: boolean;
+  isMobile?: boolean;
 }) {
   const [userDetails, setUserDetails] = useState<any>(null);
   const [loadingUserDetails, setLoadingUserDetails] = useState(false);
@@ -455,10 +533,12 @@ function ConnectedCallContent({
 // Post-Call Content
 function PostCallContent({ 
   callData,
-  onClose 
+  onClose,
+  isMobile = false
 }: {
   callData?: any;
   onClose?: () => void;
+  isMobile?: boolean;
 }) {
   const [disposition, setDisposition] = useState('');
   const [finalNotes, setFinalNotes] = useState('');
