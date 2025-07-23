@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
     await logCronExecution('queue-discovery', 'success', duration, {
       report,
       summary: report.summary,
-      usersProcessed: report.usersProcessed || 0,
-      queuesUpdated: report.queuesUpdated || 0
+      usersFound: report.usersFound || 0,
+      totalProcessed: report.totalProcessed || 0
     });
     
     return NextResponse.json({
