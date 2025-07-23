@@ -16,85 +16,56 @@ export async function GET(request: NextRequest) {
     const startTime = Date.now();
     let maintenanceStats = {
       missingScoresCreated: 0,
-      orphanedQueuesFound: 0,
-      scoresUpdated: 0,
-      inactiveUsersChecked: 0
+      scoresUpdated: 0
     };
 
-    // 1. Find queue users without scoring records and create them
-    const queueUsersWithoutScores = await prisma.callQueue.findMany({
-      where: {
-        status: 'pending',
-        userCallScore: { is: null }
-      },
-      select: {
-        userId: true,
-        queueType: true,
-        createdAt: true
-      },
-      distinct: ['userId'],
-      take: 1000
+    // Simple approach: Get all pending queue users and ensure they have scores
+    const pendingQueueUsers = await prisma.callQueue.findMany({
+      where: { status: 'pending' },
+      select: { userId: true, queueType: true, createdAt: true },
+      distinct: ['userId']
     });
 
-    console.log(`📊 Found ${queueUsersWithoutScores.length} queue users without scoring records`);
+    console.log(`📊 Found ${pendingQueueUsers.length} unique pending queue users`);
 
-    for (const queueUser of queueUsersWithoutScores) {
-      try {
-        await prisma.userCallScore.create({
-          data: {
-            userId: queueUser.userId,
-            currentScore: 0, // Fresh start
-            isActive: true,
-            currentQueueType: queueUser.queueType,
-            lastResetDate: new Date(),
-            lastQueueCheck: new Date(),
-            totalAttempts: 0,
-            successfulCalls: 0,
-            baseScore: 0,
-            outcomePenaltyScore: 0,
-            timePenaltyScore: 0,
-            createdAt: queueUser.createdAt
-          }
-        });
-        maintenanceStats.missingScoresCreated++;
-      } catch (error: any) {
-        if (error.code !== 'P2002') { // Ignore unique constraint errors
-          console.error(`Failed to create score for user ${queueUser.userId}:`, error.message);
-        }
-      }
-    }
-
-    // 2. Update queue priority scores to match user_call_scores
-    const usersToUpdate = await prisma.userCallScore.findMany({
-      where: {
-        isActive: true,
-        callQueue: {
-          some: {
-            status: 'pending'
-          }
-        }
-      },
-      select: {
-        userId: true,
-        currentScore: true
-      }
+    // Get existing user scores
+    const existingScores = await prisma.userCallScore.findMany({
+      select: { userId: true }
     });
 
-    for (const user of usersToUpdate) {
-      await prisma.callQueue.updateMany({
-        where: {
-          userId: user.userId,
-          status: 'pending'
-        },
-        data: {
-          priorityScore: user.currentScore
+    const existingUserIds = new Set(existingScores.map(score => score.userId.toString()));
+
+    // Create missing scores
+    for (const queueUser of pendingQueueUsers) {
+      if (!existingUserIds.has(queueUser.userId.toString())) {
+        try {
+          await prisma.userCallScore.create({
+            data: {
+              userId: queueUser.userId,
+              currentScore: 0,
+              isActive: true,
+              currentQueueType: queueUser.queueType,
+              lastResetDate: new Date(),
+              lastQueueCheck: new Date(),
+              totalAttempts: 0,
+              successfulCalls: 0,
+              baseScore: 0,
+              outcomePenaltyScore: 0,
+              timePenaltyScore: 0,
+              createdAt: queueUser.createdAt
+            }
+          });
+          maintenanceStats.missingScoresCreated++;
+        } catch (error: any) {
+          if (error.code !== 'P2002') { // Ignore unique constraint errors
+            console.error(`Failed to create score for user ${queueUser.userId}:`, error.message);
+          }
         }
-      });
-      maintenanceStats.scoresUpdated++;
+      }
     }
 
     const duration = Date.now() - startTime;
-    const summary = `Maintenance: ${maintenanceStats.missingScoresCreated} scores created, ${maintenanceStats.scoresUpdated} updated in ${Math.round(duration/1000)}s`;
+    const summary = `Maintenance: ${maintenanceStats.missingScoresCreated} scores created in ${Math.round(duration/1000)}s`;
 
     console.log(`✅ Scoring maintenance completed: ${summary}`);
     
