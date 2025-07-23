@@ -370,6 +370,14 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       
       console.log(`📡 Webhook URLs: Recording=${recordingCallbackUrl}, Status=${statusCallbackUrl}`);
       
+      console.log(`📞 [Voice Webhook] Generating TwiML for call from ${from} to agent ${agentClientName}`);
+      console.log(`🔍 [Voice Webhook] CallerInfo for TwiML:`, {
+        hasCallerInfo: !!callerInfo,
+        hasUser: !!callerInfo?.user,
+        callerName: callerInfo?.user ? `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 'N/A',
+        userId: callerInfo?.user?.id || 'N/A'
+      });
+
       return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="alice">Hello${callerInfo?.user ? ' ' + callerInfo.user.first_name : ''}! Welcome to R M C Dialler. Please hold while we connect you to an available agent.</Say>
@@ -437,9 +445,11 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
 // Enhanced caller lookup with smart phone number matching
 async function performEnhancedCallerLookup(phoneNumber: string): Promise<any> {
   try {
+    console.log(`🔍 [Voice Webhook] Starting enhanced caller lookup for: ${phoneNumber}`);
+    
     // Normalize phone number to multiple formats for matching
     const normalizedNumbers = normalizePhoneNumber(phoneNumber);
-    console.log(`🔍 Searching for caller with phone variants: ${normalizedNumbers.join(', ')}`);
+    console.log(`🔍 [Voice Webhook] Searching for caller with phone variants: ${normalizedNumbers.join(', ')}`);
 
     // Search for user with any of the normalized phone number variants
     const user = await replicaDb.user.findFirst({
@@ -468,8 +478,11 @@ async function performEnhancedCallerLookup(phoneNumber: string): Promise<any> {
     });
 
     if (!user) {
+      console.log(`❌ [Voice Webhook] No user found for phone: ${phoneNumber} (tried: ${normalizedNumbers.join(', ')})`);
       return null;
     }
+
+    console.log(`✅ [Voice Webhook] User found: ${user.first_name} ${user.last_name} (ID: ${user.id})`);
 
     // Get user's claims and call history
     const [claims, callHistory] = await Promise.all([
@@ -519,7 +532,7 @@ async function performEnhancedCallerLookup(phoneNumber: string): Promise<any> {
     // Calculate priority score based on claims and requirements
     const priorityScore = calculateCallerPriority(claims, requirements, callHistory);
 
-    return {
+    const result = {
       user: {
         ...user,
         id: Number(user.id) // Convert BigInt to number for JSON serialization
@@ -531,8 +544,18 @@ async function performEnhancedCallerLookup(phoneNumber: string): Promise<any> {
       lookupSuccess: true
     };
 
+    console.log(`✅ [Voice Webhook] Caller lookup successful:`, {
+      callerName: `${user.first_name} ${user.last_name}`,
+      userId: user.id,
+      phone: user.phone_number,
+      claimsCount: claims.length,
+      priorityScore
+    });
+
+    return result;
+
   } catch (error) {
-    console.error('❌ Enhanced caller lookup failed:', error);
+    console.error('❌ [Voice Webhook] Enhanced caller lookup failed:', error);
     return null;
   }
 }
