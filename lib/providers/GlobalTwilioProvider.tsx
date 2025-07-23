@@ -6,12 +6,17 @@ import { api } from '@/lib/trpc/client';
 import { useToast } from '@/modules/core/hooks/use-toast';
 import { isFeatureEnabled } from '@/lib/config/features';
 import { performanceService } from '@/lib/services/performance.service';
+import { AudioPermissionModal, AudioPermissionStatus } from '@/components/AudioPermissionModal';
 
 interface GlobalTwilioState {
   // Connection state
   isReady: boolean;
   isConnecting: boolean;
   error: string | null;
+  
+  // Audio permission state
+  audioPermissionStatus: AudioPermissionStatus;
+  showAudioPermissionModal: boolean;
   
   // Call state
   incomingCall: IncomingCallInfo | null;
@@ -24,6 +29,7 @@ interface GlobalTwilioState {
   endCall: () => void;
   getDevice: () => TwilioVoiceService | null;
   reinitialize: () => Promise<void>;
+  requestAudioPermission: () => void;
   
   // Debug/Testing
   simulateIncomingCall: (mockCallData?: Partial<IncomingCallInfo>) => void;
@@ -57,23 +63,42 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
   const [isInCall, setIsInCall] = useState(false);
   const [currentCallSid, setCurrentCallSid] = useState<string | null>(null);
   
+  // Audio permission state
+  const [audioPermissionStatus, setAudioPermissionStatus] = useState<AudioPermissionStatus>({
+    status: 'unknown',
+    hasAudio: false,
+  });
+  const [showAudioPermissionModal, setShowAudioPermissionModal] = useState(false);
+  const [needsPermissionCheck, setNeedsPermissionCheck] = useState(true);
+  
   // Refs for cleanup and mount tracking
   const initializationRef = useRef<Promise<void> | null>(null);
   const isInitializingRef = useRef(false);
   const isMountedRef = useRef(true);
 
-  // Initialize Twilio when agent is available and feature is enabled
+  // Check audio permissions on mount
+  useEffect(() => {
+    if (isEnabled && needsPermissionCheck) {
+      checkAudioPermissions();
+      setNeedsPermissionCheck(false);
+    }
+  }, [isEnabled, needsPermissionCheck]);
+
+  // Initialize Twilio when agent is available, feature is enabled, and audio is granted
   useEffect(() => {
     if (!isEnabled) {
       console.log('🎧 Global Twilio disabled via feature flag');
       return;
     }
     
-    if (session?.agent && !twilioService && !isInitializingRef.current) {
+    if (session?.agent && !twilioService && !isInitializingRef.current && audioPermissionStatus.hasAudio) {
       console.log('🎧 Initializing Global Twilio for agent:', session.agent.email);
       initializeTwilio();
+    } else if (session?.agent && !audioPermissionStatus.hasAudio && audioPermissionStatus.status !== 'unknown') {
+      console.log('🎤 Audio permission required before Twilio initialization');
+      setShowAudioPermissionModal(true);
     }
-  }, [session?.agent, isEnabled, twilioService]);
+  }, [session?.agent, isEnabled, twilioService, audioPermissionStatus]);
 
   // Separate cleanup effect to avoid stale closures
   useEffect(() => {
@@ -86,8 +111,121 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
     };
   }, [twilioService]);
 
+  const checkAudioPermissions = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setAudioPermissionStatus({
+          status: 'denied',
+          hasAudio: false,
+          error: 'Media devices not supported by this browser',
+        });
+        return;
+      }
+
+      // Try to check permission status via Permissions API (if available)
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          const permission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          console.log('🎤 Initial microphone permission status:', permission.state);
+          
+          if (permission.state === 'granted') {
+            // Verify we can actually access audio
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              stream.getTracks().forEach(track => track.stop());
+              
+              setAudioPermissionStatus({
+                status: 'granted',
+                hasAudio: true,
+              });
+              console.log('✅ Audio permission verified');
+            } catch (err) {
+              console.warn('⚠️ Permission granted but audio access failed:', err);
+              setAudioPermissionStatus({
+                status: 'denied',
+                hasAudio: false,
+                error: 'Audio access failed despite permission',
+              });
+            }
+          } else {
+            setAudioPermissionStatus({
+              status: permission.state as any,
+              hasAudio: false,
+            });
+          }
+        } catch (err) {
+          console.warn('⚠️ Permissions API not available, showing permission modal');
+          setAudioPermissionStatus({
+            status: 'prompt',
+            hasAudio: false,
+          });
+          setShowAudioPermissionModal(true);
+        }
+      } else {
+        // No Permissions API - show modal to request permission
+        setAudioPermissionStatus({
+          status: 'prompt',
+          hasAudio: false,
+        });
+        setShowAudioPermissionModal(true);
+      }
+    } catch (error) {
+      console.error('❌ Error checking audio permissions:', error);
+      setAudioPermissionStatus({
+        status: 'denied',
+        hasAudio: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  };
+
+  const requestAudioPermission = () => {
+    console.log('🎤 Showing audio permission modal');
+    setShowAudioPermissionModal(true);
+  };
+
+  const handleAudioPermissionGranted = () => {
+    console.log('✅ Audio permission granted!');
+    setAudioPermissionStatus({
+      status: 'granted',
+      hasAudio: true,
+    });
+    setShowAudioPermissionModal(false);
+    
+    // Initialize Twilio now that we have audio permission
+    if (session?.agent && !twilioService && !isInitializingRef.current) {
+      console.log('🎧 Audio granted - initializing Twilio');
+      initializeTwilio();
+    }
+  };
+
+  const handleAudioPermissionDenied = () => {
+    console.warn('❌ Audio permission denied');
+    setAudioPermissionStatus({
+      status: 'denied',
+      hasAudio: false,
+      error: 'User denied microphone permission',
+    });
+    
+    // Keep modal open with instructions
+    // setShowAudioPermissionModal(false);
+    
+    toast({
+      title: "Audio Permission Required",
+      description: "Microphone access is required for call functionality. Please enable it in your browser settings.",
+      variant: "destructive",
+    });
+  };
+
   const initializeTwilio = useCallback(async () => {
-    if (!session?.agent || isInitializingRef.current) return;
+    if (!session?.agent || isInitializingRef.current || !audioPermissionStatus.hasAudio) {
+      console.log('🎧 Skipping Twilio initialization - missing requirements:', {
+        hasAgent: !!session?.agent,
+        isInitializing: isInitializingRef.current,
+        hasAudio: audioPermissionStatus.hasAudio,
+      });
+      return;
+    }
     
     isInitializingRef.current = true;
     
@@ -95,38 +233,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
       setIsConnecting(true);
       setError(null);
       
-      console.log('🎧 Creating new TwilioVoiceService instance');
-      
-      // CRITICAL FIX: Handle AudioContext user gesture requirement
-      const handleAudioContextGesture = () => {
-        console.log('🎵 Attempting to resume AudioContext for user gesture compliance');
-        // Try to resume any suspended AudioContext instances
-        if (window.AudioContext || (window as any).webkitAudioContext) {
-          try {
-            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            if (audioCtx.state === 'suspended') {
-              audioCtx.resume().then(() => {
-                console.log('✅ AudioContext resumed successfully');
-              }).catch((err) => {
-                console.warn('⚠️ Failed to resume AudioContext:', err);
-              });
-            }
-          } catch (err) {
-            console.warn('⚠️ AudioContext handling failed:', err);
-          }
-        }
-      };
-
-      // Add one-time click listener to handle user gesture requirement
-      const clickHandler = () => {
-        handleAudioContextGesture();
-        document.removeEventListener('click', clickHandler);
-        document.removeEventListener('touchstart', clickHandler);
-      };
-      
-      // Listen for user gestures to unlock audio
-      document.addEventListener('click', clickHandler, { once: true });
-      document.addEventListener('touchstart', clickHandler, { once: true });
+      console.log('🎧 Creating new TwilioVoiceService instance with audio permissions');
       
       // Use performance monitoring for Twilio initialization
       const service = performanceService.measurePerformance('twilio_initialization', () => {
@@ -140,9 +247,6 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
             setIsReady(true);
             setIsConnecting(false);
             console.log('✅ Global Twilio ready for calls');
-            
-            // ADDITIONAL FIX: Try to unlock audio when device is ready
-            handleAudioContextGesture();
           } else if (status.state === 'error') {
             setError(status.error || 'Unknown error');
             setIsConnecting(false);
@@ -155,10 +259,6 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
             setIsInCall(false);
             setCurrentCallSid(null);
             setIncomingCall(null);
-          } else if (status.state === 'incoming') {
-            console.log('📞 Global incoming call detected');
-            // CRITICAL: Try to unlock audio for incoming calls
-            handleAudioContextGesture();
           }
         },
         onError: (err: Error) => {
@@ -176,9 +276,6 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
         onIncomingCall: (callInfo: IncomingCallInfo) => {
           console.log('📞 Global incoming call received:', callInfo);
           setIncomingCall(callInfo);
-          
-          // CRITICAL: Unlock audio immediately for incoming calls
-          handleAudioContextGesture();
           
           // Show incoming call notification
           toast({
@@ -200,7 +297,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
       
       setTwilioService(service);
       
-      console.log('✅ Global Twilio initialized successfully');
+      console.log('✅ Global Twilio initialized successfully with audio permissions');
       
     } catch (err) {
       // Check if component is still mounted before updating state
@@ -214,15 +311,26 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
       setError(errorMessage);
       setIsConnecting(false);
       
+      // If error is audio-related, show permission modal again
+      if (errorMessage.toLowerCase().includes('audio') || errorMessage.toLowerCase().includes('microphone')) {
+        console.log('🎤 Audio-related error detected, requesting permission again');
+        setShowAudioPermissionModal(true);
+        setAudioPermissionStatus({
+          status: 'denied',
+          hasAudio: false,
+          error: 'Audio setup failed during Twilio initialization',
+        });
+      }
+      
       toast({
         title: "Calling System Unavailable",
-        description: "Unable to initialize the calling system. Some features may be limited.",
+        description: "Unable to initialize the calling system. Please check audio permissions.",
         variant: "destructive",
       });
     } finally {
       isInitializingRef.current = false;
     }
-  }, [session?.agent, toast]);
+  }, [session?.agent, audioPermissionStatus.hasAudio, toast]);
 
   const acceptIncomingCall = useCallback(() => {
     if (twilioService && incomingCall) {
@@ -282,8 +390,12 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
       console.warn('⚠️ Global Twilio is disabled, returning null device');
       return null;
     }
+    if (!audioPermissionStatus.hasAudio) {
+      console.warn('⚠️ Audio permission not granted, returning null device');
+      return null;
+    }
     return twilioService;
-  }, [twilioService, isEnabled]);
+  }, [twilioService, isEnabled, audioPermissionStatus.hasAudio]);
 
   const reinitialize = useCallback(async () => {
     console.log('🔄 Reinitializing Global Twilio...');
@@ -303,13 +415,26 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
     setCurrentCallSid(null);
     isInitializingRef.current = false;
     
-    // Reinitialize
-    await initializeTwilio();
-  }, [twilioService, initializeTwilio]);
+    // Check audio permissions again
+    await checkAudioPermissions();
+    
+    // Reinitialize if we have permissions
+    if (audioPermissionStatus.hasAudio) {
+      await initializeTwilio();
+    } else {
+      setShowAudioPermissionModal(true);
+    }
+  }, [twilioService, initializeTwilio, audioPermissionStatus.hasAudio]);
 
   const simulateIncomingCall = useCallback((mockCallData?: Partial<IncomingCallInfo>) => {
     if (!isEnabled) {
       console.warn('⚠️ Cannot simulate call - Global Twilio is disabled');
+      return;
+    }
+    
+    if (!audioPermissionStatus.hasAudio) {
+      console.warn('⚠️ Cannot simulate call - Audio permission not granted');
+      setShowAudioPermissionModal(true);
       return;
     }
 
@@ -320,7 +445,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
       callSid: 'CA_mock_call_sid_12345',
       from: '+447738585850',
       to: '+447488879172',
-      callerName: 'James Campbell',
+      callerName: 'Test Caller',
       userId: '2064',
       callSessionId: 'aec62188-825d-4bc4-b1f8-99f8ebca97b4',
       accept: () => {
@@ -347,7 +472,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
     });
     
     console.log('✅ Mock incoming call set:', mockCall);
-  }, [isEnabled, toast]);
+  }, [isEnabled, audioPermissionStatus.hasAudio, toast]);
 
   // Show debug info in development
   useEffect(() => {
@@ -360,15 +485,19 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
         error,
         hasIncomingCall: !!incomingCall,
         isInCall,
-        currentCallSid
+        currentCallSid,
+        audioPermissionStatus,
+        showAudioPermissionModal,
       });
     }
-  }, [isEnabled, session?.agent, isReady, isConnecting, error, incomingCall, isInCall, currentCallSid]);
+  }, [isEnabled, session?.agent, isReady, isConnecting, error, incomingCall, isInCall, currentCallSid, audioPermissionStatus, showAudioPermissionModal]);
 
   const contextValue: GlobalTwilioState = {
     isReady,
     isConnecting,
     error,
+    audioPermissionStatus,
+    showAudioPermissionModal,
     incomingCall,
     isInCall,
     currentCallSid,
@@ -377,6 +506,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
     endCall,
     getDevice,
     reinitialize,
+    requestAudioPermission,
     simulateIncomingCall,
     isEnabled
   };
@@ -384,6 +514,13 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
   return (
     <GlobalTwilioContext.Provider value={contextValue}>
       {children}
+      
+      {/* Audio Permission Modal */}
+      <AudioPermissionModal
+        isOpen={showAudioPermissionModal}
+        onPermissionGranted={handleAudioPermissionGranted}
+        onPermissionDenied={handleAudioPermissionDenied}
+      />
     </GlobalTwilioContext.Provider>
   );
 }

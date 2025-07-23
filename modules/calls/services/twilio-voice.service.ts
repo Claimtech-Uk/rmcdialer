@@ -150,13 +150,56 @@ export class TwilioVoiceService {
   private async requestMicrophonePermission(): Promise<void> {
     try {
       console.log('🎤 Requesting microphone permission...');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Stop the stream immediately after getting permission
+      
+      // Check if media devices are supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Media devices not supported by this browser. Please use a modern browser like Chrome, Firefox, or Safari.');
+      }
+      
+      // Request microphone access with optimal settings
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 16000, // Twilio recommends 16kHz for optimal quality
+        }
+      });
+      
+      // Verify we got audio tracks
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        stream.getTracks().forEach(track => track.stop());
+        throw new Error('No audio tracks available. Please check your microphone settings.');
+      }
+      
+      console.log('✅ Microphone permission granted with tracks:', audioTracks.map(track => ({
+        label: track.label,
+        enabled: track.enabled,
+        readyState: track.readyState,
+        kind: track.kind
+      })));
+      
+      // Stop the stream immediately after verifying permission
       stream.getTracks().forEach(track => track.stop());
-      console.log('✅ Microphone permission granted');
-    } catch (error) {
-      console.warn('⚠️ Microphone permission denied or unavailable:', error);
-      // Don't throw here - let Twilio handle audio setup
+      
+    } catch (error: any) {
+      console.error('❌ Microphone permission request failed:', error);
+      
+      // Provide specific error messages based on error type
+      if (error.name === 'NotAllowedError') {
+        throw new Error('Microphone permission denied. Please enable microphone access in your browser settings and refresh the page.');
+      } else if (error.name === 'NotFoundError') {
+        throw new Error('No microphone found. Please connect a microphone and try again.');
+      } else if (error.name === 'NotReadableError') {
+        throw new Error('Microphone is being used by another application. Please close other applications using your microphone and try again.');
+      } else if (error.name === 'OverconstrainedError') {
+        throw new Error('Microphone does not support the required settings. Please check your microphone capabilities.');
+      } else if (error.name === 'SecurityError') {
+        throw new Error('Microphone access blocked due to security restrictions. Please use HTTPS or localhost.');
+      } else {
+        throw new Error(`Microphone setup failed: ${error.message || 'Unknown error'}`);
+      }
     }
   }
 
