@@ -33,12 +33,12 @@ export async function GET(request: NextRequest) {
       ]),
       
       // Orphaned queue entries (missing scoring records)
-      prisma.$queryRaw`
+      prisma.$queryRaw<Array<{count: bigint}>>`
         SELECT COUNT(*) as count
         FROM call_queue cq
         LEFT JOIN user_call_scores ucs ON cq.user_id = ucs.user_id
         WHERE cq.status = 'pending' AND ucs.user_id IS NULL
-      ` as Array<{count: bigint}>,
+      ` ,
       
       // Recent activity (last 24 hours)
       Promise.all([
