@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# RMC Dialler - Smart Deployment Script
-# Prevents multiple simultaneous deployments
+# RMC Dialler - Smart Deployment Script with Auto Queue Discovery
+# Prevents multiple simultaneous deployments and triggers immediate queue population
 
 set -e
 
@@ -78,14 +78,73 @@ fi
 
 # Deploy to Vercel
 echo "🚀 Deploying to Vercel..."
-npx vercel --prod
+DEPLOYMENT_OUTPUT=$(npx vercel --prod 2>&1)
+DEPLOYMENT_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -E 'https://.*\.vercel\.app' | tail -1 | tr -d ' ')
 
 if [ $? -eq 0 ]; then
     echo "✅ Deployment completed successfully!"
-    echo "🌐 Check: https://rmcdialer.vercel.app"
+    echo "🌐 Production URL: $DEPLOYMENT_URL"
+    
+    # Post-Deployment: Trigger Queue Discovery
+    echo ""
+    echo "🔄 Post-Deployment: Triggering Queue Discovery..."
+    echo "================================================="
+    
+    # Wait a moment for deployment to be fully ready
+    echo "⏳ Waiting 10 seconds for deployment to stabilize..."
+    sleep 10
+    
+    # Trigger queue discovery
+    echo "📊 Step 1: Triggering Queue Discovery..."
+    DISCOVERY_RESPONSE=$(curl -s -X GET "${DEPLOYMENT_URL}/api/cron/discover-new-leads" || echo "ERROR")
+    
+    if echo "$DISCOVERY_RESPONSE" | grep -q '"success":true'; then
+        echo "✅ Queue Discovery completed successfully!"
+        echo "$DISCOVERY_RESPONSE" | jq -r '.report.summary // "Summary not available"' 2>/dev/null || echo "Raw response: $DISCOVERY_RESPONSE"
+    else
+        echo "⚠️  Queue Discovery response: $DISCOVERY_RESPONSE"
+    fi
+    
+    # Wait a moment between requests
+    sleep 3
+    
+    # Trigger scoring maintenance
+    echo "📈 Step 2: Triggering Scoring Maintenance..."
+    SCORING_RESPONSE=$(curl -s -X GET "${DEPLOYMENT_URL}/api/cron/scoring-maintenance" || echo "ERROR")
+    
+    if echo "$SCORING_RESPONSE" | grep -q '"success":true'; then
+        echo "✅ Scoring Maintenance completed successfully!"
+        echo "$SCORING_RESPONSE" | jq -r '.summary // "Summary not available"' 2>/dev/null || echo "Raw response: $SCORING_RESPONSE"
+    else
+        echo "⚠️  Scoring Maintenance response: $SCORING_RESPONSE"
+    fi
+    
+    # Wait a moment and check system status
+    sleep 3
+    
+    echo "🔍 Step 3: Checking System Status..."
+    STATUS_RESPONSE=$(curl -s "${DEPLOYMENT_URL}/api/cron-status" || echo "ERROR")
+    
+    if echo "$STATUS_RESPONSE" | grep -q '"status"'; then
+        echo "📊 System Status:"
+        echo "$STATUS_RESPONSE" | jq '.' 2>/dev/null || echo "Raw response: $STATUS_RESPONSE"
+    else
+        echo "⚠️  Status check response: $STATUS_RESPONSE"
+    fi
+    
+    echo ""
+    echo "🎯 Quick Summary:"
+    echo "   🌐 Production: $DEPLOYMENT_URL"
+    echo "   📋 Queue Status: ${DEPLOYMENT_URL}/queue/unsigned"
+    echo "   📊 Admin Panel: ${DEPLOYMENT_URL}/admin"
+    echo "   🔍 Cron Status: ${DEPLOYMENT_URL}/api/cron-status"
+    
 else
     echo "❌ Deployment failed"
+    echo "$DEPLOYMENT_OUTPUT"
     exit 1
 fi
 
-echo "🎉 All done!" 
+echo ""
+echo "🎉 Deployment & Queue Discovery Complete!" 
+echo "Your production database should now be populated with real users!"
