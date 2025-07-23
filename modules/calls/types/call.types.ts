@@ -230,7 +230,9 @@ export interface CallHistoryEntry {
   outcomeNotes?: string;
   magicLinkSent?: boolean;
   smsSent?: boolean;
-  nextCallDelay?: number;
+  callbackScheduled?: boolean; // Added to match tRPC response
+  followUpRequired?: boolean; // Added to match tRPC response
+  nextCallDelay?: number | null; // Fixed: allow null values
   documentsRequested?: string[];
   twilioCallSid?: string;
   recordingUrl?: string;
