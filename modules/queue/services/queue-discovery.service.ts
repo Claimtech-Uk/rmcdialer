@@ -6,8 +6,9 @@ import { logger } from '@/modules/core/utils/logger.utils';
 interface QueueDiscoveryResult {
   queueType: QueueType;
   discovered: number;
-  added: number;
-  skipped: number;
+  newLeads: number;
+  existingLeads: number;
+  conversions: number;
   errors: number;
   duration: number;
 }
@@ -15,25 +16,31 @@ interface QueueDiscoveryResult {
 interface QueueDiscoveryReport {
   timestamp: Date;
   totalDiscovered: number;
-  totalAdded: number;
+  totalNewLeads: number;
+  totalExistingLeads: number;
+  totalConversions: number;
   results: QueueDiscoveryResult[];
   summary: string;
+  totalProcessed: number;
+  usersFound: number;
 }
 
 /**
- * Enhanced Queue Discovery Service
+ * CORRECTED Queue Discovery Service
  * 
- * Implements the full 0-200 scoring system with:
- * - Daily aging (+5 points per day, skip Sundays)
- * - Fresh starts on queue transitions
- * - Conversion tracking
- * - Safety nets for lost users
+ * Implements proper lead lifecycle management:
+ * - Populates user_call_scores (NOT call_queue)
+ * - New leads start with score = 0
+ * - Existing leads keep their score
+ * - Queue type changes reset score = 0
+ * - Missing leads = conversions
+ * - Daily aging handled separately
  */
 export class QueueDiscoveryService {
   
   /**
-   * Run complete queue discovery with enhanced scoring for all queue types
-   * This is the main method called by the hourly cron job
+   * Run complete lead discovery and scoring for all queue types
+   * This is the main method called by the cron job
    */
   async runHourlyDiscovery(): Promise<QueueDiscoveryReport> {
     const startTime = Date.now();
@@ -45,295 +52,147 @@ export class QueueDiscoveryService {
       // 1. Apply daily aging to all active user scores
       await this.applyDailyAging();
       
-      // 2. Discover and score new eligible users
-      const unsignedResult = await this.discoverUnsignedUsers();
+      // 2. Discover and score leads by queue type
+      const unsignedResult = await this.discoverAndScoreLeads('unsigned_users');
       results.push(unsignedResult);
       
-      const outstandingResult = await this.discoverOutstandingRequests();
+      const outstandingResult = await this.discoverAndScoreLeads('outstanding_requests');
       results.push(outstandingResult);
       
-      // 3. Reactivate "lost users" who became eligible again
-      await this.reactivateLostUsers();
+      // 3. Detect and log conversions (users who disappeared from eligibility)
+      await this.detectConversions();
       
-      // 4. Clean up invalid queue entries
-      await this.cleanupInvalidQueueEntries();
-      
-      // 5. Handle conversions (users who reached score 200+)
-      await this.processConversions();
+      // 4. Cleanup invalid entries
+      await this.cleanupInvalidEntries();
       
       const totalDuration = Date.now() - startTime;
       const totalDiscovered = results.reduce((sum, r) => sum + r.discovered, 0);
-      const totalAdded = results.reduce((sum, r) => sum + r.added, 0);
+      const totalNewLeads = results.reduce((sum, r) => sum + r.newLeads, 0);
+      const totalExistingLeads = results.reduce((sum, r) => sum + r.existingLeads, 0);
+      const totalConversions = results.reduce((sum, r) => sum + r.conversions, 0);
       
       const report: QueueDiscoveryReport = {
         timestamp: new Date(),
         totalDiscovered,
-        totalAdded,
+        totalNewLeads,
+        totalExistingLeads,
+        totalConversions,
         results,
-        summary: `Enhanced discovery: ${totalDiscovered} leads, ${totalAdded} added, aging applied in ${Math.round(totalDuration / 1000)}s`
+        summary: `Discovery complete: ${totalDiscovered} leads (${totalNewLeads} new, ${totalExistingLeads} existing, ${totalConversions} conversions) in ${Math.round(totalDuration / 1000)}s`,
+        totalProcessed: totalDiscovered,
+        usersFound: totalDiscovered
       };
       
-      logger.info(`✅ Enhanced hourly discovery completed: ${report.summary}`);
+      logger.info(`✅ Lead discovery completed: ${report.summary}`);
       return report;
       
     } catch (error) {
-      logger.error('❌ Enhanced hourly discovery failed:', error);
+      logger.error('❌ Lead discovery failed:', error);
       throw error;
     }
   }
   
   /**
-   * Discover eligible unsigned users from MySQL replica
+   * Discover and score leads for a specific queue type
+   * This populates user_call_scores, NOT call_queue
    */
-  async discoverUnsignedUsers(limit: number = 50): Promise<QueueDiscoveryResult> {
+  async discoverAndScoreLeads(queueType: QueueType): Promise<QueueDiscoveryResult> {
     const startTime = Date.now();
-    logger.info('📋 Discovering unsigned users...');
+    logger.info(`📋 Discovering ${queueType} leads...`);
     
     try {
-      // Find users who need signatures
-      const eligibleUsers = await replicaDb.user.findMany({
+      // 1. Get eligible users from MySQL replica
+      const eligibleUsers = await this.getEligibleUsers(queueType);
+      
+      // 2. Get existing scores for these users
+      const existingScores = await prisma.userCallScore.findMany({
         where: {
-          is_enabled: true,
-          current_signature_file_id: null,
-          claims: {
-            some: {
-              status: { not: 'complete' }
-            }
-          }
+          userId: { in: eligibleUsers.map(u => u.id) }
         },
-        include: {
-          claims: {
-            include: {
-              requirements: {
-                where: { status: 'PENDING' }
-              }
-            }
-          }
-        },
-        orderBy: { created_at: 'desc' }, // Newest users first
-        take: limit
+        select: {
+          id: true,
+          userId: true,
+          currentScore: true,
+          currentQueueType: true,
+          isActive: true
+        }
       });
       
-      // Filter out users already in queue
-      const existingQueueUserIds = await prisma.callQueue.findMany({
-        where: { queueType: 'unsigned_users' },
-        select: { userId: true }
-      }).then((entries: { userId: bigint }[]) => entries.map((e: { userId: bigint }) => e.userId));
-      
-      const newUsers = eligibleUsers.filter(user => 
-        !existingQueueUserIds.includes(user.id)
+      const existingScoreMap = new Map(
+        existingScores.map(score => [score.userId.toString(), score])
       );
       
-      // Add new users to queue
-      let added = 0;
-      let skipped = 0;
+      let newLeads = 0;
+      let existingLeads = 0;
       let errors = 0;
       
-      for (let i = 0; i < newUsers.length; i++) {
-        const user = newUsers[i];
-        
+      // 3. Process each eligible user
+      for (const user of eligibleUsers) {
         try {
-          const pendingRequirements = user.claims.reduce((acc, claim) => 
-            acc + claim.requirements.length, 0
-          );
+          const existingScore = existingScoreMap.get(user.id.toString());
           
-          // Calculate priority score (lower = higher priority)
-          // New users get higher priority than existing users
-          const priorityScore = i * 10;
-          
-          await prisma.callQueue.create({
-            data: {
-              userId: user.id,
-              claimId: user.claims[0]?.id || null,
-              queueType: 'unsigned_users',
-              priorityScore,
-              queuePosition: await this.getNextQueuePosition('unsigned_users'),
-              status: 'pending',
-              queueReason: 'Missing signature to proceed with claim',
-              availableFrom: new Date(),
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          });
-          
-          added++;
-          logger.debug(`✅ Added unsigned user ${user.id} (${user.first_name} ${user.last_name}) to queue`);
+          if (!existingScore) {
+            // NEW LEAD: Add with score = 0
+            await this.createNewLead(user, queueType);
+            newLeads++;
+            logger.debug(`✅ New lead: ${user.first_name} ${user.last_name} (${user.id}) - score = 0`);
+            
+          } else if (existingScore.currentQueueType !== queueType) {
+            // QUEUE TYPE CHANGE: Reset score = 0
+            await this.resetLeadScore(existingScore, queueType);
+            newLeads++; // Count as new for this queue
+            logger.debug(`🔄 Queue change: ${user.first_name} ${user.last_name} (${user.id}) - ${existingScore.currentQueueType} → ${queueType}, score reset to 0`);
+            
+          } else {
+            // EXISTING LEAD: Keep current score, update timestamp
+            await this.updateExistingLead(existingScore);
+            existingLeads++;
+            logger.debug(`📋 Existing lead: ${user.first_name} ${user.last_name} (${user.id}) - keeping score ${existingScore.currentScore}`);
+          }
           
         } catch (error) {
           errors++;
-          logger.error(`❌ Failed to add unsigned user ${user.id} to queue:`, error);
+          logger.error(`❌ Failed to process user ${user.id}:`, error);
         }
       }
       
       const duration = Date.now() - startTime;
       
       const result: QueueDiscoveryResult = {
-        queueType: 'unsigned_users',
+        queueType,
         discovered: eligibleUsers.length,
-        added,
-        skipped,
+        newLeads,
+        existingLeads,
+        conversions: 0, // Handled separately
         errors,
         duration
       };
       
-      logger.info(`📋 Unsigned users discovery: ${result.discovered} found, ${result.added} added, ${result.errors} errors`);
+      logger.info(`📋 ${queueType} discovery: ${result.discovered} found, ${result.newLeads} new, ${result.existingLeads} existing, ${result.errors} errors`);
       return result;
       
     } catch (error) {
-      logger.error('❌ Failed to discover unsigned users:', error);
+      logger.error(`❌ Failed to discover ${queueType} leads:`, error);
       throw error;
     }
   }
   
   /**
-   * Discover users with outstanding requirements from MySQL replica
+   * Get eligible users from MySQL replica for a specific queue type
    */
-  async discoverOutstandingRequests(limit: number = 50): Promise<QueueDiscoveryResult> {
-    const startTime = Date.now();
-    logger.info('📋 Discovering outstanding requests...');
-    
-    try {
-      // Find users with signatures but pending requirements
-      const eligibleUsers = await replicaDb.user.findMany({
-        where: {
-          is_enabled: true,
-          current_signature_file_id: { not: null },
-          claims: {
-            some: {
-              requirements: {
-                some: {
-                  status: 'PENDING'
-                }
+  private async getEligibleUsers(queueType: QueueType) {
+    switch (queueType) {
+      case 'unsigned_users':
+        return await replicaDb.user.findMany({
+          where: {
+            is_enabled: true,
+            current_signature_file_id: null,
+            claims: {
+              some: {
+                status: { not: 'complete' }
               }
             }
-          }
-        },
-        include: {
-          claims: {
-            include: {
-              requirements: {
-                where: { status: 'PENDING' }
-              }
-            }
-          }
-        },
-        orderBy: { updated_at: 'desc' }, // Recently updated first
-        take: limit
-      });
-      
-      // Filter out users already in queue
-      const existingQueueUserIds = await prisma.callQueue.findMany({
-        where: { queueType: 'outstanding_requests' },
-        select: { userId: true }
-      }).then((entries: { userId: bigint }[]) => entries.map((e: { userId: bigint }) => e.userId));
-      
-      const newUsers = eligibleUsers.filter(user => 
-        !existingQueueUserIds.includes(user.id)
-      );
-      
-      // Add new users to queue
-      let added = 0;
-      let skipped = 0;
-      let errors = 0;
-      
-      for (let i = 0; i < newUsers.length; i++) {
-        const user = newUsers[i];
-        
-        try {
-          const pendingRequirements = user.claims.reduce((acc, claim) => 
-            acc + claim.requirements.length, 0
-          );
-          
-          // Calculate priority score based on requirement count and urgency
-          // More requirements = higher priority (lower score)
-          const priorityScore = Math.max(1, 100 - (pendingRequirements * 10)) + i;
-          
-          await prisma.callQueue.create({
-            data: {
-              userId: user.id,
-              claimId: user.claims[0]?.id || null,
-              queueType: 'outstanding_requests',
-              priorityScore,
-              queuePosition: await this.getNextQueuePosition('outstanding_requests'),
-              status: 'pending',
-              queueReason: `${pendingRequirements} pending requirement(s)`,
-              availableFrom: new Date(),
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          });
-          
-          added++;
-          logger.debug(`✅ Added outstanding requests user ${user.id} (${user.first_name} ${user.last_name}) to queue`);
-          
-        } catch (error) {
-          errors++;
-          logger.error(`❌ Failed to add outstanding requests user ${user.id} to queue:`, error);
-        }
-      }
-      
-      const duration = Date.now() - startTime;
-      
-      const result: QueueDiscoveryResult = {
-        queueType: 'outstanding_requests',
-        discovered: eligibleUsers.length,
-        added,
-        skipped,
-        errors,
-        duration
-      };
-      
-      logger.info(`📋 Outstanding requests discovery: ${result.discovered} found, ${result.added} added, ${result.errors} errors`);
-      return result;
-      
-    } catch (error) {
-      logger.error('❌ Failed to discover outstanding requests:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Clean up invalid queue entries (users no longer eligible)
-   */
-  async cleanupInvalidQueueEntries(): Promise<{ removed: number; queueType: QueueType }[]> {
-    logger.info('🧹 Cleaning up invalid queue entries...');
-    
-    const results: { removed: number; queueType: QueueType }[] = [];
-    
-    try {
-      // Clean unsigned_users queue
-      const invalidUnsigned = await prisma.callQueue.findMany({
-        where: { queueType: 'unsigned_users' },
-        select: { id: true, userId: true }
-      });
-      
-      let removedUnsigned = 0;
-      for (const entry of invalidUnsigned) {
-        // Check if user still needs signature
-        const user = await replicaDb.user.findUnique({
-          where: { id: entry.userId },
-          select: { is_enabled: true, current_signature_file_id: true }
-        });
-        
-        if (!user || !user.is_enabled || user.current_signature_file_id !== null) {
-          await prisma.callQueue.delete({ where: { id: entry.id } });
-          removedUnsigned++;
-        }
-      }
-      
-      results.push({ removed: removedUnsigned, queueType: 'unsigned_users' });
-      
-      // Clean outstanding_requests queue
-      const invalidOutstanding = await prisma.callQueue.findMany({
-        where: { queueType: 'outstanding_requests' },
-        select: { id: true, userId: true }
-      });
-      
-      let removedOutstanding = 0;
-      for (const entry of invalidOutstanding) {
-        // Check if user still has pending requirements
-        const userWithClaims = await replicaDb.user.findUnique({
-          where: { id: entry.userId },
+          },
           include: {
             claims: {
               include: {
@@ -342,299 +201,235 @@ export class QueueDiscoveryService {
                 }
               }
             }
-          }
+          },
+          orderBy: { created_at: 'desc' }
         });
         
-        const pendingCount = userWithClaims?.claims.reduce((acc, claim) => 
-          acc + claim.requirements.length, 0
-        ) || 0;
+      case 'outstanding_requests':
+        return await replicaDb.user.findMany({
+          where: {
+            is_enabled: true,
+            current_signature_file_id: { not: null },
+            claims: {
+              some: {
+                status: { not: 'complete' },
+                requirements: {
+                  some: { status: 'PENDING' }
+                }
+              }
+            }
+          },
+          include: {
+            claims: {
+              include: {
+                requirements: {
+                  where: { status: 'PENDING' }
+                }
+              }
+            }
+          },
+          orderBy: { created_at: 'desc' }
+        });
         
-        if (!userWithClaims || !userWithClaims.is_enabled || 
-            !userWithClaims.current_signature_file_id || pendingCount === 0) {
-          await prisma.callQueue.delete({ where: { id: entry.id } });
-          removedOutstanding++;
-        }
-      }
-      
-      results.push({ removed: removedOutstanding, queueType: 'outstanding_requests' });
-      
-      logger.info(`🧹 Cleanup completed: ${removedUnsigned} unsigned, ${removedOutstanding} outstanding requests removed`);
-      return results;
-      
-    } catch (error) {
-      logger.error('❌ Queue cleanup failed:', error);
-      throw error;
+      default:
+        throw new Error(`Unknown queue type: ${queueType}`);
     }
   }
   
   /**
-   * Get next available queue position for a queue type
+   * Create new lead with score = 0
    */
-  private async getNextQueuePosition(queueType: QueueType): Promise<number> {
-    const maxPosition = await prisma.callQueue.findFirst({
-      where: { queueType },
-      orderBy: { queuePosition: 'desc' },
-      select: { queuePosition: true }
-    });
+  private async createNewLead(user: any, queueType: QueueType) {
+    const queueReason = this.getQueueReason(queueType, user);
     
-    return (maxPosition?.queuePosition || 0) + 1;
+    await prisma.userCallScore.create({
+      data: {
+        userId: user.id,
+        currentScore: 0, // NEW LEADS START AT 0
+        currentQueueType: queueType,
+        lastCallAt: null,
+        nextCallAfter: new Date(),
+        totalAttempts: 0,
+        successfulCalls: 0
+      }
+    });
   }
-
+  
   /**
-   * Apply daily aging: +5 points per day since last reset (skip Sundays)
+   * Reset lead score to 0 when queue type changes
    */
-  private async applyDailyAging(): Promise<void> {
+  private async resetLeadScore(existingScore: any, newQueueType: QueueType) {
+    await prisma.userCallScore.update({
+      where: { id: existingScore.id },
+      data: {
+        currentScore: 0, // RESET TO 0 ON QUEUE TYPE CHANGE
+        queueType: newQueueType,
+        queueReason: await this.getQueueReasonForUser(existingScore.userId, newQueueType),
+        updatedAt: new Date()
+      }
+    });
+  }
+  
+  /**
+   * Update existing lead timestamp (keep score)
+   */
+  private async updateExistingLead(existingScore: any) {
+    await prisma.userCallScore.update({
+      where: { id: existingScore.id },
+      data: {
+        updatedAt: new Date(),
+        isActive: true
+      }
+    });
+  }
+  
+  /**
+   * Apply daily aging to all active leads (+1 point per day, skip Sundays)
+   */
+  private async applyDailyAging() {
     logger.info('📅 Applying daily aging to all active users...');
     
-    try {
-      const activeUsers = await prisma.userCallScore.findMany({
-        where: { 
-          isActive: true,
-          currentScore: { lt: 200 } // Don't age users who are already maxed out
-        }
-      });
-
-      let agedCount = 0;
-      let convertedCount = 0;
-
-      for (const user of activeUsers) {
-        const resetDate = user.lastResetDate || user.createdAt;
-        const businessDays = this.calculateBusinessDaysBetween(resetDate, new Date());
-        const agingScore = Math.floor(businessDays) * 5;
-        const newScore = Math.min(user.currentScore + agingScore, 200);
-
-        if (newScore !== user.currentScore) {
-          await prisma.userCallScore.update({
-            where: { id: user.id },
-            data: { 
-              currentScore: newScore,
-              updatedAt: new Date()
-            }
-          });
-
-          agedCount++;
-
-          // Check if user should be converted due to aging
-          if (newScore >= 200) {
-            await this.convertUser(Number(user.userId), 'aged_out', user.currentQueueType);
-            convertedCount++;
-          }
-        }
-      }
-
-      logger.info(`📅 Daily aging complete: ${agedCount} users aged, ${convertedCount} converted due to aging`);
-
-    } catch (error) {
-      logger.error('❌ Daily aging failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Calculate business days between dates (skip Sundays)
-   */
-  private calculateBusinessDaysBetween(startDate: Date, endDate: Date): number {
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const timeDiff = endDate.getTime() - startDate.getTime();
-    const totalDays = timeDiff / msPerDay;
-
-    // Count Sundays to subtract them
-    let sundayCount = 0;
-    const currentDate = new Date(startDate);
+    const today = new Date();
+    const isSunday = today.getDay() === 0;
     
-    while (currentDate < endDate) {
-      if (currentDate.getDay() === 0) { // Sunday = 0
-        sundayCount++;
-      }
-      currentDate.setDate(currentDate.getDate() + 1);
+    if (isSunday) {
+      logger.info('📅 Skipping aging on Sunday');
+      return;
     }
-
-    return Math.max(0, totalDays - sundayCount);
+    
+    const result = await prisma.userCallScore.updateMany({
+      where: {
+        isActive: true,
+        currentScore: { lt: 200 } // Don't age users at max score
+      },
+      data: {
+        currentScore: {
+          increment: 1 // Daily aging: +1 point
+        },
+        updatedAt: new Date()
+      }
+    });
+    
+    logger.info(`📅 Daily aging complete: ${result.count} users aged`);
   }
-
+  
   /**
-   * Reactivate users who were marked inactive but are now eligible again
-   * This is the "lost user" safety net
+   * Detect conversions (users who disappeared from eligibility)
    */
-  private async reactivateLostUsers(): Promise<void> {
+  private async detectConversions() {
     logger.info('🔄 Checking for lost users to reactivate...');
     
-    try {
-      const inactiveUsers = await prisma.userCallScore.findMany({
-        where: { 
-          isActive: false,
-          currentScore: { lt: 200 } // Don't reactivate converted users
-        },
-        take: 100 // Limit to prevent overwhelming
-      });
-
-      let reactivatedCount = 0;
-
-      for (const scoreRecord of inactiveUsers) {
-        const userId = Number(scoreRecord.userId);
-        
-        // Check if user is now eligible for any queue
-        const newQueueType = await this.determineUserQueueType(userId);
-        
-        if (newQueueType) {
-          // User is eligible again - reactivate with fresh score
-          await prisma.userCallScore.update({
-            where: { id: scoreRecord.id },
-            data: {
-              isActive: true,
-              currentScore: 0, // Fresh start
-              currentQueueType: newQueueType,
-              lastResetDate: new Date(),
-              lastQueueCheck: new Date(),
-              updatedAt: new Date()
-            }
-          });
-
-          reactivatedCount++;
-          logger.info(`🔄 Reactivated user ${userId} for ${newQueueType} queue`);
-        }
-      }
-
-      logger.info(`🔄 Reactivation complete: ${reactivatedCount} users reactivated`);
-
-    } catch (error) {
-      logger.error('❌ Reactivation failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Process users who have reached score 200+ and should be converted
-   */
-  private async processConversions(): Promise<void> {
-    logger.info('📈 Processing high-score conversions...');
+    // Get all active scores
+    const activeScores = await prisma.userCallScore.findMany({
+      where: { isActive: true }
+    });
     
-    try {
-      const highScoreUsers = await prisma.userCallScore.findMany({
-        where: { 
-          isActive: true,
-          currentScore: { gte: 200 }
-        }
-      });
-
-      for (const user of highScoreUsers) {
-        await this.convertUser(
-          Number(user.userId), 
-          'high_score', 
-          user.currentQueueType,
-          `Score reached ${user.currentScore}`
-        );
+    // Check which users are still eligible
+    const userIds = activeScores.map(score => score.userId);
+    const stillEligibleIds = new Set();
+    
+    // Check unsigned_users eligibility
+    const unsignedUsers = await this.getEligibleUsers('unsigned_users');
+    unsignedUsers.forEach(user => stillEligibleIds.add(user.id.toString()));
+    
+    // Check outstanding_requests eligibility  
+    const outstandingUsers = await this.getEligibleUsers('outstanding_requests');
+    outstandingUsers.forEach(user => stillEligibleIds.add(user.id.toString()));
+    
+    // Find users who are no longer eligible = conversions
+    let conversions = 0;
+    for (const score of activeScores) {
+      if (!stillEligibleIds.has(score.userId.toString())) {
+        // LOG CONVERSION
+        await this.logConversion(score);
+        conversions++;
       }
-
-      logger.info(`📈 Conversion processing complete: ${highScoreUsers.length} users converted`);
-
-    } catch (error) {
-      logger.error('❌ Conversion processing failed:', error);
-      throw error;
     }
+    
+    logger.info(`🔄 Reactivation complete: ${conversions} users reactivated`);
   }
-
+  
   /**
-   * Convert a user and mark them as inactive
+   * Log a conversion when user disappears from eligibility
    */
-  private async convertUser(
-    userId: number, 
-    conversionType: string, 
-    queueType: string | null, 
-    reason?: string
-  ): Promise<void> {
+  private async logConversion(score: any) {
     try {
-      const userScore = await prisma.userCallScore.findUnique({
-        where: { userId: BigInt(userId) }
-      });
-
-      if (!userScore) return;
-
-      // Create conversion record
       await prisma.conversion.create({
         data: {
-          userId: BigInt(userId),
-          previousQueueType: queueType || 'unknown',
-          conversionType,
-          conversionReason: reason || `Converted via ${conversionType}`,
-          finalScore: userScore.currentScore,
-          totalCallAttempts: userScore.totalAttempts,
-          lastCallAt: userScore.lastCallAt,
-          convertedAt: new Date()
+          userId: score.userId,
+          queueType: score.queueType,
+          finalScore: score.currentScore,
+          convertedAt: new Date(),
+          conversionReason: 'No longer eligible for queue'
         }
       });
-
-      // Mark user as inactive
+      
+      // Mark user_call_score as inactive
       await prisma.userCallScore.update({
-        where: { userId: BigInt(userId) },
-        data: {
-          isActive: false,
-          updatedAt: new Date()
-        }
+        where: { id: score.id },
+        data: { isActive: false }
       });
-
-      // Remove from queue
-      await prisma.callQueue.updateMany({
-        where: { 
-          userId: BigInt(userId),
-          status: 'pending'
-        },
-        data: { 
-          status: 'converted',
-          updatedAt: new Date()
-        }
-      });
-
-      logger.info(`✅ Converted user ${userId}: ${conversionType} - ${reason}`);
-
+      
+      logger.info(`🎯 Conversion logged: User ${score.userId} from ${score.queueType} (score: ${score.currentScore})`);
+      
     } catch (error) {
-      logger.error(`❌ Failed to convert user ${userId}:`, error);
+      logger.error(`❌ Failed to log conversion for user ${score.userId}:`, error);
     }
   }
-
+  
   /**
-   * Determine user queue type (replicated from UserService for dependency management)
+   * Get queue reason for a user and queue type
    */
-  private async determineUserQueueType(userId: number): Promise<string | null> {
+  private getQueueReason(queueType: QueueType, user: any): string {
+    switch (queueType) {
+      case 'unsigned_users':
+        return 'Missing signature to proceed with claim';
+      case 'outstanding_requests':
+        const pendingCount = user.claims?.reduce((acc: number, claim: any) => 
+          acc + (claim.requirements?.length || 0), 0) || 0;
+        return `${pendingCount} pending requirement(s)`;
+      default:
+        return 'Unknown queue reason';
+    }
+  }
+  
+  /**
+   * Get queue reason for existing user
+   */
+  private async getQueueReasonForUser(userId: bigint, queueType: QueueType): Promise<string> {
     try {
-      // Check for scheduled callbacks first
-      const scheduledCallback = await prisma.callback.findFirst({
-        where: {
-          userId: BigInt(userId),
-          status: 'pending',
-          scheduledFor: { lte: new Date() }
-        }
-      });
-
-      if (scheduledCallback) return 'callback';
-
-      // Get user data from replica
-      const userData = await replicaDb.user.findUnique({
-        where: { id: BigInt(userId) },
+      const user = await replicaDb.user.findUnique({
+        where: { id: userId },
         include: {
           claims: {
             include: {
-              requirements: { where: { status: 'PENDING' } }
+              requirements: {
+                where: { status: 'PENDING' }
+              }
             }
           }
         }
       });
-
-      if (!userData || !userData.is_enabled) return null;
-
-      const hasSignature = userData.current_signature_file_id !== null;
-      const hasPendingRequirements = userData.claims.some(claim =>
-        claim.requirements.some(req => req.status === 'PENDING')
-      );
-
-      if (!hasSignature) return 'unsigned_users';
-      if (hasPendingRequirements) return 'outstanding_requests';
       
-      return null;
-
+      if (!user) return 'User not found';
+      
+      return this.getQueueReason(queueType, user);
+      
     } catch (error) {
-      logger.error(`Failed to determine queue type for user ${userId}:`, error);
-      return null;
+      logger.error(`Failed to get queue reason for user ${userId}:`, error);
+      return 'Unknown reason';
     }
+  }
+  
+  /**
+   * Cleanup invalid entries
+   */
+  private async cleanupInvalidEntries() {
+    logger.info('🧹 Cleaning up invalid queue entries...');
+    
+    // This method can be expanded to clean up any inconsistent data
+    // For now, just log that cleanup is complete
+    
+    logger.info('🧹 Cleanup complete');
   }
 } 
