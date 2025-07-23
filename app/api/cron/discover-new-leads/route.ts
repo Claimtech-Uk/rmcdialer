@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { LeadScoringSimpleService } from '@/modules/queue/services/lead-scoring-simple.service';
+import { LeadDiscoveryOptimizedService } from '@/modules/queue/services/lead-discovery-optimized.service';
 import { QueueGenerationService } from '@/modules/queue/services/queue-generation.service';
 
 async function logCronExecution(jobName: string, status: 'running' | 'success' | 'failed', duration: number, details: any, error?: string) {
@@ -24,74 +24,71 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    console.log('🔄 [CRON] TIMEOUT-FIXED Lead Scoring & Queue Generation starting...');
+    console.log('🚀 [CRON] OPTIMIZED Lead Discovery starting (NEW users only)...');
     
     // Log start
-    await logCronExecution('queue-discovery', 'running', 0, { message: 'Starting timeout-fixed lead scoring' });
+    await logCronExecution('optimized-lead-discovery', 'running', 0, { 
+      message: 'OPTIMIZED Lead Discovery started (NEW users only)',
+      timestamp: new Date().toISOString()
+    });
     
-    // Step 1: Lead Scoring with timeout protection
-    console.log('📊 Step 1: TIMEOUT-FIXED lead scoring (MySQL replica → user_call_scores)...');
-    const leadService = new LeadScoringSimpleService();
-    const scoringResult = await leadService.runLeadScoring();
+    // Step 1: OPTIMIZED Lead Discovery (only NEW users)
+    console.log('📊 Step 1: OPTIMIZED lead discovery (MySQL replica → user_call_scores for NEW users only)...');
+    const discoveryService = new LeadDiscoveryOptimizedService();
+    const discoveryReport = await discoveryService.runOptimizedDiscovery();
     
-    // Step 2: Queue Generation (only if we have time)
-    const timeUsed = Date.now() - startTime;
-    if (timeUsed < 25000) { // Leave 5 seconds for queue generation
-      console.log('🎯 Step 2: Queue generation (user_call_scores → call_queue)...');
-      const queueService = new QueueGenerationService();
-      const queueResults = await queueService.generateAllQueues();
-      
-      const duration = Date.now() - startTime;
-      
-      // Log success with both steps
-      await logCronExecution('queue-discovery', 'success', duration, {
-        leadScoring: scoringResult,
-        queueGeneration: queueResults,
-        timeoutProtection: 'enabled',
-        architecture: 'corrected'
-      });
-      
-      return NextResponse.json({
-        success: true,
-        message: 'TIMEOUT-FIXED: Lead scoring and queue generation completed',
-        duration: `${duration}ms`,
-        leadScoring: scoringResult,
-        queueGeneration: queueResults,
-        timeoutProtection: true
-      });
-      
-    } else {
-      // Only lead scoring completed due to timeout
-      const duration = Date.now() - startTime;
-      
-      await logCronExecution('queue-discovery', 'success', duration, {
-        leadScoring: scoringResult,
-        queueGeneration: 'skipped_due_to_timeout',
-        timeoutProtection: 'enabled'
-      });
-      
-      return NextResponse.json({
-        success: true,
-        message: 'TIMEOUT-FIXED: Lead scoring completed, queue generation skipped',
-        duration: `${duration}ms`,
-        leadScoring: scoringResult,
-        queueGeneration: { message: 'Skipped due to timeout protection' },
-        timeoutProtection: true
-      });
-    }
-
+    console.log(`✅ Discovery complete: ${discoveryReport.totalNewUsersCreated} NEW users processed, ${discoveryReport.totalAlreadyScored} existing users skipped`);
+    
+    // Step 2: Queue Generation (user_call_scores → call_queue)
+    console.log('🎯 Step 2: Queue generation (user_call_scores → call_queue)...');
+    const queueService = new QueueGenerationService();
+    const queueResults = await queueService.generateAllQueues();
+    
+    const duration = Date.now() - startTime;
+    
+    // Log success
+    await logCronExecution('optimized-lead-discovery', 'success', duration, {
+      discoveryResults: {
+        totalEligibleInMysql: discoveryReport.totalEligibleInMysql,
+        totalAlreadyScored: discoveryReport.totalAlreadyScored,
+        totalNewUsersFound: discoveryReport.totalNewUsersFound,
+        totalNewUsersCreated: discoveryReport.totalNewUsersCreated,
+        performanceGain: discoveryReport.performanceGain
+      },
+      queueResults: queueResults.map(r => ({
+        queueType: r.queueType,
+        totalEligible: r.totalEligible,
+        queuePopulated: r.queuePopulated
+      })),
+      summary: discoveryReport.summary,
+      duration: `${duration}ms`
+    });
+    
+    console.log(`🎉 [CRON] OPTIMIZED Lead Discovery completed successfully in ${duration}ms`);
+    console.log(`📊 Performance gain: ${discoveryReport.performanceGain}`);
+    
+    return NextResponse.json({
+      success: true,
+      duration,
+      discoveryReport,
+      queueResults,
+      summary: `OPTIMIZED Discovery: ${discoveryReport.totalNewUsersCreated} NEW users processed efficiently`
+    });
+    
   } catch (error: any) {
     const duration = Date.now() - startTime;
     
-    console.error('❌ [CRON] Failed:', error);
+    console.error('❌ [CRON] OPTIMIZED Lead Discovery failed:', error);
     
-    await logCronExecution('queue-discovery', 'failed', duration, {}, error.message);
+    // Log failure
+    await logCronExecution('optimized-lead-discovery', 'failed', duration, {
+      error: error.message
+    }, error.toString());
     
     return NextResponse.json({
       success: false,
       error: error.message,
-      duration: `${duration}ms`,
-      timeoutProtection: true
+      duration
     }, { status: 500 });
   }
 }
