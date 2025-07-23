@@ -3,12 +3,6 @@ import { QueueDiscoveryService } from '@/modules/queue/services/queue-discovery.
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify this is a legitimate cron request
-    const authHeader = request.headers.get('Authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     console.log('🔄 Starting hourly lead discovery cron job...');
     
     const discoveryService = new QueueDiscoveryService();
@@ -36,4 +30,4 @@ export async function GET(request: NextRequest) {
 // For manual testing
 export async function POST(request: NextRequest) {
   return GET(request);
-} 
+}

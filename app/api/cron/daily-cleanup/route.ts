@@ -5,12 +5,6 @@ const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify this is a legitimate cron request
-    const authHeader = request.headers.get('Authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     console.log('🧹 Starting daily cleanup...');
     
     const startTime = Date.now();
