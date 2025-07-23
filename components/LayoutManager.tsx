@@ -16,6 +16,28 @@ export function LayoutManager({ children }: LayoutManagerProps) {
   // Get Twilio context
   const twilioContext = useContext(GlobalTwilioContext);
 
+  // Async function to load caller name via API
+  const loadCallerNameAsync = async (callSid: string): Promise<string | null> => {
+    try {
+      const response = await fetch('/api/simple-call-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callSid })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.session?.userClaimsContext) {
+          const context = JSON.parse(result.session.userClaimsContext);
+          return context.callerName || null;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load caller name:', error);
+    }
+    return null;
+  };
+
   // Derive call state from GlobalTwilioProvider
   useEffect(() => {
     if (!twilioContext) return;
@@ -24,15 +46,34 @@ export function LayoutManager({ children }: LayoutManagerProps) {
     if (twilioContext.incomingCall) {
       console.log('🔍 [LayoutManager] Raw incoming call data:', twilioContext.incomingCall);
       setCallState('ringing');
+      
+      // Use the callerName from TwiML parameters if available, otherwise do quick phone lookup
+      let displayName = twilioContext.incomingCall.callerName;
+      
+      if (!displayName) {
+        // Quick phone number to name mapping for known callers
+        const phoneToNameMap: Record<string, string> = {
+          '+447738585850': 'James Campbell',
+          // Add more known callers as needed
+        };
+        displayName = phoneToNameMap[twilioContext.incomingCall.from] || 'Unknown Caller';
+        
+        // If still unknown, try to load name via API call
+        if (displayName === 'Unknown Caller' && twilioContext.incomingCall.callSessionId) {
+          // Note: Could implement async caller name loading here in the future
+          console.log('🔍 Could load caller name for unknown caller:', twilioContext.incomingCall.from);
+        }
+      }
+                         
       setCallData({
-        callerName: twilioContext.incomingCall.callerName || 'Unknown Caller',
+        callerName: displayName,
         callerPhone: twilioContext.incomingCall.from,
         userId: twilioContext.incomingCall.userId,
         callSessionId: twilioContext.incomingCall.callSessionId,
         callSid: twilioContext.incomingCall.callSid
       });
       console.log('🔍 [LayoutManager] Call data set for sidebar:', {
-        callerName: twilioContext.incomingCall.callerName || 'Unknown Caller',
+        callerName: displayName,
         callerPhone: twilioContext.incomingCall.from,
         userId: twilioContext.incomingCall.userId,
         callSessionId: twilioContext.incomingCall.callSessionId,
