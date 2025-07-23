@@ -69,7 +69,7 @@ export function LayoutManager({ children }: LayoutManagerProps) {
             });
         }
       }
-                         
+                          
       setCallData({
         callerName: displayName,
         callerPhone: twilioContext.incomingCall.from,
@@ -84,22 +84,28 @@ export function LayoutManager({ children }: LayoutManagerProps) {
         callSessionId: twilioContext.incomingCall.callSessionId,
         callSid: twilioContext.incomingCall.callSid
       });
-    } else if (twilioContext.isInCall && twilioContext.currentCallSid) {
-      setCallState('connected');
-      // Keep existing callData but add current call info
+    } else if (twilioContext.isInCall) {
+      // Call is connected
+      if (callState !== 'connected') {
+        setCallState('connected');
+      }
+      // Update call data with current call information
       setCallData((prev: any) => ({
         ...prev,
         callSid: twilioContext.currentCallSid,
         callDuration: callDuration
       }));
     } else {
-      // Only set to idle if we're not in post-call mode
-      if (callState !== 'ended') {
-        setCallState('idle');
-        setCallData(null);
+      // Call has ended - transition to 'ended' state for disposition
+      if (callState === 'connected' || callState === 'ringing') {
+        console.log('🔍 [LayoutManager] Call ended, transitioning to disposition state');
+        setCallState('ended');
+        // Keep callData for disposition form
       }
+      // Only set to idle if we're already in 'ended' state and disposition is complete
+      // This will be handled by the disposition save callback
     }
-  }, [twilioContext?.incomingCall, twilioContext?.isInCall, twilioContext?.currentCallSid, callDuration]);
+  }, [twilioContext?.incomingCall, twilioContext?.isInCall, twilioContext?.currentCallSid, callDuration, callState]);
 
   // Call duration timer
   useEffect(() => {
@@ -178,7 +184,19 @@ export function LayoutManager({ children }: LayoutManagerProps) {
     console.log('⏸️ Toggle hold (to be implemented)');
   };
 
-  const handleCloseCallSidebar = () => {
+  // Handle disposition completion and panel closure
+  const handleDispositionComplete = () => {
+    console.log('🔍 [LayoutManager] Disposition complete, closing panel');
+    setCallState('idle');
+    setCallData(null);
+  };
+
+  // Handle manual panel closure (only allowed in certain states)
+  const handlePanelClose = () => {
+    if (callState === 'ended') {
+      // Don't allow closing during disposition - must complete disposition first
+      return;
+    }
     setCallState('idle');
     setCallData(null);
   };
@@ -194,7 +212,8 @@ export function LayoutManager({ children }: LayoutManagerProps) {
         onAcceptCall={handleAcceptCall}
         onDeclineCall={handleDeclineCall}
         onEndCall={handleEndCall}
-        onClose={handleCloseCallSidebar}
+        onClose={handlePanelClose}
+        onDispositionComplete={handleDispositionComplete}
         onToggleMute={handleToggleMute}
         onToggleHold={handleToggleHold}
         isMuted={false}

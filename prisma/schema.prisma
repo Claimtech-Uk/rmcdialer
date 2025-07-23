@@ -135,6 +135,11 @@ model CallSession {
   lastOutcomeAgentId    Int?        @map("last_outcome_agent_id") // Which agent recorded outcome
   lastOutcomeAt         DateTime?   @map("last_outcome_at") // When outcome was recorded
   
+  // Additional outcome fields (consolidated from CallOutcome - SAFE ADDITIVE MIGRATION)
+  nextCallDelayHours    Int?        @map("next_call_delay_hours") // How long to wait before next call
+  scoreAdjustment       Int?        @map("score_adjustment") // Points to add/subtract from user score
+  documentsRequested    Json?       @map("documents_requested") // Which requirements discussed
+  
   // Quick action flags
   magicLinkSent         Boolean     @default(false) @map("magic_link_sent")
   smsSent               Boolean     @default(false) @map("sms_sent")

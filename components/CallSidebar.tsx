@@ -24,6 +24,7 @@ interface CallSidebarProps {
   isMuted?: boolean;
   isOnHold?: boolean;
   onClose?: () => void;
+  onDispositionComplete?: () => void;
 }
 
 export function CallSidebar({
@@ -37,6 +38,7 @@ export function CallSidebar({
   isMuted = false,
   isOnHold = false,
   onClose,
+  onDispositionComplete,
 }: CallSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -49,6 +51,15 @@ export function CallSidebar({
 
   // Don't render if no active call
   if (callState === 'idle') return null;
+
+  // Handle close with disposition protection
+  const handleClose = () => {
+    if (callState === 'ended') {
+      // Don't allow closing during disposition
+      return;
+    }
+    onClose?.();
+  };
 
   const sidebarWidth = () => {
     if (callState === 'ringing') return 'w-80'; // 320px - compact for incoming
@@ -81,7 +92,7 @@ export function CallSidebar({
           <Button
             variant="ghost"
             size="sm"
-            onClick={onClose}
+            onClick={handleClose}
             className="h-8 w-8 p-0"
           >
             <X className="w-4 h-4" />
@@ -112,7 +123,8 @@ export function CallSidebar({
           {callState === 'ended' && (
             <PostCallContent
               callData={callData}
-              onClose={onClose}
+              onClose={handleClose}
+              onDispositionComplete={onDispositionComplete}
             />
           )}
         </div>
@@ -123,7 +135,7 @@ export function CallSidebar({
         {/* Backdrop */}
         <div 
           className="absolute inset-0 bg-black/50 transition-opacity duration-300 opacity-100"
-          onClick={onClose}
+          onClick={handleClose}
         />
         
         {/* Bottom Sheet Container */}
@@ -154,7 +166,7 @@ export function CallSidebar({
             <Button
               variant="ghost"
               size="sm"
-              onClick={onClose}
+              onClick={handleClose}
               className="h-8 w-8 p-0"
             >
               <X className="w-4 h-4" />
@@ -187,7 +199,8 @@ export function CallSidebar({
             {callState === 'ended' && (
               <PostCallContent
                 callData={callData}
-                onClose={onClose}
+                onClose={handleClose}
+                onDispositionComplete={onDispositionComplete}
                 isMobile={true}
               />
             )}
@@ -580,12 +593,12 @@ function ConnectedCallContent({
 
       {/* Quick Actions */}
       <Card className="p-4">
-        <h4 className="font-medium text-gray-900 mb-3">Quick Actions</h4>
+        <h4 className="font-medium text-gray-900 mb-4">Quick Actions</h4>
         <div className="space-y-3">
           <Button 
             variant="outline" 
             size="default"
-            className="w-full justify-start px-4 py-3 text-left hover:bg-blue-50 hover:border-blue-300 transition-colors"
+            className="w-full h-auto min-h-[60px] justify-start px-4 py-3 text-left hover:bg-blue-50 hover:border-blue-300 transition-colors border border-gray-200"
             onClick={() => {
               // TODO: Implement schedule callback functionality
               if (userDetails?.userId) {
@@ -594,17 +607,17 @@ function ConnectedCallContent({
             }}
             disabled={!userDetails?.userId}
           >
-            <span className="mr-3 text-lg">📅</span>
-            <div className="flex flex-col items-start">
-              <span className="font-medium">Schedule Callback</span>
-              <span className="text-xs text-gray-500">Set up follow-up call</span>
+            <span className="mr-3 text-lg flex-shrink-0">📅</span>
+            <div className="flex flex-col items-start text-left w-full">
+              <span className="font-medium text-sm">Schedule Callback</span>
+              <span className="text-xs text-gray-500 mt-1">Set up follow-up call</span>
             </div>
           </Button>
           
           <Button 
             variant="outline" 
             size="default"
-            className="w-full justify-start px-4 py-3 text-left hover:bg-green-50 hover:border-green-300 transition-colors"
+            className="w-full h-auto min-h-[60px] justify-start px-4 py-3 text-left hover:bg-green-50 hover:border-green-300 transition-colors border border-gray-200"
             onClick={() => {
               // TODO: Implement SMS functionality
               if (userDetails?.userId) {
@@ -613,17 +626,17 @@ function ConnectedCallContent({
             }}
             disabled={!userDetails?.userId}
           >
-            <span className="mr-3 text-lg">💬</span>
-            <div className="flex flex-col items-start">
-              <span className="font-medium">Send SMS</span>
-              <span className="text-xs text-gray-500">Send text message</span>
+            <span className="mr-3 text-lg flex-shrink-0">💬</span>
+            <div className="flex flex-col items-start text-left w-full">
+              <span className="font-medium text-sm">Send SMS</span>
+              <span className="text-xs text-gray-500 mt-1">Send text message</span>
             </div>
           </Button>
           
           <Button 
             variant="outline" 
             size="default"
-            className="w-full justify-start px-4 py-3 text-left hover:bg-purple-50 hover:border-purple-300 transition-colors"
+            className="w-full h-auto min-h-[60px] justify-start px-4 py-3 text-left hover:bg-purple-50 hover:border-purple-300 transition-colors border border-gray-200"
             onClick={() => {
               if (userDetails?.userId) {
                 window.open(`/users/${userDetails.userId}`, '_blank');
@@ -631,10 +644,10 @@ function ConnectedCallContent({
             }}
             disabled={!userDetails?.userId}
           >
-            <span className="mr-3 text-lg">👤</span>
-            <div className="flex flex-col items-start">
-              <span className="font-medium">View Full Profile</span>
-              <span className="text-xs text-gray-500">Complete user details</span>
+            <span className="mr-3 text-lg flex-shrink-0">👤</span>
+            <div className="flex flex-col items-start text-left w-full">
+              <span className="font-medium text-sm">View Full Profile</span>
+              <span className="text-xs text-gray-500 mt-1">Complete user details</span>
             </div>
           </Button>
           
@@ -642,7 +655,7 @@ function ConnectedCallContent({
             <Button 
               variant="outline" 
               size="default"
-              className="w-full justify-start px-4 py-3 text-left hover:bg-orange-50 hover:border-orange-300 transition-colors"
+              className="w-full h-auto min-h-[60px] justify-start px-4 py-3 text-left hover:bg-orange-50 hover:border-orange-300 transition-colors border border-gray-200"
               onClick={() => {
                 if (userDetails?.userId) {
                   window.open(`/claims?userId=${userDetails.userId}`, '_blank');
@@ -650,10 +663,10 @@ function ConnectedCallContent({
               }}
               disabled={!userDetails?.userId}
             >
-              <span className="mr-3 text-lg">📋</span>
-              <div className="flex flex-col items-start">
-                <span className="font-medium">View Claims ({userContext.claims.length})</span>
-                <span className="text-xs text-gray-500">Active claims & documents</span>
+              <span className="mr-3 text-lg flex-shrink-0">📋</span>
+              <div className="flex flex-col items-start text-left w-full">
+                <span className="font-medium text-sm">View Claims ({userContext.claims.length})</span>
+                <span className="text-xs text-gray-500 mt-1">Active claims & documents</span>
               </div>
             </Button>
           )}
@@ -662,7 +675,7 @@ function ConnectedCallContent({
             <Button 
               variant="outline" 
               size="default"
-              className="w-full justify-start px-4 py-3 text-left hover:bg-red-50 hover:border-red-300 transition-colors"
+              className="w-full h-auto min-h-[60px] justify-start px-4 py-3 text-left hover:bg-red-50 hover:border-red-300 transition-colors border border-gray-200"
               onClick={() => {
                 if (userDetails?.userId) {
                   window.open(`/queue/requirements?userId=${userDetails.userId}`, '_blank');
@@ -670,10 +683,10 @@ function ConnectedCallContent({
               }}
               disabled={!userDetails?.userId}
             >
-              <span className="mr-3 text-lg">⚠️</span>
-              <div className="flex flex-col items-start">
-                <span className="font-medium">Review Requirements</span>
-                <span className="text-xs text-gray-500">
+              <span className="mr-3 text-lg flex-shrink-0">⚠️</span>
+              <div className="flex flex-col items-start text-left w-full">
+                <span className="font-medium text-sm">Review Requirements</span>
+                <span className="text-xs text-gray-500 mt-1">
                   {userContext.requirements.filter((req: any) => req.status !== 'completed').length} outstanding items
                 </span>
               </div>
@@ -809,10 +822,12 @@ function RecentSMSSection({ userDetails }: { userDetails: any }) {
 function PostCallContent({ 
   callData,
   onClose,
+  onDispositionComplete,
   isMobile = false
 }: {
   callData?: any;
   onClose?: () => void;
+  onDispositionComplete?: () => void;
   isMobile?: boolean;
 }) {
   const [disposition, setDisposition] = useState('');
@@ -863,6 +878,7 @@ function PostCallContent({
       
       alert('Call outcome saved successfully!');
       onClose?.();
+      onDispositionComplete?.(); // Call the prop when disposition is saved
     } catch (error) {
       console.error('❌ Failed to save call outcome:', error);
       alert('Failed to save call outcome. Please try again.');

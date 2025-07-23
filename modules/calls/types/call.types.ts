@@ -232,7 +232,7 @@ export interface CallHistoryEntry {
   smsSent?: boolean;
   callbackScheduled?: boolean; // Added to match tRPC response
   followUpRequired?: boolean; // Added to match tRPC response
-  nextCallDelay?: number | null; // Fixed: allow null values
+  nextCallDelay?: number | null | undefined; // Fixed: allow null and undefined values
   documentsRequested?: string[];
   twilioCallSid?: string;
   recordingUrl?: string;
