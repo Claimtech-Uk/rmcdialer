@@ -718,12 +718,12 @@ export class CallService {
   private getScoreAdjustment(outcomeType: string): number {
     const adjustmentMap: Record<string, number> = {
       'contacted': -10,      // Lower score = higher priority for follow-up
-      'no_answer': 5,
-      'busy': 2,
-      'wrong_number': 50,    // Much lower priority
-      'not_interested': 100, // Lowest priority
-      'callback_requested': -20, // High priority
-      'left_voicemail': 10,
+      'no_answer': 5,        // Slight penalty
+      'callback_requested': -5, // Medium priority for follow-up
+      'not_interested': 20,  // Large penalty - lower priority
+      'wrong_number': 15,    // Penalty but not as severe
+      'busy': 3,            // Minor penalty
+      'left_voicemail': 0,  // Neutral
       'failed': 0
     };
     return adjustmentMap[outcomeType] || 0;

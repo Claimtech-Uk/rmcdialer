@@ -744,6 +744,17 @@ export const callsRouter = createTRPCRouter({
                 firstName: true,
                 lastName: true
               }
+            },
+            // **FALLBACK: Include CallOutcome for missing consolidated fields**
+            callOutcomes: {
+              select: {
+                nextCallDelayHours: true,
+                scoreAdjustment: true,
+                documentsRequested: true,
+                createdAt: true
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 1
             }
           },
           orderBy: { startedAt: 'desc' },
@@ -772,8 +783,9 @@ export const callsRouter = createTRPCRouter({
         // Format for table display
         const formattedCalls = callSessions.map((session: any) => {
           const user = userMap.get(Number(session.userId));
+          const latestOutcome = session.callOutcomes[0]; // Fallback outcome data
           
-          // Use consolidated CallSession outcome data instead of separate CallOutcome
+          // Use consolidated CallSession outcome data with CallOutcome fallback
           const outcomeType = session.lastOutcomeType;
           const outcomeNotes = session.lastOutcomeNotes;
           
@@ -817,8 +829,8 @@ export const callsRouter = createTRPCRouter({
             smsSent: session.smsSent || false,
             callbackScheduled: session.callbackScheduled || false, // Now using CallSession field
             followUpRequired: session.followUpRequired || false,
-            nextCallDelay: null, // Could add this field to CallSession if needed
-            documentsRequested: [],
+            nextCallDelay: latestOutcome?.nextCallDelayHours || null, // Fallback to CallOutcome
+            documentsRequested: latestOutcome?.documentsRequested ? JSON.parse(latestOutcome.documentsRequested) : [],
             twilioCallSid: session.twilioCallSid,
             recordingUrl: session.recordingUrl,
             recordingStatus: session.recordingStatus,
