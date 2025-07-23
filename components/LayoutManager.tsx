@@ -16,7 +16,7 @@ export function LayoutManager({ children }: LayoutManagerProps) {
   // Get Twilio context
   const twilioContext = useContext(GlobalTwilioContext);
 
-  // Async function to load caller name via API
+  // Async function to load caller name via API lookup
   const loadCallerNameAsync = async (callSid: string): Promise<string | null> => {
     try {
       const response = await fetch('/api/simple-call-lookup', {
@@ -33,7 +33,7 @@ export function LayoutManager({ children }: LayoutManagerProps) {
         }
       }
     } catch (error) {
-      console.warn('Failed to load caller name:', error);
+      console.warn('API caller name lookup failed:', error);
     }
     return null;
   };
@@ -47,21 +47,26 @@ export function LayoutManager({ children }: LayoutManagerProps) {
       console.log('🔍 [LayoutManager] Raw incoming call data:', twilioContext.incomingCall);
       setCallState('ringing');
       
-      // Use the callerName from TwiML parameters if available, otherwise do quick phone lookup
+      // Use the callerName from TwiML parameters if available, otherwise show generic message
       let displayName = twilioContext.incomingCall.callerName;
       
       if (!displayName) {
-        // Quick phone number to name mapping for known callers
-        const phoneToNameMap: Record<string, string> = {
-          '+447738585850': 'James Campbell',
-          // Add more known callers as needed
-        };
-        displayName = phoneToNameMap[twilioContext.incomingCall.from] || 'Unknown Caller';
+        // Don't hardcode personal details - show generic message until TwiML provides the name
+        displayName = 'Incoming Call';
+        console.log('🔍 No caller name from TwiML, showing generic message for:', twilioContext.incomingCall.from);
         
-        // If still unknown, try to load name via API call
-        if (displayName === 'Unknown Caller' && twilioContext.incomingCall.callSessionId) {
-          // Note: Could implement async caller name loading here in the future
-          console.log('🔍 Could load caller name for unknown caller:', twilioContext.incomingCall.from);
+        // Try to load caller name asynchronously via API lookup
+        if (twilioContext.incomingCall.callSid) {
+          loadCallerNameAsync(twilioContext.incomingCall.callSid)
+            .then((name: string | null) => {
+              if (name) {
+                console.log('🔍 Async caller name loaded:', name);
+                setCallData((prev: any) => prev ? { ...prev, callerName: name } : prev);
+              }
+            })
+            .catch((error: any) => {
+              console.warn('Failed to load caller name asynchronously:', error);
+            });
         }
       }
                          
