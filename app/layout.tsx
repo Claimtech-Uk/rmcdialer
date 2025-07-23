@@ -39,12 +39,8 @@ export default function RootLayout({
               <LayoutManager>
                 {children}
               </LayoutManager>
-              <GlobalErrorBoundary>
-                <GlobalIncomingCallHandler />
-              </GlobalErrorBoundary>
-              <GlobalErrorBoundary>
-                <FloatingCallStatus />
-              </GlobalErrorBoundary>
+{/* GlobalIncomingCallHandler disabled - using new CallSidebar in LayoutManager */}
+{/* FloatingCallStatus disabled - using new CallSidebar in LayoutManager */}
               <GlobalErrorBoundary>
                 <AudioUnlockHelper />
               </GlobalErrorBoundary>
