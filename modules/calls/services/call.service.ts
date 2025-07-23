@@ -284,109 +284,78 @@ export class CallService {
    * Record call outcome and disposition
    */
   async recordCallOutcome(
-    sessionId: string, 
-    agentId: number, 
-    outcome: CallOutcomeOptions
-  ): Promise<CallOutcome> {
-    return await this.deps.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // Get the call session
-      const callSession = await tx.callSession.findUnique({
-        where: { id: sessionId },
-        include: { callQueue: true }
-      });
+    sessionId: string,
+    agentId: number,
+    outcome: {
+      outcomeType: string;
+      outcomeNotes?: string;
+      magicLinkSent?: boolean;
+      smsSent?: boolean;
+      nextCallDelayHours?: number;
+      documentsRequested?: string[];
+      callbackDateTime?: Date;
+      callbackReason?: string;
+    }
+  ): Promise<void> {
+    try {
+      console.log(`📋 Recording call outcome for session ${sessionId}:`, outcome);
 
-      if (!callSession) {
-        throw new Error('Call session not found');
-      }
-
-      if (callSession.agentId !== agentId) {
-        throw new Error('Agent not authorized for this call session');
-      }
-
-      // Create call outcome record
-      const callOutcome = await tx.callOutcome.create({
-        data: {
-          callSessionId: sessionId,
-          outcomeType: outcome.outcomeType,
-          outcomeNotes: outcome.outcomeNotes || '',
-          nextCallDelayHours: outcome.nextCallDelayHours || this.getDefaultDelayHours(outcome.outcomeType),
-          scoreAdjustment: outcome.scoreAdjustment || this.getScoreAdjustment(outcome.outcomeType),
-          magicLinkSent: outcome.magicLinkSent || false,
-          smsSent: outcome.smsSent || false,
-          documentsRequested: outcome.documentsRequested ? JSON.stringify(outcome.documentsRequested) : undefined,
-          recordedByAgentId: agentId
-        }
-      });
-
-      // Update call session with denormalized outcome data for performance
-      await tx.callSession.update({
-        where: { id: sessionId },
-        data: {
-          lastOutcomeType: outcome.outcomeType,
-          lastOutcomeNotes: outcome.outcomeNotes || null,
-          lastOutcomeAgentId: agentId,
-          lastOutcomeAt: new Date(),
-          magicLinkSent: outcome.magicLinkSent || false,
-          smsSent: outcome.smsSent || false,
-          followUpRequired: ['callback_requested', 'not_interested', 'wrong_number'].includes(outcome.outcomeType)
-        }
-      });
-
-      // Update user call score
-      await this.updateUserScoreAfterCall(
-        tx, 
-        Number(callSession.userId), 
-        outcome.outcomeType, 
-        outcome.scoreAdjustment
-      );
-
-      // Create callback if requested
-      if (outcome.outcomeType === 'callback_requested' && outcome.callbackDateTime) {
-        await tx.callback.create({
+      await this.deps.prisma.$transaction(async (tx) => {
+        // 1. Create CallOutcome record (preserve existing pattern)
+        const callOutcome = await tx.callOutcome.create({
           data: {
-            userId: callSession.userId,
-            scheduledFor: outcome.callbackDateTime,
-            callbackReason: outcome.callbackReason || 'User requested callback',
-            preferredAgentId: agentId,
-            originalCallSessionId: sessionId,
-            status: 'pending'
-          }
+            callSessionId: sessionId,
+            outcomeType: outcome.outcomeType,
+            outcomeNotes: outcome.outcomeNotes,
+            nextCallDelayHours: outcome.nextCallDelayHours,
+            magicLinkSent: outcome.magicLinkSent || false,
+            smsSent: outcome.smsSent || false,
+            documentsRequested: outcome.documentsRequested || [],
+            recordedByAgentId: agentId,
+          },
         });
-      }
 
-      // Update agent session back to available if call ended
-      if (['completed', 'failed', 'no_answer'].includes(callSession.status)) {
-        await tx.agentSession.updateMany({
-          where: { agentId, currentCallSessionId: sessionId },
-          data: { 
-            status: 'available',
-            currentCallSessionId: null,
-            callsCompletedToday: { increment: 1 },
-            totalTalkTimeSeconds: { 
-              increment: callSession.talkTimeSeconds || 0 
+        // 2. **FIX: Update denormalized CallSession fields** 
+        await tx.callSession.update({
+          where: { id: sessionId },
+          data: {
+            // Update outcome tracking fields
+            lastOutcomeType: outcome.outcomeType,
+            lastOutcomeNotes: outcome.outcomeNotes,
+            lastOutcomeAgentId: agentId,
+            lastOutcomeAt: new Date(),
+            
+            // Update action flags
+            magicLinkSent: outcome.magicLinkSent || false,
+            smsSent: outcome.smsSent || false,
+            callbackScheduled: outcome.outcomeType === 'callback_requested',
+            followUpRequired: outcome.nextCallDelayHours !== null && outcome.nextCallDelayHours !== undefined,
+            
+            updatedAt: new Date()
+          },
+        });
+
+        // 3. Create callback if requested
+        if (outcome.outcomeType === 'callback_requested' && outcome.callbackDateTime) {
+          await tx.callback.create({
+            data: {
+              userId: await this.getSessionUserId(sessionId, tx),
+              scheduledFor: outcome.callbackDateTime,
+              callbackReason: outcome.callbackReason || 'Agent scheduled callback',
+              originalCallSessionId: sessionId,
+              status: 'pending',
             },
-            lastActivity: new Date()
-          }
-        });
-      }
+          });
+          console.log(`📞 Created callback for ${outcome.callbackDateTime}`);
+        }
 
-      // Update queue entry to completed
-      if (callSession.callQueueId) {
-        await tx.callQueue.update({
-          where: { id: callSession.callQueueId },
-          data: { status: 'completed' }
-        });
-      }
-
-      this.deps.logger.info('Call outcome recorded', {
-        sessionId,
-        agentId,
-        outcomeType: outcome.outcomeType,
-        callbackRequested: outcome.outcomeType === 'callback_requested'
+        console.log(`✅ Call outcome recorded successfully for session ${sessionId}`);
       });
 
-      return this.mapToCallOutcome(callOutcome);
-    });
+    } catch (error: any) {
+      console.error(`❌ Error recording call outcome:`, error);
+      throw new Error(`Failed to record call outcome: ${error.message}`);
+    }
   }
 
   /**
@@ -794,6 +763,16 @@ export class CallService {
     const now = new Date();
     const delayHours = this.getDefaultDelayHours(outcomeType);
     return new Date(now.getTime() + delayHours * 60 * 60 * 1000);
+  }
+
+  // Helper method to get userId from session
+  private async getSessionUserId(sessionId: string, tx: any): Promise<bigint> {
+    const session = await tx.callSession.findUnique({
+      where: { id: sessionId },
+      select: { userId: true },
+    });
+    if (!session) throw new Error(`Call session ${sessionId} not found`);
+    return session.userId;
   }
 
   /**

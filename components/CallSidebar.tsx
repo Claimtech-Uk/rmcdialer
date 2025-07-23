@@ -458,6 +458,87 @@ function ConnectedCallContent({
         </Card>
       )}
 
+      {/* Signing Status & Requirements */}
+      {userContext && (
+        <Card className="p-4">
+          <h4 className="font-medium text-gray-900 mb-3">Status & Requirements</h4>
+          
+          {/* Signing Status */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">Signature Status:</span>
+              <span className={`text-xs px-2 py-1 rounded font-medium ${
+                userContext.hasSignature || userContext.claims?.some((c: any) => c.signature_completed) 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-orange-100 text-orange-800'
+              }`}>
+                {userContext.hasSignature || userContext.claims?.some((c: any) => c.signature_completed) 
+                  ? '✅ Signed' 
+                  : '⏳ Pending'}
+              </span>
+            </div>
+          </div>
+
+          {/* Outstanding Requirements */}
+          {userContext.requirements && userContext.requirements.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">Outstanding Requirements:</span>
+                <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800 font-medium">
+                  {userContext.requirements.filter((req: any) => req.status !== 'completed').length} pending
+                </span>
+              </div>
+              <div className="space-y-2 max-h-32 overflow-y-auto">
+                {userContext.requirements
+                  .filter((req: any) => req.status !== 'completed')
+                  .slice(0, 5)
+                  .map((requirement: any, index: number) => (
+                    <div key={index} className="p-2 bg-orange-50 border border-orange-200 rounded text-sm">
+                      <div className="flex justify-between items-start">
+                        <span className="font-medium text-orange-900">
+                          {requirement.type?.replace('_', ' ').toUpperCase() || 'Document Required'}
+                        </span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          requirement.status === 'pending' ? 'bg-orange-100 text-orange-800' :
+                          requirement.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {requirement.status?.replace('_', ' ') || 'pending'}
+                        </span>
+                      </div>
+                      {requirement.reason && (
+                        <div className="text-orange-700 text-xs mt-1">
+                          {requirement.reason}
+                        </div>
+                      )}
+                      <div className="text-orange-600 text-xs mt-1">
+                        Due: {requirement.created_at ? new Date(requirement.created_at).toLocaleDateString() : 'TBD'}
+                      </div>
+                    </div>
+                  ))}
+                {userContext.requirements.filter((req: any) => req.status !== 'completed').length > 5 && (
+                  <div className="text-xs text-gray-500 text-center py-1">
+                    +{userContext.requirements.filter((req: any) => req.status !== 'completed').length - 5} more requirements
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* No outstanding requirements */}
+          {(!userContext.requirements || userContext.requirements.filter((req: any) => req.status !== 'completed').length === 0) && (
+            <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
+              ✅ No outstanding requirements
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Recent SMS Messages */}
+      {userContext && (
+        <RecentSMSSection userDetails={userDetails} />
+      )}
+
       {/* Call History */}
       {userContext?.callHistory && userContext.callHistory.length > 0 && (
         <Card className="p-4">
@@ -528,6 +609,126 @@ function ConnectedCallContent({
         </div>
       </Card>
     </div>
+  );
+}
+
+// Recent SMS Section Component
+function RecentSMSSection({ userDetails }: { userDetails: any }) {
+  const [smsData, setSmsData] = useState<any[]>([]);
+  const [loadingSMS, setLoadingSMS] = useState(false);
+
+  // Load recent SMS messages for this user
+  useEffect(() => {
+    if (userDetails?.userId) {
+      loadRecentSMS();
+    }
+  }, [userDetails?.userId]);
+
+  const loadRecentSMS = async () => {
+    if (!userDetails?.userId) return;
+    
+    setLoadingSMS(true);
+    try {
+      // This would be a new API endpoint to get recent SMS for a user
+      const response = await fetch(`/api/users/${userDetails.userId}/sms/recent`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setSmsData(result.messages || []);
+      } else {
+        console.warn('⚠️ Failed to load SMS data:', response.status);
+        // Mock data for now until API is implemented
+        setSmsData([
+          {
+            id: '1',
+            body: 'Hello, we need to discuss your claim. Please call us back.',
+            direction: 'outbound',
+            created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            status: 'delivered'
+          },
+          {
+            id: '2', 
+            body: 'Yes I can talk tomorrow morning',
+            direction: 'inbound',
+            created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+            status: 'received'
+          },
+          {
+            id: '3',
+            body: 'We have sent you a magic link to access your documents.',
+            direction: 'outbound', 
+            created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+            status: 'delivered'
+          }
+        ]);
+      }
+    } catch (error) {
+      console.error('❌ Error loading SMS data:', error);
+      // Fallback to empty array
+      setSmsData([]);
+    } finally {
+      setLoadingSMS(false);
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <h4 className="font-medium text-gray-900 mb-3">Recent SMS Messages</h4>
+      {loadingSMS ? (
+        <div className="flex items-center space-x-2 text-sm text-gray-500">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+          <span>Loading messages...</span>
+        </div>
+      ) : smsData.length > 0 ? (
+        <div className="space-y-3 max-h-40 overflow-y-auto">
+          {smsData.slice(0, 4).map((sms: any, index: number) => (
+            <div key={sms.id || index} className={`p-3 rounded-lg text-sm ${
+              sms.direction === 'inbound' 
+                ? 'bg-blue-50 border-l-4 border-blue-400 ml-4' 
+                : 'bg-gray-50 border-l-4 border-gray-400 mr-4'
+            }`}>
+              <div className="flex justify-between items-start mb-1">
+                <span className={`text-xs font-medium ${
+                  sms.direction === 'inbound' ? 'text-blue-700' : 'text-gray-700'
+                }`}>
+                  {sms.direction === 'inbound' ? '📱 From User' : '📤 To User'}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {new Date(sms.created_at).toLocaleDateString()} {new Date(sms.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </span>
+              </div>
+              <div className={`${
+                sms.direction === 'inbound' ? 'text-blue-900' : 'text-gray-800'
+              }`}>
+                {sms.body}
+              </div>
+              <div className="flex justify-between items-center mt-2">
+                <span className={`text-xs px-2 py-0.5 rounded ${
+                  sms.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                  sms.status === 'received' ? 'bg-blue-100 text-blue-700' :
+                  sms.status === 'failed' ? 'bg-red-100 text-red-700' :
+                  'bg-gray-100 text-gray-700'
+                }`}>
+                  {sms.status}
+                </span>
+              </div>
+            </div>
+          ))}
+          {smsData.length > 4 && (
+            <div className="text-xs text-gray-500 text-center py-1">
+              +{smsData.length - 4} more messages
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded">
+          No recent SMS messages
+        </div>
+      )}
+    </Card>
   );
 }
 

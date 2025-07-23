@@ -184,25 +184,41 @@ export const callsRouter = createTRPCRouter({
       }
     }),
 
-  // Record call outcome and disposition
+  // Record call outcome
   recordOutcome: protectedProcedure
     .input(RecordOutcomeSchema)
     .mutation(async ({ input, ctx }) => {
       try {
-        const { sessionId, ...outcomeData } = input;
+        console.log(`📋 Recording outcome via tRPC:`, input);
         
-        // Validate session ID format
-        validateSessionId(sessionId, 'recordOutcome');
+        await callService.recordCallOutcome(
+          input.sessionId,
+          ctx.agent.id,
+          {
+            outcomeType: input.outcomeType,
+            outcomeNotes: input.outcomeNotes,
+            magicLinkSent: input.magicLinkSent,
+            smsSent: input.smsSent,
+            nextCallDelayHours: input.nextCallDelayHours,
+            documentsRequested: input.documentsRequested,
+            callbackDateTime: input.callbackDateTime,
+            callbackReason: input.callbackReason,
+          }
+        );
+
+        console.log(`✅ Call outcome recorded successfully via tRPC`);
         
-        const outcome = await callService.recordCallOutcome(sessionId, ctx.agent.id, outcomeData);
-        return outcome;
-      } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
+        // Return success status
+        return {
+          success: true,
+          message: 'Call outcome recorded successfully'
+        };
+        
+      } catch (error: any) {
+        console.error(`❌ tRPC recordOutcome error:`, error);
         throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Failed to record call outcome'
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Failed to record call outcome: ${error.message}`,
         });
       }
     }),
@@ -703,33 +719,36 @@ export const callsRouter = createTRPCRouter({
             durationSeconds: true,
             talkTimeSeconds: true,
             twilioCallSid: true,
+            
+            // Recording fields
             recordingUrl: true,
             recordingSid: true,
             recordingStatus: true,
             recordingDurationSeconds: true,
+            
+            // **CONSOLIDATED OUTCOME FIELDS**
+            lastOutcomeType: true,
+            lastOutcomeNotes: true,
+            lastOutcomeAgentId: true,
+            lastOutcomeAt: true,
+            
+            // Action flags
+            magicLinkSent: true,
+            smsSent: true,
+            callbackScheduled: true,
+            followUpRequired: true,
+            
+            // Relations
             agent: {
               select: {
                 firstName: true,
                 lastName: true
               }
-            },
-            callOutcomes: {
-              select: {
-                outcomeType: true,
-                outcomeNotes: true,
-                magicLinkSent: true,
-                smsSent: true,
-                nextCallDelayHours: true,
-                documentsRequested: true,
-                createdAt: true
-              },
-              orderBy: { createdAt: 'desc' },
-              take: 1
             }
           },
           orderBy: { startedAt: 'desc' },
-          skip: (filters.page - 1) * filters.limit,
-          take: filters.limit
+          take: filters.limit || 25,
+          skip: (filters.page - 1) * (filters.limit || 25)
         });
 
         // Get user details from replica DB for each call
@@ -753,10 +772,13 @@ export const callsRouter = createTRPCRouter({
         // Format for table display
         const formattedCalls = callSessions.map((session: any) => {
           const user = userMap.get(Number(session.userId));
-          const outcome = session.callOutcomes[0];
+          
+          // Use consolidated CallSession outcome data instead of separate CallOutcome
+          const outcomeType = session.lastOutcomeType;
+          const outcomeNotes = session.lastOutcomeNotes;
           
           // Smart outcome determination - if call has duration but no outcome, infer it was connected
-          let smartOutcome = outcome?.outcomeType;
+          let smartOutcome = outcomeType;
           if (!smartOutcome || smartOutcome === 'no_outcome') {
             if (session.durationSeconds && session.durationSeconds > 0) {
               // Call had duration, likely was answered
@@ -770,14 +792,13 @@ export const callsRouter = createTRPCRouter({
             }
           }
 
-          // Improved talk time calculation
+          // Calculate talk time more accurately
           let calculatedTalkTime = session.talkTimeSeconds;
           if (!calculatedTalkTime && session.durationSeconds && session.durationSeconds > 0) {
-            // If we have call duration but no talk time, use duration as talk time
-            // This happens when webhook provides duration but talk time calculation fails
+            // If no talk time but has duration, use duration as estimate
             calculatedTalkTime = session.durationSeconds;
           }
-          
+
           return {
             id: session.id,
             userId: Number(session.userId),
@@ -791,16 +812,18 @@ export const callsRouter = createTRPCRouter({
             durationSeconds: session.durationSeconds,
             talkTimeSeconds: calculatedTalkTime,
             outcome: smartOutcome,
-            outcomeNotes: outcome?.outcomeNotes,
-            magicLinkSent: outcome?.magicLinkSent || false,
-            smsSent: outcome?.smsSent || false,
-            nextCallDelay: outcome?.nextCallDelayHours,
-            documentsRequested: outcome?.documentsRequested ? JSON.parse(outcome.documentsRequested) : [],
+            outcomeNotes: outcomeNotes,
+            magicLinkSent: session.magicLinkSent || false,
+            smsSent: session.smsSent || false,
+            callbackScheduled: session.callbackScheduled || false, // Now using CallSession field
+            followUpRequired: session.followUpRequired || false,
+            nextCallDelay: null, // Could add this field to CallSession if needed
+            documentsRequested: [],
             twilioCallSid: session.twilioCallSid,
             recordingUrl: session.recordingUrl,
             recordingStatus: session.recordingStatus,
             recordingDurationSeconds: session.recordingDurationSeconds,
-            status: session.status
+            status: session.status,
           };
         });
 
