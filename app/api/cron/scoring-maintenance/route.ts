@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const queueUsersWithoutScores = await prisma.callQueue.findMany({
       where: {
         status: 'pending',
-        userCallScore: null
+        userCallScore: { is: null }
       },
       select: {
         userId: true,
