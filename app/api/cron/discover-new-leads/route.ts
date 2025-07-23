@@ -38,12 +38,10 @@ export async function GET(request: NextRequest) {
     
     console.log(`✅ [CRON] Queue Discovery completed: ${report.summary} (${duration}ms)`);
     
-    // Log success
+    // Log success - simplified without TypeScript issues
     await logCronExecution('queue-discovery', 'success', duration, {
       report,
-      summary: report.summary,
-      usersFound: report.usersFound || 0,
-      totalProcessed: report.totalProcessed || 0
+      summary: report.summary
     });
     
     return NextResponse.json({
