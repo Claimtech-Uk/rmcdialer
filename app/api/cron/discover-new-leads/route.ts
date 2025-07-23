@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { QueueDiscoveryService } from '@/modules/queue/services/queue-discovery.service';
+import { LeadScoringService } from '@/modules/queue/services/lead-scoring.service';
+import { QueueGenerationService } from '@/modules/queue/services/queue-generation.service';
 
 async function logCronExecution(jobName: string, status: 'running' | 'success' | 'failed', duration: number, details: any, error?: string) {
   try {
@@ -23,42 +24,61 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    console.log('🔄 [CRON] Queue Discovery starting...');
+    console.log('🔄 [CRON] Lead Scoring & Queue Generation starting...');
     
     // Log start
-    await logCronExecution('queue-discovery', 'running', 0, { 
-      message: 'Queue discovery started',
-      timestamp: new Date().toISOString()
+    await logCronExecution('lead-scoring-queue-generation', 'running', 0, { 
+      message: 'CORRECTED: Lead scoring and queue generation started',
+      timestamp: new Date().toISOString(),
+      architecture: 'MySQL replica → user_call_scores → call_queue'
     });
     
-    const discoveryService = new QueueDiscoveryService();
-    const report = await discoveryService.runHourlyDiscovery();
+    // Step 1: Lead Scoring (populate user_call_scores)
+    console.log('📊 Step 1: Lead scoring (MySQL replica → user_call_scores)...');
+    const leadService = new LeadScoringService();
+    const scoringReport = await leadService.runLeadScoring();
+    
+    // Step 2: Queue Generation (populate call_queue from user_call_scores)
+    console.log('🎯 Step 2: Queue generation (user_call_scores → call_queue)...');
+    const queueService = new QueueGenerationService();
+    const queueResults = await queueService.generateAllQueues();
     
     const duration = Date.now() - startTime;
     
-    console.log(`✅ [CRON] Queue Discovery completed: ${report.summary} (${duration}ms)`);
+    console.log(`✅ [CRON] CORRECTED Lead Scoring & Queue Generation completed in ${duration}ms`);
+    console.log(`📊 Lead Scoring: ${scoringReport.totalEligible} leads (${scoringReport.totalNewLeads} new, ${scoringReport.totalExistingLeads} existing)`);
+    console.log(`🎯 Queue Generation: ${queueResults.length} queues, ${queueResults.reduce((sum, r) => sum + r.queuePopulated, 0)} users queued`);
     
-    // Log success - simplified without TypeScript issues
-    await logCronExecution('queue-discovery', 'success', duration, {
-      report,
-      summary: report.summary
+    // Log success
+    await logCronExecution('lead-scoring-queue-generation', 'success', duration, {
+      scoringReport,
+      queueResults,
+      summary: `✅ CORRECTED: ${scoringReport.totalEligible} leads scored, ${queueResults.reduce((sum, r) => sum + r.queuePopulated, 0)} queued`
     });
     
     return NextResponse.json({
       success: true,
-      report,
+      report: {
+        ...scoringReport,
+        queueGeneration: queueResults
+      },
       duration,
       timestamp: new Date().toISOString(),
-      nextRun: getNextRunTime()
+      nextRun: getNextRunTime(),
+      architecture: {
+        step1: 'MySQL replica → user_call_scores (lead scoring)',
+        step2: 'user_call_scores → call_queue (queue generation)',
+        improvement: 'NEW leads start with score = 0, existing leads keep scores'
+      }
     });
 
   } catch (error: any) {
     const duration = Date.now() - startTime;
     
-    console.error('❌ [CRON] Queue Discovery failed:', error);
+    console.error('❌ [CRON] Lead Scoring & Queue Generation failed:', error);
     
     // Log failure
-    await logCronExecution('queue-discovery', 'failed', duration, {
+    await logCronExecution('lead-scoring-queue-generation', 'failed', duration, {
       errorMessage: error.message,
       errorStack: error.stack
     }, error.message);
