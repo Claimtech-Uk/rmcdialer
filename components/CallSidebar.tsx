@@ -302,7 +302,8 @@ function ConnectedCallContent({
     
     setLoadingUserDetails(true);
     try {
-      console.log('🔍 Loading user details for Call SID:', callData.callSid);
+      console.log('🔍 [CallSidebar] Full call data received:', callData);
+      console.log('🔍 [CallSidebar] Trying to lookup Call SID:', callData.callSid);
       
       const response = await fetch('/api/simple-call-lookup', {
         method: 'POST',

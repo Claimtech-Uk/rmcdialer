@@ -22,8 +22,16 @@ export function LayoutManager({ children }: LayoutManagerProps) {
 
     // Determine call state based on Twilio context
     if (twilioContext.incomingCall) {
+      console.log('🔍 [LayoutManager] Raw incoming call data:', twilioContext.incomingCall);
       setCallState('ringing');
       setCallData({
+        callerName: twilioContext.incomingCall.callerName || 'Unknown Caller',
+        callerPhone: twilioContext.incomingCall.from,
+        userId: twilioContext.incomingCall.userId,
+        callSessionId: twilioContext.incomingCall.callSessionId,
+        callSid: twilioContext.incomingCall.callSid
+      });
+      console.log('🔍 [LayoutManager] Call data set for sidebar:', {
         callerName: twilioContext.incomingCall.callerName || 'Unknown Caller',
         callerPhone: twilioContext.incomingCall.from,
         userId: twilioContext.incomingCall.userId,
