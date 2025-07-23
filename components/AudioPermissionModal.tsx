@@ -123,12 +123,15 @@ export function AudioPermissionModal({
       // Stop the stream immediately after getting permission
       stream.getTracks().forEach(track => track.stop());
       
+      // ALSO unlock AudioContext as part of permission grant
+      await unlockAudioContext();
+      
       setPermissionStatus({
         status: 'granted',
         hasAudio: true,
       });
       
-      console.log('✅ Microphone permission granted');
+      console.log('✅ Microphone permission granted and AudioContext unlocked');
       onPermissionGranted();
       
     } catch (error: any) {
@@ -147,6 +150,47 @@ export function AudioPermissionModal({
       onPermissionDenied();
     } finally {
       setIsRequesting(false);
+    }
+  };
+
+  // Function to unlock AudioContext
+  const unlockAudioContext = async () => {
+    try {
+      console.log('🎵 Unlocking AudioContext...');
+      
+      // Try to unlock all existing AudioContext instances
+      if ((window as any).__audioContextInstances) {
+        const promises = (window as any).__audioContextInstances.map((ctx: AudioContext) => {
+          if (ctx.state === 'suspended') {
+            console.log('🎵 Resuming suspended AudioContext');
+            return ctx.resume();
+          }
+          return Promise.resolve();
+        });
+        
+        await Promise.all(promises);
+      }
+      
+      // Create and immediately unlock a test AudioContext to trigger the gesture unlock
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        const testContext = new AudioContextClass();
+        
+        if (testContext.state === 'suspended') {
+          console.log('🎵 Test AudioContext suspended, unlocking...');
+          await testContext.resume();
+          console.log('✅ Test AudioContext unlocked successfully');
+        }
+        
+        // Clean up test context
+        testContext.close();
+      }
+      
+      console.log('✅ AudioContext unlock completed');
+      
+    } catch (error) {
+      console.warn('⚠️ AudioContext unlock failed (but microphone still works):', error);
+      // Don't fail the entire permission process for AudioContext issues
     }
   };
 
