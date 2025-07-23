@@ -151,6 +151,7 @@ model CallOutcome {
   callSessionId      String      @map("call_session_id") @db.Uuid
   outcomeType        String      @map("outcome_type")
   outcomeNotes       String?     @map("outcome_notes")
+  nextCallDelayHours Int?        @map("next_call_delay_hours")
   scoreAdjustment    Int?        @map("score_adjustment")
   magicLinkSent      Boolean     @default(false) @map("magic_link_sent")
   smsSent            Boolean     @default(false) @map("sms_sent")
