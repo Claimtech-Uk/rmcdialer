@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
-import { CallService } from '@/modules/calls';
-import { UserService } from '@/modules/users';
+import { NextRequest, NextResponse } from 'next/server';
+import { CallService } from '@/modules/calls/services/call.service';
+import { UserService } from '@/modules/users/services/user.service';
+import { PriorityScoringService } from '@/modules/scoring/services/priority-scoring.service';
 import { prisma } from '@/lib/db';
 
 export async function GET() {
@@ -55,7 +56,8 @@ export async function GET() {
     };
     
     try {
-      const callService = new CallService({ prisma, userService, logger });
+      const scoringService = new PriorityScoringService({ logger });
+      const callService = new CallService({ prisma, userService, scoringService, logger });
       console.log('✅ CallService instantiated successfully');
       
       // Test 4: Simulate call initiation (without actually making the call)

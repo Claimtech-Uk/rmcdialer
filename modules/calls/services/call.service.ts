@@ -20,6 +20,7 @@ import {
   InitiateCallResponse
 } from '../types/call.types';
 import { UserService } from '../../users/services/user.service';
+import { PriorityScoringService } from '../../scoring/services/priority-scoring.service';
 
 // Dependencies that will be injected
 interface CallServiceDependencies {
@@ -30,6 +31,7 @@ interface CallServiceDependencies {
     error: (message: string, error?: any) => void;
     warn: (message: string, meta?: any) => void;
   };
+  scoringService: PriorityScoringService;
 }
 
 export class CallService {
@@ -281,7 +283,7 @@ export class CallService {
   }
 
   /**
-   * Record call outcome and disposition
+   * Record call outcome and disposition with enhanced conversion tracking
    */
   async recordCallOutcome(
     sessionId: string,
@@ -301,6 +303,22 @@ export class CallService {
       console.log(`📋 Recording call outcome for session ${sessionId}:`, outcome);
 
       await this.deps.prisma.$transaction(async (tx) => {
+        // Get the call session details for conversion tracking
+        const callSession = await tx.callSession.findUnique({
+          where: { id: sessionId },
+          include: {
+            callQueue: {
+              include: {
+                userCallScore: true
+              }
+            }
+          }
+        });
+
+        if (!callSession) {
+          throw new Error(`Call session ${sessionId} not found`);
+        }
+
         // 1. Create CallOutcome record (preserve existing pattern)
         const callOutcome = await tx.callOutcome.create({
           data: {
@@ -315,22 +333,18 @@ export class CallService {
           },
         });
 
-        // 2. **FIX: Update denormalized CallSession fields** 
+        // 2. Update denormalized CallSession fields
         await tx.callSession.update({
           where: { id: sessionId },
           data: {
-            // Update outcome tracking fields
             lastOutcomeType: outcome.outcomeType,
             lastOutcomeNotes: outcome.outcomeNotes,
             lastOutcomeAgentId: agentId,
             lastOutcomeAt: new Date(),
-            
-            // Update action flags
             magicLinkSent: outcome.magicLinkSent || false,
             smsSent: outcome.smsSent || false,
             callbackScheduled: outcome.outcomeType === 'callback_requested',
             followUpRequired: outcome.nextCallDelayHours !== null && outcome.nextCallDelayHours !== undefined,
-            
             updatedAt: new Date()
           },
         });
@@ -339,7 +353,7 @@ export class CallService {
         if (outcome.outcomeType === 'callback_requested' && outcome.callbackDateTime) {
           await tx.callback.create({
             data: {
-              userId: await this.getSessionUserId(sessionId, tx),
+              userId: callSession.userId,
               scheduledFor: outcome.callbackDateTime,
               callbackReason: outcome.callbackReason || 'Agent scheduled callback',
               originalCallSessionId: sessionId,
@@ -348,6 +362,28 @@ export class CallService {
           });
           console.log(`📞 Created callback for ${outcome.callbackDateTime}`);
         }
+
+        // 4. Handle conversions - track successful outcomes with agent attribution
+        if (this.isConversionOutcome(outcome.outcomeType)) {
+          await this.createConversion({
+            tx,
+            userId: Number(callSession.userId),
+            agentId,
+            outcomeType: outcome.outcomeType,
+            outcomeNotes: outcome.outcomeNotes,
+            documentsRequested: outcome.documentsRequested,
+            queueType: callSession.sourceQueueType || 'unknown',
+            totalAttempts: callSession.callQueue?.userCallScore?.totalAttempts || 0,
+            claimId: callSession.callQueue?.claimId ? Number(callSession.callQueue.claimId) : undefined
+          });
+        }
+
+        // 5. Update user score based on outcome
+        await this.updateUserScoreAfterCall(
+          tx,
+          Number(callSession.userId),
+          outcome.outcomeType
+        );
 
         console.log(`✅ Call outcome recorded successfully for session ${sessionId}`);
       });
@@ -735,28 +771,127 @@ export class CallService {
     outcomeType: string,
     scoreAdjustment?: number
   ): Promise<void> {
-    const adjustment = scoreAdjustment || this.getScoreAdjustment(outcomeType);
-    const nextCallAfter = this.calculateNextCallTime(outcomeType);
+    try {
+      // Get current user call score record 
+      const userScore = await tx.userCallScore.findUnique({
+        where: { userId: BigInt(userId) }
+      });
 
-    await tx.userCallScore.upsert({
-      where: { userId: BigInt(userId) },
-      update: {
-        currentScore: { increment: adjustment },
+      // Determine current queue type for this user
+      const currentQueueType = await this.userService.determineUserQueueType(userId);
+      
+      // Check if we need a score reset (queue transition)
+      const needsReset = userScore?.currentQueueType && 
+        currentQueueType && 
+        userScore.currentQueueType !== currentQueueType;
+
+      // Create enhanced scoring context
+      const scoringContext = {
+        userId: Number(userId),
+        userCreatedAt: new Date(), // We'll need to get this from user record
+        currentTime: new Date(),
+        lastResetDate: userScore?.lastResetDate || undefined,
+        currentQueueType: userScore?.currentQueueType || undefined,
+        previousQueueType: undefined, // Would need to track this separately
         lastOutcome: outcomeType,
-        lastCallAt: new Date(),
-        totalAttempts: { increment: 1 },
-        nextCallAfter,
-        updatedAt: new Date()
-      },
-      create: {
-        userId: BigInt(userId),
-        currentScore: Math.max(0, adjustment),
-        lastOutcome: outcomeType,
-        lastCallAt: new Date(),
-        totalAttempts: 1,
-        nextCallAfter
+        totalAttempts: userScore?.totalAttempts || 0,
+        lastCallAt: new Date()
+      };
+
+      // Calculate new score using enhanced scoring service
+      const newPriorityScore = await this.deps.scoringService.calculatePriority(scoringContext);
+
+      // Check if outcome indicates conversion (score 200+)
+      const shouldConvert = newPriorityScore.finalScore >= 200 || 
+        ['requirements_completed', 'opted_out', 'already_completed'].includes(outcomeType);
+
+      if (shouldConvert) {
+        // Create conversion record
+        await tx.conversion.create({
+          data: {
+            userId: BigInt(userId),
+            previousQueueType: currentQueueType || 'unknown',
+            conversionType: outcomeType === 'requirements_completed' ? 'completed' : 
+                          outcomeType === 'opted_out' ? 'opted_out' : 'no_longer_eligible',
+            conversionReason: `Outcome: ${outcomeType}, Final score: ${newPriorityScore.finalScore}`,
+            finalScore: newPriorityScore.finalScore,
+            totalCallAttempts: scoringContext.totalAttempts,
+            lastCallAt: new Date(),
+            convertedAt: new Date()
+          }
+        });
+
+        // Mark user as inactive in scoring system
+        await tx.userCallScore.upsert({
+          where: { userId: BigInt(userId) },
+          update: {
+            isActive: false,
+            currentScore: newPriorityScore.finalScore,
+            updatedAt: new Date()
+          },
+          create: {
+            userId: BigInt(userId),
+            currentScore: newPriorityScore.finalScore,
+            isActive: false,
+            currentQueueType: currentQueueType,
+            lastResetDate: needsReset ? new Date() : new Date(),
+            lastOutcome: outcomeType,
+            lastCallAt: new Date(),
+            totalAttempts: 1
+          }
+        });
+
+        this.deps.logger.info(`User ${userId} converted with outcome ${outcomeType}, score ${newPriorityScore.finalScore}`);
+      } else {
+        // Normal score update
+        await tx.userCallScore.upsert({
+          where: { userId: BigInt(userId) },
+          update: {
+            currentScore: newPriorityScore.finalScore,
+            isActive: true,
+            currentQueueType: currentQueueType,
+            lastResetDate: needsReset ? new Date() : userScore?.lastResetDate,
+            lastOutcome: outcomeType,
+            lastCallAt: new Date(),
+            totalAttempts: scoringContext.totalAttempts,
+            successfulCalls: outcomeType === 'contacted' ? { increment: 1 } : undefined,
+            lastQueueCheck: new Date(),
+            updatedAt: new Date()
+          },
+          create: {
+            userId: BigInt(userId),
+            currentScore: newPriorityScore.finalScore,
+            isActive: true,
+            currentQueueType: currentQueueType,
+            lastResetDate: new Date(),
+            lastOutcome: outcomeType,
+            lastCallAt: new Date(),
+            totalAttempts: 1,
+            successfulCalls: outcomeType === 'contacted' ? 1 : 0
+          }
+        });
+
+        this.deps.logger.info(`Updated score for user ${userId}: ${newPriorityScore.finalScore} (${outcomeType})`);
       }
-    });
+
+      // Remove from queue if converted or callback requested
+      if (shouldConvert || outcomeType === 'callback_requested') {
+        await tx.callQueue.updateMany({
+          where: { 
+            userId: BigInt(userId),
+            status: 'pending'
+          },
+          data: { 
+            status: shouldConvert ? 'converted' : 'completed',
+            updatedAt: new Date()
+          }
+        });
+      }
+
+    } catch (error) {
+      this.deps.logger.error(`Failed to update user score for ${userId}:`, error);
+      // Don't throw - we don't want call outcome recording to fail due to scoring issues
+    }
   }
 
   private calculateNextCallTime(outcomeType: string): Date {
@@ -853,5 +988,130 @@ export class CallService {
       recordedByAgentId: dbOutcome.recordedByAgentId,
       createdAt: dbOutcome.createdAt
     };
+  }
+
+  /**
+   * Check if an outcome type should trigger a conversion
+   */
+  private isConversionOutcome(outcomeType: string): boolean {
+    const conversionOutcomes = [
+      'requirements_completed',
+      'signature_obtained', 
+      'documents_received',
+      'claim_completed',
+      'signed'
+    ];
+    return conversionOutcomes.includes(outcomeType);
+  }
+
+  /**
+   * Create a conversion record with agent attribution
+   */
+  private async createConversion({
+    tx,
+    userId,
+    agentId,
+    outcomeType,
+    outcomeNotes,
+    documentsRequested,
+    queueType,
+    totalAttempts,
+    claimId
+  }: {
+    tx: any;
+    userId: number;
+    agentId: number;
+    outcomeType: string;
+    outcomeNotes?: string;
+    documentsRequested?: string[];
+    queueType: string;
+    totalAttempts: number;
+    claimId?: number;
+  }): Promise<void> {
+    try {
+      // Get contributing agents from recent call sessions
+      const recentSessions = await tx.callSession.findMany({
+        where: {
+          userId: BigInt(userId),
+          startedAt: {
+            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
+          }
+        },
+        select: {
+          agentId: true,
+          lastOutcomeType: true
+        },
+        distinct: ['agentId']
+      });
+
+      const contributingAgentIds = recentSessions
+        .map((session: { agentId: number; lastOutcomeType: string | null }) => session.agentId)
+        .filter((id: number) => id !== agentId); // Exclude primary agent
+
+      // Determine conversion details
+      const conversionType = this.mapOutcomeToConversionType(outcomeType);
+      const signatureObtained = outcomeType.includes('sign') || outcomeType === 'signature_obtained';
+      
+      // Create conversion record
+      await tx.conversion.create({
+        data: {
+          userId: BigInt(userId),
+          previousQueueType: queueType,
+          conversionType,
+          conversionReason: outcomeNotes || `Converted via ${outcomeType}`,
+          finalScore: 0, // Conversions always end with score 0
+          totalCallAttempts: totalAttempts,
+          lastCallAt: new Date(),
+          convertedAt: new Date(),
+          primaryAgentId: agentId,
+          contributingAgents: contributingAgentIds.length > 0 ? contributingAgentIds : null,
+          documentsReceived: documentsRequested || null,
+          signatureObtained,
+          requirementsMet: documentsRequested || null
+        }
+      });
+
+      // Mark user as inactive in scoring system (converted)
+      await tx.userCallScore.updateMany({
+        where: { userId: BigInt(userId) },
+        data: {
+          isActive: false,
+          currentScore: 0,
+          updatedAt: new Date()
+        }
+      });
+
+      // Remove from queue (converted)
+      await tx.callQueue.updateMany({
+        where: { 
+          userId: BigInt(userId),
+          status: 'pending'
+        },
+        data: { 
+          status: 'converted',
+          updatedAt: new Date()
+        }
+      });
+
+      console.log(`🎉 Created conversion for user ${userId} by agent ${agentId} (${conversionType})`);
+
+    } catch (error) {
+      console.error(`❌ Failed to create conversion for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Map call outcome type to conversion type
+   */
+  private mapOutcomeToConversionType(outcomeType: string): string {
+    const mapping: Record<string, string> = {
+      'requirements_completed': 'requirements_completed',
+      'signature_obtained': 'signed',
+      'documents_received': 'info_received',
+      'claim_completed': 'signed',
+      'signed': 'signed'
+    };
+    return mapping[outcomeType] || 'requirements_completed';
   }
 } 

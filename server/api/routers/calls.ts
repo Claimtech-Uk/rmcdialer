@@ -12,6 +12,7 @@ import {
   type GetCallbacksOptions
 } from '@/modules/calls';
 import { UserService } from '@/modules/users';
+import { PriorityScoringService } from '@/modules/scoring/services/priority-scoring.service';
 import { prisma } from '@/lib/db';
 import { replicaDb } from '@/lib/mysql';
 
@@ -24,7 +25,8 @@ const logger = {
 
 // Initialize services with dependencies
 const userService = new UserService();
-const callService = new CallService({ prisma, userService, logger });
+const scoringService = new PriorityScoringService({ logger });
+const callService = new CallService({ prisma, userService, scoringService, logger });
 
 // Input validation schemas
 const InitiateCallSchema = z.object({

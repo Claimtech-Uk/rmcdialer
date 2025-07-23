@@ -1096,10 +1096,9 @@ export function CallInterface({
                   <Badge variant="secondary" className="bg-blue-100 text-blue-800 border border-blue-200">
                     {queueType.data.queueType.replace('_', ' ').toUpperCase()}
                   </Badge>
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm text-slate-600 mb-1">
                     {queueType.data.queueType === 'unsigned_users' && 'User has not signed their claim documents yet'}
                     {queueType.data.queueType === 'outstanding_requests' && 'User has outstanding document requirements'}
-                    {queueType.data.queueType === 'callback' && 'User has requested a callback'}
                   </p>
                   <div className="text-xs text-slate-500 mt-2 bg-slate-50 px-3 py-2 rounded-lg">
                     Queue determination: {queueType.data.eligible ? 'Eligible' : 'Not eligible'}

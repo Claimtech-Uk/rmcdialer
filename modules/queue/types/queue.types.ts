@@ -8,11 +8,10 @@ export interface QueueOptions {
   queueType?: QueueType; // Add queue type filtering
 }
 
-// Queue type definitions for the two main business cases + callbacks
+// Queue type definitions for the two main business cases
 export type QueueType = 
   | 'unsigned_users'      // Users missing signatures (current_signature_file_id IS NULL)
-  | 'outstanding_requests' // Users with pending requirements BUT have signatures
-  | 'callback';           // Users who requested to be called back from previous calls
+  | 'outstanding_requests'; // Users with pending requirements BUT have signatures
 
 export interface UserEligibilityFactors {
   userId: bigint;
@@ -39,18 +38,23 @@ export interface ScoredUser extends UserEligibilityFactors {
 export interface QueueEntry {
   id: string;
   userId: bigint;
-  claimId?: bigint | null;
+  claimId?: bigint;
   queueType: QueueType;
   priorityScore: number;
   queuePosition?: number;
-  status: 'pending' | 'assigned' | 'completed' | 'cancelled';
+  status: string;
   queueReason?: string;
   assignedToAgentId?: number;
   assignedAt?: Date;
-  callbackId?: string;
   availableFrom?: Date;
   createdAt: Date;
   updatedAt: Date;
+  
+  // Callback fields (callbacks exist within queues, not as separate queue)
+  callbackId?: string;
+  hasCallback?: boolean;
+  callbackScheduledFor?: Date;
+  callbackReason?: string;
 }
 
 export interface QueueFilters {
@@ -74,13 +78,8 @@ export interface QueueTypeConfig {
 
 export interface QueueResult {
   entries: QueueEntry[];
-  meta: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-  queueType: QueueType;
+  meta: QueueMeta;
+  queueType: QueueType | 'mixed'; // Allow mixed when showing multiple queue types
 }
 
 export interface QueueRefreshResult {
@@ -147,14 +146,14 @@ export const QUEUE_CONFIGS: Record<QueueType, QueueTypeConfig> = {
     priority: 2, // Medium priority - claim can progress but needs documents
     maxDailyAttempts: 2,
     cooldownHours: 6
-  },
-  callback: {
-    type: 'callback',
-    displayName: 'Scheduled Callbacks',
-    description: 'Users who requested to be called back from previous calls',
-    eligibilityCriteria: 'scheduled_callback_date <= NOW()',
-    priority: 1, // High priority - user expectation set
-    maxDailyAttempts: 2,
-    cooldownHours: 24
   }
 }; 
+
+export interface QueueMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  callbacksFirst?: number;  // Number of callbacks shown first
+  regularQueue?: number;    // Number of regular queue items
+} 

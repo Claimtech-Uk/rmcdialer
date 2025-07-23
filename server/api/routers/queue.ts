@@ -18,19 +18,19 @@ const scoringService = new PriorityScoringService({ logger });
 const queueService = new QueueService({ prisma, scoringService, logger });
 
 // Input validation schemas
-const QueueFiltersSchema = z.object({
+const GetQueueInput = z.object({
   page: z.number().min(1).default(1),
   limit: z.number().min(1).max(100).default(20),
   status: z.enum(['pending', 'assigned', 'completed']).default('pending'),
   agentId: z.number().optional(),
-  queueType: z.enum(['unsigned_users', 'outstanding_requests', 'callback']).optional()
+  queueType: z.enum(['unsigned_users', 'outstanding_requests']).optional()
 });
 
 const AssignCallSchema = z.object({
   queueId: z.string().uuid('Invalid queue ID format')
 });
 
-const QueueTypeSchema = z.enum(['unsigned_users', 'outstanding_requests', 'callback']);
+const QueueTypeSchema = z.enum(['unsigned_users', 'outstanding_requests']);
 
 const ValidateUserSchema = z.object({
   userId: z.number().int().positive('User ID must be a positive integer'),
@@ -45,7 +45,7 @@ const HealthCheckSchema = z.object({
 export const queueRouter = createTRPCRouter({
   // Get the current queue with filtering and pagination
   getQueue: protectedProcedure
-    .input(QueueFiltersSchema)
+    .input(GetQueueInput)
     .query(async ({ input, ctx }) => {
       // Thin layer - delegate to module service
       return await queueService.getQueue(input);

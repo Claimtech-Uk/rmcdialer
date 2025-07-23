@@ -452,7 +452,9 @@ export class UserService {
       });
 
       if (scheduledCallback) {
-        return 'callback';
+        // User has callback - determine their appropriate queue with callback priority
+        // We'll handle the callback flag separately in the queue entry
+        // For now, determine their base queue type
       }
 
       // Get user data from replica to check signature and requirements
@@ -526,10 +528,6 @@ export class UserService {
         
         case 'outstanding_requests':
           [users, totalCount] = await this.getOutstandingRequestUsers(limit, offset);
-          break;
-        
-        case 'callback':
-          [users, totalCount] = await this.getCallbackUsers(limit, offset);
           break;
         
         default:

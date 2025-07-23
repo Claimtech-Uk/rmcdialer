@@ -144,11 +144,20 @@ export async function GET(request: Request) {
           let currentQueueType: QueueType | null = null;
           
           if (scheduledCallback) {
-            currentQueueType = 'callback';
+            // User has callback - they go in their appropriate queue with callback priority
+            if (!hasSignature) {
+              currentQueueType = 'unsigned_users';
+            } else if (pendingRequirements > 0) {
+              currentQueueType = 'outstanding_requests';
+            } else {
+              currentQueueType = 'outstanding_requests'; // Default for callbacks
+            }
           } else if (!hasSignature) {
             currentQueueType = 'unsigned_users';
           } else if (pendingRequirements > 0) {
             currentQueueType = 'outstanding_requests';
+          } else {
+            currentQueueType = null; // User doesn't need to be in any queue
           }
 
           results.tests.push({

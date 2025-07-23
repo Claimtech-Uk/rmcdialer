@@ -25,6 +25,7 @@ model Agent {
   callSessions        CallSession[]
   callSessionOutcomes CallSession[]       @relation("CallSessionLastOutcome")
   callbacks           Callback[]
+  primaryConversions  Conversion[]        @relation("PrimaryConversions")
   magicLinkActivities MagicLinkActivity[]
   shortUrls           ShortUrl[]
   smsConversations    SmsConversation[]
@@ -59,11 +60,17 @@ model UserCallScore {
   baseScore           Int         @default(0) @map("base_score")
   outcomePenaltyScore Int         @default(0) @map("outcome_penalty_score")
   timePenaltyScore    Int         @default(0) @map("time_penalty_score")
+  isActive            Boolean     @default(true) @map("is_active")
+  currentQueueType    String?     @map("current_queue_type")
+  lastResetDate       DateTime?   @map("last_reset_date")
+  lastQueueCheck      DateTime?   @map("last_queue_check")
   createdAt           DateTime    @default(now()) @map("created_at")
   updatedAt           DateTime    @updatedAt @map("updated_at")
   callQueue           CallQueue[]
 
   @@index([nextCallAfter, currentScore])
+  @@index([isActive, currentScore])
+  @@index([currentQueueType, currentScore])
   @@map("user_call_scores")
 }
 
@@ -181,6 +188,32 @@ model Callback {
   @@index([scheduledFor])
   @@index([status])
   @@map("callbacks")
+}
+
+model Conversion {
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              BigInt    @map("user_id")
+  previousQueueType   String    @map("previous_queue_type")
+  conversionType      String    @map("conversion_type")
+  conversionReason    String?   @map("conversion_reason")
+  finalScore          Int?      @map("final_score")
+  totalCallAttempts   Int       @default(0) @map("total_call_attempts")
+  lastCallAt          DateTime? @map("last_call_at")
+  convertedAt         DateTime  @default(now()) @map("converted_at")
+  primaryAgentId      Int?      @map("primary_agent_id")
+  contributingAgents  Json?     @map("contributing_agents")
+  documentsReceived   Json?     @map("documents_received")
+  signatureObtained   Boolean   @default(false) @map("signature_obtained")
+  requirementsMet     Json?     @map("requirements_met")
+  claimValue          Decimal?  @map("claim_value") @db.Decimal(10, 2)
+  estimatedCommission Decimal?  @map("estimated_commission") @db.Decimal(10, 2)
+  primaryAgent        Agent?    @relation("PrimaryConversions", fields: [primaryAgentId], references: [id])
+
+  @@index([userId])
+  @@index([conversionType])
+  @@index([convertedAt])
+  @@index([primaryAgentId])
+  @@map("conversions")
 }
 
 model MagicLinkActivity {

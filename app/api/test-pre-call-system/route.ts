@@ -28,11 +28,10 @@ export async function GET() {
       }
     };
 
-    // Test queue health for each type
+    // Test queue health for each queue type  
     console.log('🏥 Testing queue health...');
     testResults.queueHealth.unsigned_users = await validationService.validateQueueHealth('unsigned_users', 5);
     testResults.queueHealth.outstanding_requests = await validationService.validateQueueHealth('outstanding_requests', 5);
-    testResults.queueHealth.callback = await validationService.validateQueueHealth('callback', 5);
 
     // Test getting next user for each queue type
     console.log('👤 Testing next user selection...');
@@ -46,12 +45,6 @@ export async function GET() {
       testResults.nextUser.outstanding_requests = await validationService.getNextValidUserDirectFromReplica('outstanding_requests');
     } catch (error: any) {
       testResults.nextUser.outstanding_requests = { error: error.message };
-    }
-
-    try {
-      testResults.nextUser.callback = await validationService.getNextValidUserDirectFromReplica('callback');
-    } catch (error: any) {
-      testResults.nextUser.callback = { error: error.message };
     }
 
     // Calculate summary statistics

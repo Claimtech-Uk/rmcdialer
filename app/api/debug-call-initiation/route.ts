@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
-import { CallService } from '@/modules/calls';
-import { UserService } from '@/modules/users';
+import { NextRequest, NextResponse } from 'next/server';
+import { CallService } from '@/modules/calls/services/call.service';
+import { UserService } from '@/modules/users/services/user.service';
+import { PriorityScoringService } from '@/modules/scoring/services/priority-scoring.service';
 import { prisma } from '@/lib/db';
 
 export async function GET() {
@@ -10,13 +11,14 @@ export async function GET() {
     // Test 1: Basic service instantiation
     console.log('📋 Test 1: Service instantiation...');
     const logger = {
-      info: (message: string, meta?: any) => console.log(`[Debug] ${message}`, meta),
-      error: (message: string, error?: any) => console.error(`[Debug ERROR] ${message}`, error),
-      warn: (message: string, meta?: any) => console.warn(`[Debug WARN] ${message}`, meta)
+      info: (message: string, meta?: any) => console.log(`ℹ️ ${message}`, meta || ''),
+      error: (message: string, error?: any) => console.error(`❌ ${message}`, error || ''),
+      warn: (message: string, meta?: any) => console.warn(`⚠️ ${message}`, meta || '')
     };
     
     const userService = new UserService();
-    const callService = new CallService({ prisma, userService, logger });
+    const scoringService = new PriorityScoringService({ logger });
+    const callService = new CallService({ prisma, userService, scoringService, logger });
     console.log('✅ Services created successfully');
     
     // Test 2: Database connections

@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server'
-import { CallService } from '@/modules/calls'
-import { UserService } from '@/modules/users'
-import { prisma } from '@/lib/db'
+import { NextRequest, NextResponse } from 'next/server';
+import { CallService } from '@/modules/calls/services/call.service';
+import { UserService } from '@/modules/users/services/user.service';
+import { PriorityScoringService } from '@/modules/scoring/services/priority-scoring.service';
+import { prisma } from '@/lib/db';
 
 export async function GET() {
   console.log('🧪 Testing tRPC call creation flow...')
@@ -22,8 +23,9 @@ export async function GET() {
       warn: (message: string, meta?: any) => console.warn(`[Test WARN] ${message}`, meta || '')
     }
     
-    const userService = new UserService()
-    const callService = new CallService({ prisma, userService, logger })
+    const userService = new UserService();
+    const scoringService = new PriorityScoringService({ logger });
+    const callService = new CallService({ prisma, userService, scoringService, logger });
     
     results.step1_services = {
       success: true,

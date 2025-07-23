@@ -8,7 +8,16 @@ export interface ScoringContext {
   userId: number
   userCreatedAt: Date
   currentTime: Date
-  // Will be extended with more fields as we add rules
+  
+  // Enhanced scoring system fields
+  currentScore?: number
+  lastResetDate?: Date
+  currentQueueType?: string
+  previousQueueType?: string
+  lastOutcome?: string
+  totalAttempts?: number
+  requirementsChangedDate?: Date
+  lastCallAt?: Date
 }
 
 // Result of priority calculation

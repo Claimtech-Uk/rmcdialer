@@ -25,7 +25,13 @@
     "cdc:test": "tsx -e \"console.log('Testing CDC setup...'); process.exit(0)\"",
     "deploy": "./scripts/deploy.sh",
     "deploy:force": "npx vercel --prod",
-    "check-deployments": "npx vercel ls"
+    "check-deployments": "npx vercel ls",
+    "cron:test": "tsx scripts/test-cron-system.ts",
+    "cron:health": "tsx scripts/monitor-cron-health.ts",
+    "cron:check": "curl -s http://localhost:3000/api/cron/health | jq .",
+    "cron:discovery": "curl -X POST \"http://localhost:3000/api/cron/discover-new-leads\" -H \"Authorization: Bearer ${CRON_SECRET:-test-secret}\" | jq .",
+    "cron:maintenance": "curl -X POST \"http://localhost:3000/api/cron/scoring-maintenance\" -H \"Authorization: Bearer ${CRON_SECRET:-test-secret}\" | jq .",
+    "cron:schedule": "tsx scripts/check-cron-schedule.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.850.0",
@@ -81,7 +87,7 @@
     "eslint-config-next": "^14.0.4",
     "postcss": "^8.4.32",
     "ts-node": "^10.9.2",
-    "tsx": "^4.6.2",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }
 }

@@ -36,10 +36,10 @@ export class QueueService {
   }
 
   /**
-   * Refresh all three queue types
+   * Refresh the two main queue types (callbacks are handled within these queues)
    */
   async refreshAllQueues(): Promise<QueueRefreshResult[]> {
-    const queueTypes: QueueType[] = ['unsigned_users', 'outstanding_requests', 'callback'];
+    const queueTypes: QueueType[] = ['unsigned_users', 'outstanding_requests'];
     
     this.deps.logger.info('Starting refresh of all queue types');
     
@@ -48,7 +48,7 @@ export class QueueService {
     );
     
     const totalAdded = results.reduce((sum, result) => sum + result.usersAdded, 0);
-    this.deps.logger.info(`All queues refreshed: ${totalAdded} total users added across ${queueTypes.length} queues`);
+    this.deps.logger.info(`All queues refreshed: ${totalAdded} total users added`);
     
     return results;
   }
@@ -154,6 +154,7 @@ export class QueueService {
 
   /**
    * Get the current queue with pagination and filtering
+   * Enhanced to prioritize callbacks within their respective queues
    */
   async getQueue(filters: QueueFilters = {}): Promise<QueueResult> {
     const { page = 1, limit = 20, status = 'pending', agentId, queueType } = filters;
@@ -162,22 +163,35 @@ export class QueueService {
     if (agentId) where.assignedToAgentId = agentId;
     if (queueType) where.queueType = queueType;
     
-    const [entries, total] = await Promise.all([
-      this.deps.prisma.callQueue.findMany({
-        where,
-        orderBy: [
-          { priorityScore: 'asc' },
-          { queuePosition: 'asc' }
-        ],
-        skip: (page - 1) * limit,
-        take: limit
-      }),
-      this.deps.prisma.callQueue.count({ where })
-    ]);
+    // Get all entries and sort with callback priority within each queue type
+    const entries = await this.deps.prisma.callQueue.findMany({
+      where,
+      include: {
+        callback: true // Include callback details if they exist
+      },
+      orderBy: [
+        { queueType: 'asc' }, // unsigned_users first, then outstanding_requests
+        { 
+          // Callbacks first within each queue type
+          callbackId: { sort: 'asc', nulls: 'last' }
+        },
+        { priorityScore: 'asc' },  // Then by score (lower = higher priority)
+        { queuePosition: 'asc' }
+      ],
+      skip: (page - 1) * limit,
+      take: limit
+    });
+    
+    const total = await this.deps.prisma.callQueue.count({ where });
     
     return {
-      entries: entries as QueueEntry[], // Type assertion for Prisma return type
-      queueType: queueType || 'unsigned_users', // Default queue type for backwards compatibility
+      entries: entries.map(entry => ({
+        ...entry,
+        hasCallback: !!entry.callbackId,
+        callbackScheduledFor: entry.callback?.scheduledFor,
+        callbackReason: entry.callback?.callbackReason
+      })) as QueueEntry[],
+      queueType: queueType || 'mixed',
       meta: {
         page,
         limit, 
@@ -346,9 +360,6 @@ export class QueueService {
         const pendingReqs = userContext.claims.reduce((acc: any, claim: any) => 
           acc + claim.requirements.filter((req: any) => req.status === 'PENDING').length, 0);
         reason += `${pendingReqs} pending requirement(s)`;
-        break;
-      case 'callback':
-        reason += 'Scheduled callback requested';
         break;
     }
     

@@ -54,15 +54,40 @@ export async function GET(request: Request) {
 
     // Test 4: Health check (if requested)
     if (testHealthCheck) {
-      console.log('🏥 Testing queue health check...');
+      console.log('🏥 Testing queue health validation for each queue type...');
       
-      for (const queueType of ['unsigned_users', 'outstanding_requests', 'callback'] as QueueType[]) {
-        const healthCheck = await validationService.validateQueueHealth(queueType, 10);
-        results.tests.push({
-          name: `Health Check - ${queueType}`,
-          status: 'completed',
-          data: healthCheck
-        });
+      for (const queueType of ['unsigned_users', 'outstanding_requests'] as QueueType[]) {
+        console.log(`\n📋 Testing ${queueType} queue health...`);
+        
+        const healthResult = await validationService.validateQueueHealth(queueType, 5);
+        
+        results.queueHealth[queueType] = {
+          totalChecked: healthResult.totalChecked,
+          validUsers: healthResult.validUsers,
+          invalidUsers: healthResult.invalidUsers,
+          validationPercentage: Math.round((healthResult.validUsers / healthResult.totalChecked) * 100)
+        };
+      }
+
+      console.log('\n👤 Testing next user retrieval for each queue...');
+      
+      for (const queueType of ['unsigned_users', 'outstanding_requests'] as QueueType[]) {
+        console.log(`\n🎯 Testing next user for ${queueType}...`);
+        
+        try {
+          const nextUser = await validationService.getNextValidUserDirectFromReplica(queueType);
+          
+          results.nextUserTests[queueType] = {
+            success: !!nextUser,
+            userId: nextUser?.userId || null,
+            hasResult: !!nextUser
+          };
+        } catch (error: any) {
+          results.nextUserTests[queueType] = {
+            success: false,
+            error: error.message
+          };
+        }
       }
     }
 
@@ -70,7 +95,7 @@ export async function GET(request: Request) {
     if (!userIdParam) {
       console.log('🔄 Testing next valid user for each queue type...');
       
-      for (const queueType of ['unsigned_users', 'outstanding_requests', 'callback'] as QueueType[]) {
+      for (const queueType of ['unsigned_users', 'outstanding_requests'] as QueueType[]) {
         try {
           const nextUser = await validationService.getNextValidUserForCall(queueType);
           results.tests.push({

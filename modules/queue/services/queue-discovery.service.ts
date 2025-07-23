@@ -21,33 +21,45 @@ interface QueueDiscoveryReport {
 }
 
 /**
- * Queue Discovery Service
+ * Enhanced Queue Discovery Service
  * 
- * Automatically discovers eligible users from MySQL replica and populates
- * PostgreSQL queues for agent calling. Runs hourly to ensure fresh leads.
+ * Implements the full 0-200 scoring system with:
+ * - Daily aging (+5 points per day, skip Sundays)
+ * - Fresh starts on queue transitions
+ * - Conversion tracking
+ * - Safety nets for lost users
  */
 export class QueueDiscoveryService {
   
   /**
-   * Run complete queue discovery for all queue types
+   * Run complete queue discovery with enhanced scoring for all queue types
    * This is the main method called by the hourly cron job
    */
   async runHourlyDiscovery(): Promise<QueueDiscoveryReport> {
     const startTime = Date.now();
-    logger.info('🔍 Starting hourly queue discovery...');
+    logger.info('🔍 Starting enhanced hourly queue discovery...');
     
     const results: QueueDiscoveryResult[] = [];
     
     try {
-      // Discover unsigned users
+      // 1. Apply daily aging to all active user scores
+      await this.applyDailyAging();
+      
+      // 2. Discover and score new eligible users
       const unsignedResult = await this.discoverUnsignedUsers();
       results.push(unsignedResult);
       
-      // Discover outstanding requests
       const outstandingResult = await this.discoverOutstandingRequests();
       results.push(outstandingResult);
       
-      // Note: Callbacks are managed separately through the callback scheduling system
+      // 3. Reactivate "lost users" who became eligible again
+      await this.reactivateLostUsers();
+      
+      // 4. Clean up invalid queue entries
+      await this.cleanupInvalidQueueEntries();
+      
+      // 5. Handle conversions (users who reached score 200+)
+      await this.processConversions();
       
       const totalDuration = Date.now() - startTime;
       const totalDiscovered = results.reduce((sum, r) => sum + r.discovered, 0);
@@ -58,14 +70,14 @@ export class QueueDiscoveryService {
         totalDiscovered,
         totalAdded,
         results,
-        summary: `Discovered ${totalDiscovered} leads, added ${totalAdded} to queues in ${Math.round(totalDuration / 1000)}s`
+        summary: `Enhanced discovery: ${totalDiscovered} leads, ${totalAdded} added, aging applied in ${Math.round(totalDuration / 1000)}s`
       };
       
-      logger.info(`✅ Hourly discovery completed: ${report.summary}`);
+      logger.info(`✅ Enhanced hourly discovery completed: ${report.summary}`);
       return report;
       
     } catch (error) {
-      logger.error('❌ Hourly discovery failed:', error);
+      logger.error('❌ Enhanced hourly discovery failed:', error);
       throw error;
     }
   }
@@ -366,5 +378,263 @@ export class QueueDiscoveryService {
     });
     
     return (maxPosition?.queuePosition || 0) + 1;
+  }
+
+  /**
+   * Apply daily aging: +5 points per day since last reset (skip Sundays)
+   */
+  private async applyDailyAging(): Promise<void> {
+    logger.info('📅 Applying daily aging to all active users...');
+    
+    try {
+      const activeUsers = await prisma.userCallScore.findMany({
+        where: { 
+          isActive: true,
+          currentScore: { lt: 200 } // Don't age users who are already maxed out
+        }
+      });
+
+      let agedCount = 0;
+      let convertedCount = 0;
+
+      for (const user of activeUsers) {
+        const resetDate = user.lastResetDate || user.createdAt;
+        const businessDays = this.calculateBusinessDaysBetween(resetDate, new Date());
+        const agingScore = Math.floor(businessDays) * 5;
+        const newScore = Math.min(user.currentScore + agingScore, 200);
+
+        if (newScore !== user.currentScore) {
+          await prisma.userCallScore.update({
+            where: { id: user.id },
+            data: { 
+              currentScore: newScore,
+              updatedAt: new Date()
+            }
+          });
+
+          agedCount++;
+
+          // Check if user should be converted due to aging
+          if (newScore >= 200) {
+            await this.convertUser(Number(user.userId), 'aged_out', user.currentQueueType);
+            convertedCount++;
+          }
+        }
+      }
+
+      logger.info(`📅 Daily aging complete: ${agedCount} users aged, ${convertedCount} converted due to aging`);
+
+    } catch (error) {
+      logger.error('❌ Daily aging failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Calculate business days between dates (skip Sundays)
+   */
+  private calculateBusinessDaysBetween(startDate: Date, endDate: Date): number {
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const timeDiff = endDate.getTime() - startDate.getTime();
+    const totalDays = timeDiff / msPerDay;
+
+    // Count Sundays to subtract them
+    let sundayCount = 0;
+    const currentDate = new Date(startDate);
+    
+    while (currentDate < endDate) {
+      if (currentDate.getDay() === 0) { // Sunday = 0
+        sundayCount++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return Math.max(0, totalDays - sundayCount);
+  }
+
+  /**
+   * Reactivate users who were marked inactive but are now eligible again
+   * This is the "lost user" safety net
+   */
+  private async reactivateLostUsers(): Promise<void> {
+    logger.info('🔄 Checking for lost users to reactivate...');
+    
+    try {
+      const inactiveUsers = await prisma.userCallScore.findMany({
+        where: { 
+          isActive: false,
+          currentScore: { lt: 200 } // Don't reactivate converted users
+        },
+        take: 100 // Limit to prevent overwhelming
+      });
+
+      let reactivatedCount = 0;
+
+      for (const scoreRecord of inactiveUsers) {
+        const userId = Number(scoreRecord.userId);
+        
+        // Check if user is now eligible for any queue
+        const newQueueType = await this.determineUserQueueType(userId);
+        
+        if (newQueueType) {
+          // User is eligible again - reactivate with fresh score
+          await prisma.userCallScore.update({
+            where: { id: scoreRecord.id },
+            data: {
+              isActive: true,
+              currentScore: 0, // Fresh start
+              currentQueueType: newQueueType,
+              lastResetDate: new Date(),
+              lastQueueCheck: new Date(),
+              updatedAt: new Date()
+            }
+          });
+
+          reactivatedCount++;
+          logger.info(`🔄 Reactivated user ${userId} for ${newQueueType} queue`);
+        }
+      }
+
+      logger.info(`🔄 Reactivation complete: ${reactivatedCount} users reactivated`);
+
+    } catch (error) {
+      logger.error('❌ Reactivation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Process users who have reached score 200+ and should be converted
+   */
+  private async processConversions(): Promise<void> {
+    logger.info('📈 Processing high-score conversions...');
+    
+    try {
+      const highScoreUsers = await prisma.userCallScore.findMany({
+        where: { 
+          isActive: true,
+          currentScore: { gte: 200 }
+        }
+      });
+
+      for (const user of highScoreUsers) {
+        await this.convertUser(
+          Number(user.userId), 
+          'high_score', 
+          user.currentQueueType,
+          `Score reached ${user.currentScore}`
+        );
+      }
+
+      logger.info(`📈 Conversion processing complete: ${highScoreUsers.length} users converted`);
+
+    } catch (error) {
+      logger.error('❌ Conversion processing failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Convert a user and mark them as inactive
+   */
+  private async convertUser(
+    userId: number, 
+    conversionType: string, 
+    queueType: string | null, 
+    reason?: string
+  ): Promise<void> {
+    try {
+      const userScore = await prisma.userCallScore.findUnique({
+        where: { userId: BigInt(userId) }
+      });
+
+      if (!userScore) return;
+
+      // Create conversion record
+      await prisma.conversion.create({
+        data: {
+          userId: BigInt(userId),
+          previousQueueType: queueType || 'unknown',
+          conversionType,
+          conversionReason: reason || `Converted via ${conversionType}`,
+          finalScore: userScore.currentScore,
+          totalCallAttempts: userScore.totalAttempts,
+          lastCallAt: userScore.lastCallAt,
+          convertedAt: new Date()
+        }
+      });
+
+      // Mark user as inactive
+      await prisma.userCallScore.update({
+        where: { userId: BigInt(userId) },
+        data: {
+          isActive: false,
+          updatedAt: new Date()
+        }
+      });
+
+      // Remove from queue
+      await prisma.callQueue.updateMany({
+        where: { 
+          userId: BigInt(userId),
+          status: 'pending'
+        },
+        data: { 
+          status: 'converted',
+          updatedAt: new Date()
+        }
+      });
+
+      logger.info(`✅ Converted user ${userId}: ${conversionType} - ${reason}`);
+
+    } catch (error) {
+      logger.error(`❌ Failed to convert user ${userId}:`, error);
+    }
+  }
+
+  /**
+   * Determine user queue type (replicated from UserService for dependency management)
+   */
+  private async determineUserQueueType(userId: number): Promise<string | null> {
+    try {
+      // Check for scheduled callbacks first
+      const scheduledCallback = await prisma.callback.findFirst({
+        where: {
+          userId: BigInt(userId),
+          status: 'pending',
+          scheduledFor: { lte: new Date() }
+        }
+      });
+
+      if (scheduledCallback) return 'callback';
+
+      // Get user data from replica
+      const userData = await replicaDb.user.findUnique({
+        where: { id: BigInt(userId) },
+        include: {
+          claims: {
+            include: {
+              requirements: { where: { status: 'PENDING' } }
+            }
+          }
+        }
+      });
+
+      if (!userData || !userData.is_enabled) return null;
+
+      const hasSignature = userData.current_signature_file_id !== null;
+      const hasPendingRequirements = userData.claims.some(claim =>
+        claim.requirements.some(req => req.status === 'PENDING')
+      );
+
+      if (!hasSignature) return 'unsigned_users';
+      if (hasPendingRequirements) return 'outstanding_requests';
+      
+      return null;
+
+    } catch (error) {
+      logger.error(`Failed to determine queue type for user ${userId}:`, error);
+      return null;
+    }
   }
 } 

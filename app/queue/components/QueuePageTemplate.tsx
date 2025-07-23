@@ -43,29 +43,20 @@ const queueConfigs: Record<QueueType, QueueConfig> = {
   unsigned_users: {
     type: 'unsigned_users',
     title: 'Unsigned Users',
-    description: 'Users who need to provide their signature to proceed with their claim',
+    description: 'Users who need to provide their signature',
     icon: PenTool,
     gradient: 'bg-gradient-to-br from-orange-500 to-red-600',
     missingText: 'Digital signature required to proceed',
     showRequirementsCount: false
   },
   outstanding_requests: {
-    type: 'outstanding_requests',
-    title: 'Requirements',
-    description: 'Users with pending document requirements but who have signatures',
+    type: 'outstanding_requests', 
+    title: 'Outstanding Requests',
+    description: 'Users with pending document requirements',
     icon: FileText,
     gradient: 'bg-gradient-to-br from-blue-500 to-cyan-600',
     missingText: 'Outstanding document requirements',
     showRequirementsCount: true
-  },
-  callback: {
-    type: 'callback',
-    title: 'Callbacks',
-    description: 'Users requesting callback appointments',
-    icon: Phone,
-    gradient: 'bg-gradient-to-br from-purple-500 to-pink-600',
-    missingText: 'Callback requested',
-    showRequirementsCount: false
   }
 };
 

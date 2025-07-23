@@ -24,7 +24,7 @@ const GetEligibleUsersSchema = z.object({
 });
 
 const GetEligibleUsersByQueueTypeSchema = z.object({
-  queueType: z.enum(['unsigned_users', 'outstanding_requests', 'callback']),
+  queueType: z.enum(['unsigned_users', 'outstanding_requests']),
   limit: z.number().int().positive().max(100).optional().default(20),
   offset: z.number().int().min(0).optional().default(0)
 });

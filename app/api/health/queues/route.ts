@@ -8,11 +8,10 @@ export async function GET() {
     const validationService = new PreCallValidationService();
     
     const [queueStats, replicaHealth, queueHealthChecks] = await Promise.all([
-      // Get queue statistics
+      // Get queue statistics  
       Promise.all([
         prisma.callQueue.count({ where: { queueType: 'unsigned_users', status: 'pending' } }),
         prisma.callQueue.count({ where: { queueType: 'outstanding_requests', status: 'pending' } }),
-        prisma.callQueue.count({ where: { queueType: 'callback', status: 'pending' } }),
         prisma.callQueue.count({ where: { status: 'invalid' } })
       ]),
       
@@ -22,16 +21,15 @@ export async function GET() {
       // Run health checks on each queue (sample size)
       Promise.all([
         validationService.validateQueueHealth('unsigned_users', 10),
-        validationService.validateQueueHealth('outstanding_requests', 10),
-        validationService.validateQueueHealth('callback', 10)
+        validationService.validateQueueHealth('outstanding_requests', 10)
       ])
     ]);
 
-    const [unsignedCount, outstandingCount, callbackCount, invalidCount] = queueStats;
-    const [unsignedHealth, outstandingHealth, callbackHealth] = queueHealthChecks;
+    const [unsignedCount, outstandingCount, invalidCount] = queueStats;
+    const [unsignedHealth, outstandingHealth] = queueHealthChecks;
 
-    const totalInvalidFound = unsignedHealth.invalidUsers + outstandingHealth.invalidUsers + callbackHealth.invalidUsers;
-    const totalValidFound = unsignedHealth.validUsers + outstandingHealth.validUsers + callbackHealth.validUsers;
+    const totalInvalidFound = unsignedHealth.invalidUsers + outstandingHealth.invalidUsers;
+    const totalValidFound = unsignedHealth.validUsers + outstandingHealth.validUsers;
     const healthPercentage = totalValidFound + totalInvalidFound > 0 
       ? Math.round((totalValidFound / (totalValidFound + totalInvalidFound)) * 100) 
       : 100;
@@ -54,14 +52,6 @@ export async function GET() {
             checked: outstandingHealth.totalChecked,
             valid: outstandingHealth.validUsers,
             invalid: outstandingHealth.invalidUsers
-          }
-        },
-        callback: {
-          pending: callbackCount,
-          validationSample: {
-            checked: callbackHealth.totalChecked,
-            valid: callbackHealth.validUsers,
-            invalid: callbackHealth.invalidUsers
           }
         },
         total_invalid_entries: invalidCount
