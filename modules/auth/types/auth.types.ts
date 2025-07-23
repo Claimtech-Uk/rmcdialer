@@ -35,6 +35,8 @@ export interface AgentProfile {
   firstName: string;
   lastName: string;
   role: 'agent' | 'supervisor' | 'admin';
+  team: string; // NEW: Team assignment (unsigned, requirements, etc.)
+  allowedQueues: string[]; // NEW: Queue access control
   isActive: boolean;
   isAiAgent: boolean;
   twilioWorkerSid?: string;

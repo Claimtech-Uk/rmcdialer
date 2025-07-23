@@ -14,6 +14,8 @@ model Agent {
   firstName           String              @map("first_name")
   lastName            String              @map("last_name")
   role                String              @default("agent")
+  team                String              @default("general") // NEW: Team assignment
+  allowedQueues       Json                @default("[\"unsigned_users\", \"outstanding_requests\"]") @map("allowed_queues") // NEW: Queue access control
   isActive            Boolean             @default(true) @map("is_active")
   isAiAgent           Boolean             @default(false) @map("is_ai_agent")
   twilioWorkerSid     String?             @map("twilio_worker_sid")
@@ -29,21 +31,27 @@ model Agent {
   magicLinkActivities MagicLinkActivity[]
   shortUrls           ShortUrl[]
   smsConversations    SmsConversation[]
+  autoDialerSettings  AutoDialerSettings? // NEW: Auto-dialer preferences
 
   @@map("agents")
 }
 
 model AgentSession {
-  id                   String    @id @default(uuid()) @db.Uuid
-  agentId              Int       @map("agent_id")
-  status               String    @default("offline")
-  currentCallSessionId String?   @map("current_call_session_id") @db.Uuid
-  loginAt              DateTime  @default(now()) @map("login_at")
-  logoutAt             DateTime? @map("logout_at")
-  lastActivity         DateTime  @default(now()) @map("last_activity")
-  callsCompletedToday  Int       @default(0) @map("calls_completed_today")
-  totalTalkTimeSeconds Int       @default(0) @map("total_talk_time_seconds")
-  agent                Agent     @relation(fields: [agentId], references: [id])
+  id                      String    @id @default(uuid()) @db.Uuid
+  agentId                 Int       @map("agent_id")
+  status                  String    @default("offline")
+  currentCallSessionId    String?   @map("current_call_session_id") @db.Uuid
+  loginAt                 DateTime  @default(now()) @map("login_at")
+  logoutAt                DateTime? @map("logout_at")
+  lastActivity            DateTime  @default(now()) @map("last_activity")
+  callsCompletedToday     Int       @default(0) @map("calls_completed_today")
+  totalTalkTimeSeconds    Int       @default(0) @map("total_talk_time_seconds")
+  // NEW: Auto-dialer session fields
+  autoDialerActive        Boolean   @default(false) @map("auto_dialer_active")
+  autoDialerQueueType     String?   @map("auto_dialer_queue_type")
+  lastAutoCallAt          DateTime? @map("last_auto_call_at")
+  callsCompletedInSession Int       @default(0) @map("calls_completed_in_session")
+  agent                   Agent     @relation(fields: [agentId], references: [id])
 
   @@map("agent_sessions")
 }
@@ -294,4 +302,21 @@ model SmsMessage {
 
   @@index([conversationId, createdAt])
   @@map("sms_messages")
+}
+
+model AutoDialerSettings {
+  id                        String   @id @default(uuid()) @db.Uuid
+  agentId                   Int      @unique @map("agent_id")
+  team                      String   @map("team")
+  timeBetweenCallsSeconds   Int      @default(30) @map("time_between_calls_seconds")
+  autoStartEnabled          Boolean  @default(false) @map("auto_start_enabled")
+  maxCallsPerSession        Int      @default(100) @map("max_calls_per_session")
+  breakIntervalMinutes      Int      @default(120) @map("break_interval_minutes")
+  audioNotificationsEnabled Boolean  @default(true) @map("audio_notifications_enabled")
+  keyboardShortcutsEnabled  Boolean  @default(true) @map("keyboard_shortcuts_enabled")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+  agent                     Agent    @relation(fields: [agentId], references: [id])
+
+  @@map("auto_dialer_settings")
 }

@@ -768,6 +768,10 @@ export class AuthService {
       firstName: dbAgent.firstName,
       lastName: dbAgent.lastName,
       role: dbAgent.role,
+      team: dbAgent.team || 'general',
+      allowedQueues: dbAgent.allowedQueues ? 
+        (Array.isArray(dbAgent.allowedQueues) ? dbAgent.allowedQueues : JSON.parse(dbAgent.allowedQueues)) : 
+        ['unsigned_users', 'outstanding_requests'],
       isActive: dbAgent.isActive,
       isAiAgent: dbAgent.isAiAgent,
       twilioWorkerSid: dbAgent.twilioWorkerSid,

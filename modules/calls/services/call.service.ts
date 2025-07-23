@@ -77,7 +77,7 @@ export class CallService {
         update: {},
         create: {
           userId: BigInt(userId),
-          currentScore: 50, // Default starting score
+          currentScore: 0, // Default starting score - 0 is highest priority
           totalAttempts: 0,
           successfulCalls: 0
         }

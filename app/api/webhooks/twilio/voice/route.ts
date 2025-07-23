@@ -187,7 +187,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           update: {},
           create: {
             userId: BigInt(userId),
-            currentScore: 50,
+            currentScore: 0,
             totalAttempts: 0,
             successfulCalls: 0
           }
