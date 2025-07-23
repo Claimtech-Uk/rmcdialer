@@ -31,7 +31,10 @@
     "cron:check": "curl -s http://localhost:3000/api/cron/health | jq .",
     "cron:discovery": "curl -X POST \"http://localhost:3000/api/cron/discover-new-leads\" -H \"Authorization: Bearer ${CRON_SECRET:-test-secret}\" | jq .",
     "cron:maintenance": "curl -X POST \"http://localhost:3000/api/cron/scoring-maintenance\" -H \"Authorization: Bearer ${CRON_SECRET:-test-secret}\" | jq .",
-    "cron:schedule": "tsx scripts/check-cron-schedule.ts"
+    "cron:schedule": "tsx scripts/check-cron-schedule.ts",
+    "queue:trigger": "./scripts/trigger-queue-discovery-now.sh",
+    "cron:logs": "curl -s https://rmcdialer-45m0lwnlq-james-campbells-projects-6c4e4922.vercel.app/api/cron/logs | jq .",
+    "cron:monitor": "./scripts/monitor-cron-schedule.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.850.0",
