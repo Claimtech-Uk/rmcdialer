@@ -269,4 +269,3 @@ export class LeadScoringService {
     return result;
   }
 } 
-} 
