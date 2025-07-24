@@ -95,14 +95,15 @@ export class NewUsersDiscoveryService {
       }
 
       result.success = true
-      result.summary = `✅ New Users Discovery: ${result.newUsersCreated} users added (${result.unsigned} unsigned, ${result.signed} signed)`
+      result.summary = `✅ New Users Discovery: ${result.newUsersCreated} users added to system (${result.unsigned} unsigned queue, ${result.signed} null queue)`
       
       // Enhanced completion logging
       logger.info(`🎉 [DISCOVERY COMPLETE] Summary:`)
       logger.info(`   📊 Total users checked: ${result.usersChecked}`)
       logger.info(`   🆕 New users found: ${result.newUsersFound}`)
-      logger.info(`   ➕ Users added to system: ${result.newUsersCreated}`)
-      logger.info(`   📝 Breakdown: ${result.unsigned} unsigned (added to queue), ${result.signed} signed (no queue needed)`)
+      logger.info(`   ➕ Users added to system: ${result.newUsersCreated} (all new users)`)
+      logger.info(`   📝 Breakdown: ${result.unsigned} unsigned (queue: unsigned_users), ${result.signed} signed (queue: null)`)
+      logger.info(`   🔗 All users now available for later crons (requirements, conversions, etc.)`)
       logger.info(`   ⏭️  Already processed: ${result.skippedExisting}`)
       logger.info(result.summary)
 
@@ -148,8 +149,9 @@ export class NewUsersDiscoveryService {
     const unsignedCount = users.filter(u => u.current_signature_file_id === null).length
 
     logger.info(`📊 [DISCOVERY] Found ${users.length} users in time window:`)
-    logger.info(`   ✍️  ${signedCount} signed users (will get no queue)`)
-    logger.info(`   📝 ${unsignedCount} unsigned users (will get unsigned_users queue)`)
+    logger.info(`   ✍️  ${signedCount} signed users (will get queue: null)`)
+    logger.info(`   📝 ${unsignedCount} unsigned users (will get queue: unsigned_users)`)
+    logger.info(`   🗄️  All users will be added to user_call_scores for future cron reference`)
 
     return users.map(user => ({
       id: user.id,
@@ -191,8 +193,8 @@ export class NewUsersDiscoveryService {
 
       const batch = newUsers.slice(i, i + this.BATCH_SIZE)
       
-      // Create user_call_scores entries for users that need queues
-      const usersToCreate = batch.filter(user => user.queueType !== null)
+      // Create user_call_scores entries for ALL new users (signed and unsigned)
+      const usersToCreate = batch // No filtering - add all users
       
       if (usersToCreate.length > 0) {
         const userScoresToCreate = usersToCreate.map(user => ({
@@ -201,7 +203,7 @@ export class NewUsersDiscoveryService {
           totalAttempts: 0,
           lastCallAt: null,
           isActive: true,
-          currentQueueType: user.queueType!
+          currentQueueType: user.queueType // Can be null for signed users
         }))
 
         await prisma.userCallScore.createMany({
@@ -211,7 +213,7 @@ export class NewUsersDiscoveryService {
 
         result.newUsersCreated += usersToCreate.length
         logger.info(`✅ [BATCH ${Math.floor(i / this.BATCH_SIZE) + 1}] Created ${usersToCreate.length} user_call_scores entries`)
-        logger.info(`   📈 Progress: ${result.newUsersCreated}/${newUsers.length} total users processed`)
+        logger.info(`   📈 Progress: ${result.newUsersCreated}/${newUsers.length} total users added to system`)
       }
 
       // Update counters
