@@ -7,22 +7,21 @@ export const runtime = 'nodejs'
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
-  console.log('🧪 [TEST] New Users Discovery test endpoint called...')
+  console.log('🧪 [TEST] New Discovery System Test')
   
   try {
     const discoveryService = new NewUsersDiscoveryService()
     
-    // Test with last 1 hour (same as production cron)
+    // Test with last 1 hour
     const result = await discoveryService.discoverNewUsers({ hoursBack: 1 })
     
     const duration = Date.now() - startTime
     
     return NextResponse.json({
-      success: true,
+      success: result.success,
       duration,
-      timestamp: result.timestamp,
       summary: result.summary,
-      details: {
+      data: {
         usersChecked: result.usersChecked,
         newUsersFound: result.newUsersFound,
         newUsersCreated: result.newUsersCreated,
@@ -37,13 +36,12 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     
-    console.error('❌ [TEST] New Users Discovery test failed:', error)
+    console.error('❌ [TEST] Discovery test failed:', error)
     
     return NextResponse.json({
       success: false,
       error: errorMessage,
-      duration,
-      timestamp: new Date().toISOString()
+      duration
     }, { status: 500 })
   }
 } 
