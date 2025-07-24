@@ -28,6 +28,7 @@ interface NewUserData {
  * - Determines queue type based on signature and requirements
  * - Adds new users with score 0 (highest priority)
  * - Skips users that already exist in user_call_scores
+ * - Processes each user only ONCE (not per queue type)
  */
 export class SmartDiscoveryService {
   
@@ -56,7 +57,7 @@ export class SmartDiscoveryService {
     };
 
     try {
-      // Step 1: Get users created in the last X hours
+      // Step 1: Get users created in the last X hours from MySQL replica
       const cutoffTime = new Date(Date.now() - (hoursBack * 60 * 60 * 1000));
       logger.info(`📅 Looking for users created after: ${cutoffTime.toISOString()}`);
       
@@ -80,139 +81,87 @@ export class SmartDiscoveryService {
       });
 
       result.usersChecked = recentUsers.length;
-      logger.info(`👥 Found ${result.usersChecked} users created in last ${hoursBack} hours`);
+      logger.info(`📊 Found ${recentUsers.length} users created in last ${hoursBack} hour(s)`);
 
       if (recentUsers.length === 0) {
-        logger.info('✅ No new users found');
+        logger.info('✅ No new users found in time window');
         return result;
       }
 
       // Step 2: Check which users already exist in user_call_scores
-      const userIds = recentUsers.map(u => u.id);
+      const userIds = recentUsers.map(user => Number(user.id));
       const existingScores = await prisma.userCallScore.findMany({
         where: { userId: { in: userIds } },
         select: { userId: true }
       });
-
-      const existingUserIds = new Set(existingScores.map(s => s.userId));
-      result.skippedExisting = existingScores.length;
-
-      // Step 3: Filter to only truly new users
-      const newUsers = recentUsers.filter(user => !existingUserIds.has(user.id));
+      
+      const existingUserIds = new Set(existingScores.map(score => score.userId));
+      const newUsers = recentUsers.filter(user => !existingUserIds.has(Number(user.id)));
+      
       result.newUsersFound = newUsers.length;
+      result.skippedExisting = recentUsers.length - newUsers.length;
+      
+      logger.info(`🆕 Found ${newUsers.length} NEW users (${result.skippedExisting} already exist)`);
 
-      logger.info(`🆕 Found ${result.newUsersFound} new users (${result.skippedExisting} already exist, skipped)`);
-
-      // Step 4: Process new users in batches
-      if (newUsers.length > 0) {
-        result.newUsersCreated = await this.processNewUsersInBatches(newUsers, result);
+      if (newUsers.length === 0) {
+        logger.info('✅ All users in time window already processed');
+        return result;
       }
 
-      const duration = Date.now() - this.startTime;
-      logger.info(`✅ New users discovery completed in ${duration}ms`);
-      logger.info(`📊 Summary: ${result.newUsersCreated}/${result.newUsersFound} users processed (${result.unsigned} unsigned, ${result.signed} signed)`);
+      // Step 3: Process new users and determine queue types
+      const usersToCreate: NewUserData[] = [];
+      
+      for (const user of newUsers) {
+        try {
+          const userData = this.analyzeUserForQueue(user);
+          usersToCreate.push(userData);
+          
+          // Count by type
+          if (userData.queueType === 'unsigned_users') {
+            result.unsigned++;
+          } else if (userData.queueType === 'outstanding_requests') {
+            result.signed++;
+          }
+        } catch (error) {
+          logger.error(`❌ Error analyzing user ${user.id}:`, error);
+          result.errors++;
+        }
+      }
 
+      // Step 4: Create user_call_scores entries in batches
+      if (usersToCreate.length > 0) {
+        await this.createUserScoresInBatches(usersToCreate);
+        result.newUsersCreated = usersToCreate.length;
+        logger.info(`✅ Created ${result.newUsersCreated} new user scores`);
+      }
+
+      return result;
+      
     } catch (error) {
       logger.error('❌ New users discovery failed:', error);
-      result.errors++;
       throw error;
     }
-
-    return result;
   }
 
   /**
-   * Process new users in batches to avoid timeout
+   * Analyze a user to determine their queue type
    */
-  private async processNewUsersInBatches(newUsers: any[], result: SmartDiscoveryResult): Promise<number> {
-    let created = 0;
-    
-    for (let i = 0; i < newUsers.length; i += this.BATCH_SIZE) {
-      if (this.isTimeoutApproaching()) {
-        logger.warn(`⏰ Timeout approaching, processed ${created}/${newUsers.length} new users`);
-        break;
-      }
-      
-      const batch = newUsers.slice(i, i + this.BATCH_SIZE);
-      const batchCreated = await this.processBatchOfNewUsers(batch, result);
-      created += batchCreated;
-      
-      logger.info(`✅ Batch ${Math.floor(i/this.BATCH_SIZE) + 1}: Created ${batchCreated}/${batch.length} scores (${created}/${newUsers.length} total)`);
-    }
-    
-    return created;
-  }
-
-  /**
-   * Process a batch of new users
-   */
-  private async processBatchOfNewUsers(batch: any[], result: SmartDiscoveryResult): Promise<number> {
-    let created = 0;
-
-    for (const user of batch) {
-      try {
-        const userData = this.analyzeNewUser(user);
-        
-        // Count by type for reporting
-        if (userData.hasSignature) {
-          result.signed++;
-        } else {
-          result.unsigned++;
-        }
-
-        // Only create user_call_scores if user needs to be in a queue
-        if (userData.queueType) {
-          await prisma.userCallScore.create({
-            data: {
-              userId: userData.id,
-              currentScore: 0, // New users start with highest priority
-              totalAttempts: 0,
-              successfulCalls: 0,
-              currentQueueType: userData.queueType,
-              isActive: true,
-              lastQueueCheck: new Date(),
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }
-          });
-          created++;
-          
-          logger.debug(`✅ Created score for user ${userData.id} in ${userData.queueType} queue`);
-        } else {
-          logger.debug(`⏭️ User ${userData.id} doesn't need queue (signed with no pending requirements)`);
-        }
-
-      } catch (error) {
-        logger.error(`❌ Failed to process user ${user.id}:`, error);
-        result.errors++;
-      }
-    }
-
-    return created;
-  }
-
-  /**
-   * Analyze a new user to determine their queue type
-   * Based on signature status and pending requirements
-   */
-  private analyzeNewUser(user: any): NewUserData {
+  private analyzeUserForQueue(user: any): NewUserData {
     const hasSignature = user.current_signature_file_id !== null;
-    const pendingRequirements = user.claims.reduce((acc: number, claim: any) => 
-      acc + claim.requirements.length, 0
-    );
+    const pendingRequirements = user.claims?.reduce((total: number, claim: any) => 
+      total + (claim.requirements?.length || 0), 0) || 0;
 
     let queueType: QueueType | null = null;
     
+    // Business logic for queue assignment
     if (!hasSignature) {
       // No signature = unsigned users queue
       queueType = 'unsigned_users';
-    } else if (pendingRequirements > 0) {
-      // Has signature but pending requirements = outstanding requests queue
+    } else if (hasSignature && pendingRequirements > 0) {
+      // Has signature but has pending requirements = outstanding requests queue
       queueType = 'outstanding_requests';
-    } else {
-      // Has signature and no pending requirements = no queue needed
-      queueType = null;
     }
+    // If has signature and no pending requirements = no queue needed
 
     return {
       id: user.id,
@@ -223,10 +172,91 @@ export class SmartDiscoveryService {
   }
 
   /**
-   * Check if we're approaching timeout
+   * Create user_call_scores entries in batches
    */
-  private isTimeoutApproaching(): boolean {
-    const elapsed = Date.now() - this.startTime;
-    return elapsed > this.MAX_EXECUTION_TIME;
+  private async createUserScoresInBatches(users: NewUserData[]): Promise<void> {
+    const eligibleUsers = users.filter(user => user.queueType !== null);
+    
+    if (eligibleUsers.length === 0) {
+      logger.info('ℹ️ No users need queue assignment');
+      return;
+    }
+
+    for (let i = 0; i < eligibleUsers.length; i += this.BATCH_SIZE) {
+      const batch = eligibleUsers.slice(i, i + this.BATCH_SIZE);
+      
+      const userScoresToCreate = batch.map(user => ({
+        userId: user.id,
+        currentScore: 0, // New users get highest priority
+        totalAttempts: 0,
+        lastCallAt: null,
+        isActive: true,
+        currentQueueType: user.queueType!
+      }));
+
+      await prisma.userCallScore.createMany({
+        data: userScoresToCreate,
+        skipDuplicates: true // Safety net
+      });
+
+      logger.info(`✅ Batch ${Math.floor(i / this.BATCH_SIZE) + 1}: Created ${batch.length} user scores`);
+      
+      // Check execution time
+      if (Date.now() - this.startTime > this.MAX_EXECUTION_TIME) {
+        logger.warn('⚠️ Approaching execution time limit, stopping batch processing');
+        break;
+      }
+    }
+  }
+
+  /**
+   * Cron 2: Discover New Requirements (hourly) 
+   * TODO: Implement in next phase
+   */
+  async discoverNewRequirements(hoursBack: number = 1): Promise<SmartDiscoveryResult> {
+    logger.info('🔄 New requirements discovery - TODO: Implement next');
+    return {
+      usersChecked: 0,
+      newUsersFound: 0, 
+      newUsersCreated: 0,
+      skippedExisting: 0,
+      unsigned: 0,
+      signed: 0,
+      errors: 0
+    };
+  }
+
+  /**
+   * Cron 3: Check Unsigned Conversions (hourly)
+   * TODO: Implement in next phase  
+   */
+  async checkUnsignedConversions(hoursBack: number = 1): Promise<SmartDiscoveryResult> {
+    logger.info('🔄 Unsigned conversions check - TODO: Implement next');
+    return {
+      usersChecked: 0,
+      newUsersFound: 0,
+      newUsersCreated: 0, 
+      skippedExisting: 0,
+      unsigned: 0,
+      signed: 0,
+      errors: 0
+    };
+  }
+
+  /**
+   * Cron 4: Check Requirements Conversions (hourly)
+   * TODO: Implement in next phase
+   */
+  async checkRequirementsConversions(hoursBack: number = 1): Promise<SmartDiscoveryResult> {
+    logger.info('🔄 Requirements conversions check - TODO: Implement next');
+    return {
+      usersChecked: 0,
+      newUsersFound: 0,
+      newUsersCreated: 0,
+      skippedExisting: 0, 
+      unsigned: 0,
+      signed: 0,
+      errors: 0
+    };
   }
 } 
