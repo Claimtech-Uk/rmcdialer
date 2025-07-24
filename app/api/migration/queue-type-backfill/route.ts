@@ -15,7 +15,8 @@ export async function GET(request: NextRequest) {
   // Parse options from query parameters
   const dryRun = searchParams.get('dryRun') === 'true'
   const batchSize = parseInt(searchParams.get('batchSize') || '300')
-  const maxUsers = searchParams.get('maxUsers') ? parseInt(searchParams.get('maxUsers')) : undefined
+  const maxUsersParam = searchParams.get('maxUsers')
+  const maxUsers = maxUsersParam ? parseInt(maxUsersParam) : undefined
   const offset = parseInt(searchParams.get('offset') || '0')
 
   try {
