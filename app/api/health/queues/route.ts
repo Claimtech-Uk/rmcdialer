@@ -8,7 +8,7 @@ export async function GET() {
     const validationService = new PreCallValidationService();
     
     const [queueStats, replicaHealth, queueHealthChecks] = await Promise.all([
-      // Get queue statistics  
+      // Get queue statistics
       Promise.all([
         prisma.callQueue.count({ where: { queueType: 'unsigned_users', status: 'pending' } }),
         prisma.callQueue.count({ where: { queueType: 'outstanding_requests', status: 'pending' } }),

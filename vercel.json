@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/smart-new-users-discovery",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/signature-conversion-cleanup",
+      "schedule": "30 * * * *"
     }
   ],
   "git": {

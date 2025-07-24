@@ -822,9 +822,9 @@ export class CallService {
         });
 
         // Mark user as inactive in scoring system
-        await tx.userCallScore.upsert({
-          where: { userId: BigInt(userId) },
-          update: {
+    await tx.userCallScore.upsert({
+      where: { userId: BigInt(userId) },
+      update: {
             isActive: false,
             currentScore: newPriorityScore.finalScore,
             updatedAt: new Date()
@@ -835,8 +835,8 @@ export class CallService {
             isActive: false,
             currentQueueType: currentQueueType,
             lastResetDate: needsReset ? new Date() : new Date(),
-            lastOutcome: outcomeType,
-            lastCallAt: new Date(),
+        lastOutcome: outcomeType,
+        lastCallAt: new Date(),
             totalAttempts: 1
           }
         });
@@ -856,17 +856,17 @@ export class CallService {
             totalAttempts: scoringContext.totalAttempts,
             successfulCalls: outcomeType === 'contacted' ? { increment: 1 } : undefined,
             lastQueueCheck: new Date(),
-            updatedAt: new Date()
-          },
-          create: {
-            userId: BigInt(userId),
+        updatedAt: new Date()
+      },
+      create: {
+        userId: BigInt(userId),
             currentScore: newPriorityScore.finalScore,
             isActive: true,
             currentQueueType: currentQueueType,
             lastResetDate: new Date(),
-            lastOutcome: outcomeType,
-            lastCallAt: new Date(),
-            totalAttempts: 1,
+        lastOutcome: outcomeType,
+        lastCallAt: new Date(),
+        totalAttempts: 1,
             successfulCalls: outcomeType === 'contacted' ? 1 : 0
           }
         });
@@ -884,8 +884,8 @@ export class CallService {
           data: { 
             status: shouldConvert ? 'converted' : 'completed',
             updatedAt: new Date()
-          }
-        });
+      }
+    });
       }
 
     } catch (error) {

@@ -50,7 +50,7 @@ const queueConfigs: Record<QueueType, QueueConfig> = {
     showRequirementsCount: false
   },
   outstanding_requests: {
-    type: 'outstanding_requests', 
+    type: 'outstanding_requests',
     title: 'Outstanding Requests',
     description: 'Users with pending document requirements',
     icon: FileText,

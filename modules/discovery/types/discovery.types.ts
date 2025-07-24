@@ -31,7 +31,19 @@ export interface NewUsersDiscoveryResult extends BaseDiscoveryResult {
   signed: number
 }
 
-// Cron 2: Unsigned Conversion Tracking
+// Cron 2: Signature Conversion Cleanup
+export interface SignatureConversionResult extends BaseDiscoveryResult {
+  totalUnsignedUsers: number
+  usersChecked: number
+  conversionsFound: number
+  usersUpdated: number
+  batchesProcessed: number
+  processingStrategy: string
+  completed: boolean
+  conversions: SignatureConversionData[]
+}
+
+// Cron 2: Unsigned Conversion Tracking (Legacy)
 export interface UnsignedConversionResult extends BaseDiscoveryResult {
   usersChecked: number
   conversionsFound: number
@@ -61,6 +73,12 @@ export interface NewUserData {
   id: bigint
   queueType: QueueType | null
   hasSignature: boolean
+}
+
+export interface SignatureConversionData {
+  userId: bigint
+  signatureFileId: number
+  convertedAt: Date
 }
 
 export interface ConversionData {
@@ -93,11 +111,13 @@ export interface DiscoveryOptions {
   hoursBack?: number
   dryRun?: boolean
   forceRefresh?: boolean
+  batchSize?: number
 }
 
 // =============================================================================
 // ONE-OFF MIGRATION: Queue Type Backfill
 // =============================================================================
+
 // Types for the one-time migration to backfill currentQueueType for existing users
 
 export interface QueueTypeMigrationResult extends BaseDiscoveryResult {
