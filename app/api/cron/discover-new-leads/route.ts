@@ -3,6 +3,7 @@ import { NewRequirementsDiscoveryService } from '@/modules/discovery/services/ne
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+// Force redeploy - requirements discovery cron
 
 async function logCronExecution(jobName: string, status: 'running' | 'success' | 'failed', duration: number, details: any, error?: string) {
   try {
