@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DailyAgingService } from '@/modules/queue/services/daily-aging.service';
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 async function logCronExecution(jobName: string, status: 'running' | 'success' | 'failed', duration: number, details: any, error?: string) {
   try {
     await fetch(`${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/cron/logs`, {
