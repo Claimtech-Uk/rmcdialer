@@ -32,14 +32,14 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
   const startDate = new Date()
   
-  console.log(`🚀 [CRON] New Requirements Discovery STARTED`)
+  console.log(`🚀 [CRON] Requirements Lookup & Discovery STARTED`)
   console.log(`   🕐 Started at: ${startDate.toISOString()}`)
-  console.log(`   🎯 Task: Discover new requirements from last 1 hour`)
+  console.log(`   🎯 Task: Lookup new claim requirements from last 1 hour`)
   
   try {
     // Log start
-    await logCronExecution('discover-new-leads', 'running', 0, { 
-      message: 'New requirements discovery started',
+    await logCronExecution('discover-new-requirements', 'running', 0, { 
+      message: 'Requirements lookup and discovery started',
       timestamp: startDate.toISOString()
     });
     
@@ -51,13 +51,13 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     const endDate = new Date()
     
-    console.log(`✅ [CRON] New Requirements Discovery COMPLETED`)
+    console.log(`✅ [CRON] Requirements Lookup & Discovery COMPLETED`)
     console.log(`   🕐 Finished at: ${endDate.toISOString()}`)
     console.log(`   ⏱️  Duration: ${duration}ms (${(duration/1000).toFixed(2)}s)`)
     console.log(`   📊 Result: ${result.summary}`)
     
     // Log success
-    await logCronExecution('discover-new-leads', 'success', duration, {
+    await logCronExecution('discover-new-requirements', 'success', duration, {
       requirementsChecked: result.requirementsChecked,
       newRequirementsFound: result.newRequirementsFound,
       usersUpdated: result.usersUpdated,
@@ -86,13 +86,13 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     
-    console.error(`❌ [CRON] New Requirements Discovery FAILED`)
+    console.error(`❌ [CRON] Requirements Lookup & Discovery FAILED`)
     console.error(`   🕐 Failed at: ${new Date().toISOString()}`)
     console.error(`   ⏱️  Duration: ${duration}ms`)
     console.error(`   ❗ Error: ${errorMessage}`)
     
     // Log failure
-    await logCronExecution('discover-new-leads', 'failed', duration, {
+    await logCronExecution('discover-new-requirements', 'failed', duration, {
       errorMessage,
       errorStack: error instanceof Error ? error.stack : undefined
     }, errorMessage);

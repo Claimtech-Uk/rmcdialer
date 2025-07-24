@@ -152,6 +152,33 @@ export class NewRequirementsDiscoveryService {
         user_id: bigint
       }>
 
+      // 📊 DETAILED ANALYSIS: Log requirement types breakdown
+      const typeBreakdown = requirements.reduce((acc, req) => {
+        acc[req.type] = (acc[req.type] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+
+      const uniqueUsers = new Set(requirements.map(req => req.user_id)).size
+      const totalRequirements = requirements.length
+
+      logger.info(`📊 [REQUIREMENTS ANALYSIS] Found ${totalRequirements} requirements for ${uniqueUsers} unique users`)
+      logger.info(`📋 [TYPE BREAKDOWN]:`)
+      Object.entries(typeBreakdown)
+        .sort(([,a], [,b]) => b - a) // Sort by count descending
+        .forEach(([type, count]) => {
+          logger.info(`   📄 ${type}: ${count} requirements`)
+        })
+
+      // Log excluded types for reference
+      logger.info(`🚫 [EXCLUDED TYPES]: ${this.EXCLUDED_TYPES.join(', ')}`)
+      
+      // Show time range analysis
+      const oldestReq = requirements[requirements.length - 1]
+      const newestReq = requirements[0]
+      if (oldestReq && newestReq) {
+        logger.info(`⏰ [TIME RANGE]: ${newestReq.created_at.toISOString()} → ${oldestReq.created_at.toISOString()}`)
+      }
+
       return requirements.map(req => ({
         requirementId: req.requirement_id,
         userId: req.user_id,
@@ -179,6 +206,8 @@ export class NewRequirementsDiscoveryService {
     // Get unique user IDs
     const userIds = [...new Set(requirements.map(req => req.userId))]
     
+    logger.info(`🔍 [FILTERING] Checking ${userIds.length} unique users from ${requirements.length} requirements`)
+    
     try {
       // Check which users have signatures (signed users only)
       const query = `
@@ -193,11 +222,15 @@ export class NewRequirementsDiscoveryService {
         current_signature_file_id: number | null
       }>
       
-      const signedUserIds = new Set(
-        users
-          .filter(user => user.current_signature_file_id !== null)
-          .map(user => user.id)
-      )
+      const signedUsers = users.filter(user => user.current_signature_file_id !== null)
+      const unsignedUsers = users.filter(user => user.current_signature_file_id === null)
+      
+      logger.info(`👥 [USER ANALYSIS]:`)
+      logger.info(`   ✍️  ${signedUsers.length} signed users (will be processed)`)
+      logger.info(`   📝 ${unsignedUsers.length} unsigned users (will be skipped)`)
+      logger.info(`   📊 Total users checked: ${users.length}`)
+      
+      const signedUserIds = new Set(signedUsers.map(user => user.id))
       
       // Filter requirements for signed users only
       const eligibleRequirements = requirements.filter(req => {
@@ -207,6 +240,22 @@ export class NewRequirementsDiscoveryService {
         }
         return true
       })
+      
+      // Show requirements per user breakdown
+      const reqPerUser = eligibleRequirements.reduce((acc, req) => {
+        const userId = req.userId.toString()
+        acc[userId] = (acc[userId] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+      
+      const userReqCounts = Object.values(reqPerUser)
+      const avgReqsPerUser = userReqCounts.length > 0 ? (userReqCounts.reduce((a, b) => a + b, 0) / userReqCounts.length).toFixed(1) : '0'
+      const maxReqsPerUser = userReqCounts.length > 0 ? Math.max(...userReqCounts) : 0
+      
+      logger.info(`📊 [REQUIREMENTS PER USER]:`)
+      logger.info(`   📈 Average: ${avgReqsPerUser} requirements per user`)
+      logger.info(`   📊 Maximum: ${maxReqsPerUser} requirements for one user`)
+      logger.info(`   👥 Unique users with requirements: ${Object.keys(reqPerUser).length}`)
       
       result.newRequirementsFound = eligibleRequirements.length
       
