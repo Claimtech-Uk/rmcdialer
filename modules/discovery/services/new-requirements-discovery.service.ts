@@ -98,7 +98,7 @@ export class NewRequirementsDiscoveryService {
       }
 
       result.success = true
-      result.summary = `✅ New Requirements Discovery: ${result.usersUpdated} users updated to requirements queue`
+      result.summary = `✅ New Requirements Discovery: ${result.usersUpdated} users updated to outstanding_requests queue`
       
       logger.info(result.summary)
 
@@ -298,12 +298,12 @@ export class NewRequirementsDiscoveryService {
           })
           
           if (existingScore) {
-            // Update existing user to requirements queue
+            // Update existing user to outstanding_requests queue
             await prisma.userCallScore.update({
               where: { userId },
               data: {
                 // @ts-ignore - currentQueueType exists in schema
-                currentQueueType: 'requirements',
+                currentQueueType: 'outstanding_requests',
                 currentScore: 0,
                 isActive: true,
                 // @ts-ignore - lastQueueCheck exists in schema  
@@ -311,12 +311,12 @@ export class NewRequirementsDiscoveryService {
               }
             })
           } else {
-            // Create new user score entry for requirements queue
+            // Create new user score entry for outstanding_requests queue
             await prisma.userCallScore.create({
               data: {
                 userId,
                 // @ts-ignore - currentQueueType exists in schema
-                currentQueueType: 'requirements',
+                currentQueueType: 'outstanding_requests',
                 currentScore: 0,
                 totalAttempts: 0,
                 isActive: true,
@@ -334,7 +334,7 @@ export class NewRequirementsDiscoveryService {
         }
       }
       
-      logger.info(`✅ Batch ${Math.floor(i / this.BATCH_SIZE) + 1}: Updated ${batch.length} users to requirements queue (${updated}/${userIds.length} total)`)
+      logger.info(`✅ Batch ${Math.floor(i / this.BATCH_SIZE) + 1}: Updated ${batch.length} users to outstanding_requests queue (${updated}/${userIds.length} total)`)
     }
     
     result.usersUpdated = updated
