@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/signature-conversion-cleanup",
       "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/cron/discover-new-leads",
+      "schedule": "35 * * * *"
     }
   ],
   "git": {
