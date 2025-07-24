@@ -89,14 +89,14 @@ export class SmartDiscoveryService {
       }
 
       // Step 2: Check which users already exist in user_call_scores
-      const userIds = recentUsers.map(user => Number(user.id));
+      const userIds = recentUsers.map(user => user.id);
       const existingScores = await prisma.userCallScore.findMany({
         where: { userId: { in: userIds } },
         select: { userId: true }
       });
       
       const existingUserIds = new Set(existingScores.map(score => score.userId));
-      const newUsers = recentUsers.filter(user => !existingUserIds.has(Number(user.id)));
+      const newUsers = recentUsers.filter(user => !existingUserIds.has(user.id));
       
       result.newUsersFound = newUsers.length;
       result.skippedExisting = recentUsers.length - newUsers.length;
