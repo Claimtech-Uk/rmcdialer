@@ -17,18 +17,21 @@ interface NewUserData {
   id: bigint;
   queueType: QueueType | null;
   hasSignature: boolean;
-  pendingRequirements: number;
 }
 
 /**
  * Smart Discovery Service - Targeted User Discovery
  * 
+ * 🎯 DISCOVERY GOALS:
+ * 1. Add new users from last hour
+ * 2. Mark as unsigned_users queue (no signature) or no queue (has signature)
+ * 
  * 🎯 SMART OPTIMIZATIONS:
  * - Only processes users created in specified time window
- * - Determines queue type based on signature and requirements
+ * - Simple signature check: has signature = no queue, no signature = unsigned queue
  * - Adds new users with score 0 (highest priority)
  * - Skips users that already exist in user_call_scores
- * - Processes each user only ONCE (not per queue type)
+ * - Processes each user only ONCE
  */
 export class SmartDiscoveryService {
   
@@ -39,8 +42,9 @@ export class SmartDiscoveryService {
   /**
    * Cron 1: Discover New Users (hourly)
    * Only check users created in last hour
-   * Add all users (signed and unsigned)
-   * Determine queue type and create user_call_scores entries
+   * Add all users based on signature status:
+   * - No signature → unsigned_users queue
+   * - Has signature → no queue (complete)
    */
   async discoverNewUsers(hoursBack: number = 1): Promise<SmartDiscoveryResult> {
     this.startTime = Date.now();
@@ -68,14 +72,12 @@ export class SmartDiscoveryService {
           first_name: { not: null },
           created_at: { gte: cutoffTime }
         },
-        include: {
-          claims: {
-            include: {
-              requirements: {
-                where: { status: 'PENDING' }
-              }
-            }
-          }
+        select: {
+          id: true,
+          current_signature_file_id: true,
+          first_name: true,
+          last_name: true,
+          created_at: true
         },
         orderBy: { created_at: 'desc' }
       });
@@ -108,19 +110,19 @@ export class SmartDiscoveryService {
         return result;
       }
 
-      // Step 3: Process new users and determine queue types
+      // Step 3: Process new users and determine queue assignment
       const usersToCreate: NewUserData[] = [];
       
       for (const user of newUsers) {
         try {
-          const userData = this.analyzeUserForQueue(user);
+          const userData = this.analyzeUserSignatureStatus(user);
           usersToCreate.push(userData);
           
           // Count by type
-          if (userData.queueType === 'unsigned_users') {
-            result.unsigned++;
-          } else if (userData.queueType === 'outstanding_requests') {
+          if (userData.hasSignature) {
             result.signed++;
+          } else {
+            result.unsigned++;
           }
         } catch (error) {
           logger.error(`❌ Error analyzing user ${user.id}:`, error);
@@ -128,11 +130,11 @@ export class SmartDiscoveryService {
         }
       }
 
-      // Step 4: Create user_call_scores entries in batches
+      // Step 4: Create user_call_scores entries for users that need queues
       if (usersToCreate.length > 0) {
         await this.createUserScoresInBatches(usersToCreate);
-        result.newUsersCreated = usersToCreate.length;
-        logger.info(`✅ Created ${result.newUsersCreated} new user scores`);
+        result.newUsersCreated = usersToCreate.filter(u => u.queueType !== null).length;
+        logger.info(`✅ Created ${result.newUsersCreated} new user scores (${result.signed} signed users skipped)`);
       }
 
       return result;
@@ -144,41 +146,35 @@ export class SmartDiscoveryService {
   }
 
   /**
-   * Analyze a user to determine their queue type
+   * Analyze a user's signature status to determine queue assignment
+   * Simple logic: has signature = no queue, no signature = unsigned queue
    */
-  private analyzeUserForQueue(user: any): NewUserData {
+  private analyzeUserSignatureStatus(user: any): NewUserData {
     const hasSignature = user.current_signature_file_id !== null;
-    const pendingRequirements = user.claims?.reduce((total: number, claim: any) => 
-      total + (claim.requirements?.length || 0), 0) || 0;
 
     let queueType: QueueType | null = null;
     
-    // Business logic for queue assignment
     if (!hasSignature) {
-      // No signature = unsigned users queue
+      // No signature = needs to be called to get signed
       queueType = 'unsigned_users';
-    } else if (hasSignature && pendingRequirements > 0) {
-      // Has signature but has pending requirements = outstanding requests queue
-      queueType = 'outstanding_requests';
     }
-    // If has signature and no pending requirements = no queue needed
+    // Has signature = complete, no queue needed
 
     return {
       id: user.id,
       queueType,
-      hasSignature,
-      pendingRequirements
+      hasSignature
     };
   }
 
   /**
-   * Create user_call_scores entries in batches
+   * Create user_call_scores entries in batches (only for users that need queues)
    */
   private async createUserScoresInBatches(users: NewUserData[]): Promise<void> {
     const eligibleUsers = users.filter(user => user.queueType !== null);
     
     if (eligibleUsers.length === 0) {
-      logger.info('ℹ️ No users need queue assignment');
+      logger.info('ℹ️ No users need queue assignment (all signed)');
       return;
     }
 
@@ -199,7 +195,7 @@ export class SmartDiscoveryService {
         skipDuplicates: true // Safety net
       });
 
-      logger.info(`✅ Batch ${Math.floor(i / this.BATCH_SIZE) + 1}: Created ${batch.length} user scores`);
+      logger.info(`✅ Batch ${Math.floor(i / this.BATCH_SIZE) + 1}: Created ${batch.length} user scores (unsigned queue)`);
       
       // Check execution time
       if (Date.now() - this.startTime > this.MAX_EXECUTION_TIME) {
