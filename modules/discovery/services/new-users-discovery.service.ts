@@ -85,7 +85,9 @@ export class NewUsersDiscoveryService {
         return result
       }
 
-      logger.info(`🆕 Found ${newUsers.length} NEW users (${result.skippedExisting} already scored, skipped)`)
+      logger.info(`🔄 [FILTERING] Checking which users are genuinely new...`)
+      logger.info(`   ✅ ${newUsers.length} NEW users (need processing)`)
+      logger.info(`   ⏭️  ${result.skippedExisting} users already scored (skipped)`)
 
       // Step 3: Process new users in batches
       if (!dryRun) {
@@ -95,6 +97,13 @@ export class NewUsersDiscoveryService {
       result.success = true
       result.summary = `✅ New Users Discovery: ${result.newUsersCreated} users added (${result.unsigned} unsigned, ${result.signed} signed)`
       
+      // Enhanced completion logging
+      logger.info(`🎉 [DISCOVERY COMPLETE] Summary:`)
+      logger.info(`   📊 Total users checked: ${result.usersChecked}`)
+      logger.info(`   🆕 New users found: ${result.newUsersFound}`)
+      logger.info(`   ➕ Users added to system: ${result.newUsersCreated}`)
+      logger.info(`   📝 Breakdown: ${result.unsigned} unsigned (added to queue), ${result.signed} signed (no queue needed)`)
+      logger.info(`   ⏭️  Already processed: ${result.skippedExisting}`)
       logger.info(result.summary)
 
     } catch (error) {
@@ -113,9 +122,12 @@ export class NewUsersDiscoveryService {
    * Get users created in the specified time window from MySQL
    */
   private async getRecentUsersFromMySQL(hoursBack: number): Promise<NewUserData[]> {
+    const now = new Date()
     const cutoffTime = new Date(Date.now() - (hoursBack * 60 * 60 * 1000))
     
-    logger.info(`📅 Checking users created after: ${cutoffTime.toISOString()}`)
+    logger.info(`🔍 [DISCOVERY] Searching for users created between:`)
+    logger.info(`   📅 From: ${cutoffTime.toISOString()} (${hoursBack} hour${hoursBack !== 1 ? 's' : ''} ago)`)
+    logger.info(`   📅 To:   ${now.toISOString()} (now)`)
 
     const query = `
       SELECT 
@@ -131,6 +143,13 @@ export class NewUsersDiscoveryService {
       id: bigint
       current_signature_file_id: number | null
     }>
+
+    const signedCount = users.filter(u => u.current_signature_file_id !== null).length
+    const unsignedCount = users.filter(u => u.current_signature_file_id === null).length
+
+    logger.info(`📊 [DISCOVERY] Found ${users.length} users in time window:`)
+    logger.info(`   ✍️  ${signedCount} signed users (will get no queue)`)
+    logger.info(`   📝 ${unsignedCount} unsigned users (will get unsigned_users queue)`)
 
     return users.map(user => ({
       id: user.id,
@@ -191,7 +210,8 @@ export class NewUsersDiscoveryService {
         })
 
         result.newUsersCreated += usersToCreate.length
-        logger.info(`✅ Batch ${Math.floor(i / this.BATCH_SIZE) + 1}: Created ${usersToCreate.length}/${batch.length} scores (${result.newUsersCreated}/${newUsers.length} total)`)
+        logger.info(`✅ [BATCH ${Math.floor(i / this.BATCH_SIZE) + 1}] Created ${usersToCreate.length} user_call_scores entries`)
+        logger.info(`   📈 Progress: ${result.newUsersCreated}/${newUsers.length} total users processed`)
       }
 
       // Update counters
