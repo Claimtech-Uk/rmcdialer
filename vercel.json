@@ -22,7 +22,7 @@
       "schedule": "30 * * * *"
     },
     {
-      "path": "/api/cron/discover-new-leads",
+      "path": "/api/cron/discover-new-requirements",
       "schedule": "35 * * * *"
     }
   ],
