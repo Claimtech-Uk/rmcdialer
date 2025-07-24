@@ -17,6 +17,12 @@ export async function POST(request: NextRequest) {
     
     console.log(`✅ [ADMIN TRIGGER] Manual cleanup completed: ${result.summary} (${duration}ms)`)
     
+    // Convert BigInt values to strings for JSON serialization
+    const serializedConversions = result.conversions.map(conversion => ({
+      ...conversion,
+      userId: conversion.userId.toString()
+    }))
+    
     return NextResponse.json({
       success: result.success,
       duration,
@@ -31,7 +37,7 @@ export async function POST(request: NextRequest) {
         processingStrategy: result.processingStrategy,
         completed: result.completed
       },
-      conversions: result.conversions,
+      conversions: serializedConversions,
       errors: result.errors,
       triggeredBy: 'manual-admin',
       note: 'Check the conversions table in your database for new records'

@@ -6,6 +6,12 @@ export const runtime = 'nodejs'
 
 async function logCronExecution(jobName: string, status: 'running' | 'success' | 'failed', duration: number, details: any, error?: string) {
   try {
+    // Skip logging in production serverless environment to avoid localhost connection errors
+    // The main console.log statements provide sufficient logging in Vercel
+    if (process.env.NODE_ENV === 'production') {
+      return;
+    }
+    
     await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/cron/logs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -53,6 +59,12 @@ export async function GET(request: NextRequest) {
       summary: result.summary
     });
     
+    // Convert BigInt values to strings for JSON serialization
+    const serializedConversions = result.conversions.map(conversion => ({
+      ...conversion,
+      userId: conversion.userId.toString()
+    }))
+
     return NextResponse.json({
       success: result.success,
       duration,
@@ -67,7 +79,7 @@ export async function GET(request: NextRequest) {
         processingStrategy: result.processingStrategy,
         completed: result.completed
       },
-      conversions: result.conversions,
+      conversions: serializedConversions,
       errors: result.errors,
       nextRun: getNextRunTime()
     })
