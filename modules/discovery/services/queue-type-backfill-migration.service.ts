@@ -194,14 +194,12 @@ export class QueueTypeBackfillMigrationService {
       const userSignatureStatus = await replicaDb.$queryRawUnsafe(
         `SELECT 
            id,
-           current_signature_file_id,
-           (current_signature_file_id IS NULL) as is_unsigned
+           current_signature_file_id
          FROM users 
          WHERE id IN (${userIds.join(',')})`
       ) as Array<{
         id: string
         current_signature_file_id: number | null
-        is_unsigned: number // MySQL boolean as number
       }>
 
       // Separate unsigned users that need updating
@@ -209,12 +207,20 @@ export class QueueTypeBackfillMigrationService {
       let signedCount = 0
 
       for (const user of userSignatureStatus) {
-        if (user.is_unsigned === 1) {
+        // If current_signature_file_id IS NULL, user is unsigned
+        if (user.current_signature_file_id === null) {
           unsignedUserIds.push(BigInt(user.id))
         } else {
           signedCount++
         }
       }
+
+      logger.info(`🔍 [BATCH DEBUG] Processed ${userSignatureStatus.length} users`)
+      logger.info(`   🔍 Found ${unsignedUserIds.length} unsigned users (null signature)`)
+      logger.info(`   ✍️  Found ${signedCount} signed users (has signature)`)
+      logger.info(`   📝 Sample data: ${userSignatureStatus.slice(0, 3).map(u => 
+        `ID:${u.id}(sig:${u.current_signature_file_id === null ? 'NULL' : u.current_signature_file_id})`
+      ).join(', ')}`)
 
       // Update unsigned users to 'unsigned_users' queue
       let updatedCount = 0
