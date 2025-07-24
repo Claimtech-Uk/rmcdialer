@@ -16,38 +16,15 @@ export async function GET(request: NextRequest) {
 
     const userIds = sampleUsers.map(u => u.userId.toString())
 
-    // Check their actual signature status in read replica
-    const signatureData = await replicaDb.$queryRawUnsafe(
-      `SELECT 
-         id,
-         current_signature_file_id,
-         (current_signature_file_id IS NULL) as is_unsigned_check,
-         (current_signature_file_id IS NOT NULL) as is_signed_check,
-         created_at
-       FROM users 
-       WHERE id IN (${userIds.join(',')})
-       ORDER BY id ASC`
-    ) as Array<{
-      id: string
-      current_signature_file_id: number | null
-      is_unsigned_check: number
-      is_signed_check: number
-      created_at: string
-    }>
-
     return NextResponse.json({
       success: true,
+      debug: `Found ${sampleUsers.length} sample users`,
       sampleUserIds: userIds,
-      signatureData: signatureData,
-      analysis: signatureData.map(user => ({
-        userId: user.id,
-        signatureFileId: user.current_signature_file_id,
-        isNull: user.current_signature_file_id === null,
-        mysqlUnsignedCheck: user.is_unsigned_check === 1,
-        mysqlSignedCheck: user.is_signed_check === 1,
-        ourLogic: user.is_unsigned_check === 1 ? 'UNSIGNED' : 'SIGNED',
-        createdAt: user.created_at
-      }))
+      rawSampleUsers: sampleUsers.map(u => ({ userId: u.userId.toString() }))
+    }, {
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
     })
 
   } catch (error: any) {
