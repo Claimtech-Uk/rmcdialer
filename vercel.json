@@ -16,14 +16,6 @@
     {
       "path": "/api/cron/smart-new-users-discovery",
       "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/scoring-maintenance",
-      "schedule": "5,20,35,50 * * * *"
-    },
-    {
-      "path": "/api/cron/daily-cleanup",
-      "schedule": "10,25,40,55 * * * *"
     }
   ],
   "git": {
