@@ -260,6 +260,19 @@ export class SignatureConversionCleanupService {
     let updated = 0
     for (const conversion of conversions) {
       try {
+        // Get current user call score data for conversion logging
+        const currentUserScore = await prisma.userCallScore.findUnique({
+          where: { userId: conversion.userId },
+          select: {
+            currentScore: true,
+            totalAttempts: true,
+            lastCallAt: true,
+            // @ts-ignore - currentQueueType exists in database
+            currentQueueType: true
+          }
+        })
+
+        // Update user call score
         const updateResult = await prisma.userCallScore.updateMany({
           where: { 
             userId: conversion.userId,
@@ -275,7 +288,27 @@ export class SignatureConversionCleanupService {
             lastQueueCheck: new Date()  // Update check timestamp
           }
         })
-        updated += updateResult.count
+
+        if (updateResult.count > 0) {
+          updated += updateResult.count
+
+          // Create conversion record in database
+          await prisma.conversion.create({
+            data: {
+              userId: conversion.userId,
+              previousQueueType: 'unsigned_users',
+              conversionType: 'signature_obtained',
+              conversionReason: 'User provided signature - moved from unsigned queue',
+              finalScore: currentUserScore?.currentScore || 0,
+              totalCallAttempts: currentUserScore?.totalAttempts || 0,
+              lastCallAt: currentUserScore?.lastCallAt,
+              signatureObtained: true,
+              convertedAt: conversion.convertedAt
+            }
+          })
+
+          logger.info(`📝 [CONVERSION] Created conversion record for user ${conversion.userId}`)
+        }
       } catch (error: any) {
         logger.error(`❌ Failed to update user ${conversion.userId}:`, error)
       }
