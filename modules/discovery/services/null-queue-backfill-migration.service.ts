@@ -277,21 +277,24 @@ export class NullQueueBackfillMigrationService {
   /**
    * Get users with their signature status
    */
-  private async getUsersWithSignatureStatus(userIds: bigint[]): Promise<{ userId: bigint, currentSignatureFileId: bigint | null }[]> {
+  private async getUsersWithSignatureStatus(userIds: bigint[]): Promise<{ userId: bigint, currentSignatureFileId: number | null }[]> {
     try {
       const query = `
-        SELECT id as userId, current_signature_file_id as currentSignatureFileId
+        SELECT id, current_signature_file_id
         FROM users 
         WHERE id IN (${userIds.map(() => '?').join(', ')})
           AND is_enabled = 1
       `
       
-      const users = await replicaDb.$queryRawUnsafe(query, userIds) as Array<{
-        userId: bigint
-        currentSignatureFileId: bigint | null
+      const users = await replicaDb.$queryRawUnsafe(query, ...userIds) as Array<{
+        id: bigint
+        current_signature_file_id: number | null
       }>
       
-      return users
+      return users.map(u => ({
+        userId: u.id,
+        currentSignatureFileId: u.current_signature_file_id
+      }))
       
     } catch (replicaError) {
       logger.warn('⚠️ Replica DB failed for signature status check', { error: replicaError })
@@ -321,7 +324,7 @@ export class NullQueueBackfillMigrationService {
       `
       
       const params = [...userIds, ...this.EXCLUDED_REQUIREMENT_TYPES]
-      const users = await replicaDb.$queryRawUnsafe(query, params) as Array<{
+      const users = await replicaDb.$queryRawUnsafe(query, ...params) as Array<{
         userId: bigint
       }>
       
