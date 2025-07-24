@@ -227,7 +227,7 @@ export class NullQueueBackfillMigrationService {
     let usersWithoutReqs = 0
     let skippedUnsigned = 0
     let skippedNoRequirements = 0
-    const eligibleUsers: number[] = []
+    const eligibleUsers: bigint[] = []
     
     for (const user of usersData) {
       const hasPendingRequirements = requirementsMap.has(user.userId)
@@ -294,24 +294,12 @@ export class NullQueueBackfillMigrationService {
       return users
       
     } catch (replicaError) {
-      logger.warn('⚠️ Replica DB failed, using primary DB for signature status', { error: replicaError })
+      logger.warn('⚠️ Replica DB failed for signature status check', { error: replicaError })
       
-      // Fallback to primary DB  
-      const users = await prisma.user.findMany({
-        where: {
-          id: { in: userIds },
-          isEnabled: true
-        },
-        select: {
-          id: true,
-          currentSignatureFileId: true
-        }
-      })
-      
-      return users.map(u => ({
-        userId: u.id,
-        currentSignatureFileId: u.currentSignatureFileId
-      }))
+      // Cannot fallback to primary DB for user signature queries
+      // Return empty array to skip processing this batch
+      logger.error('❌ Cannot check user signatures - replica DB required')
+      return []
     }
   }
   
