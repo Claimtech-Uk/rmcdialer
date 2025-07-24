@@ -146,4 +146,26 @@ export interface MigrationOptions extends DiscoveryOptions {
   batchSize?: number
   maxUsers?: number
   offset?: number
+}
+
+// =============================================================================
+// QUEUE TYPE MIGRATION: Requirements to Outstanding Requests
+// =============================================================================
+
+export interface RequirementsToOutstandingMigrationResult extends BaseDiscoveryResult {
+  totalUsersChecked: number
+  usersWithRequirementsQueue: number
+  usersUpdated: number
+  batchesProcessed: number
+  progress: {
+    processed: number
+    total: number
+    percentage: number
+  }
+}
+
+export interface RequirementsMigrationOptions extends DiscoveryOptions {
+  batchSize?: number
+  maxUsers?: number
+  offset?: number
 } 
