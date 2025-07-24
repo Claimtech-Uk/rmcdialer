@@ -168,4 +168,44 @@ export interface RequirementsMigrationOptions extends DiscoveryOptions {
   batchSize?: number
   maxUsers?: number
   offset?: number
+}
+
+// =============================================================================
+// NULL Queue Backfill Migration Types
+// =============================================================================
+
+export interface NullQueueBackfillResult {
+  timestamp: Date
+  duration: number
+  success: boolean
+  errors: string[]
+  summary: string
+  
+  // Analysis metrics
+  totalNullUsers: number
+  signedUsers: number
+  unsignedUsers: number
+  usersWithRequirements: number
+  usersWithoutRequirements: number
+  
+  // Update results
+  usersUpdatedToOutstandingRequests: number
+  usersSkippedUnsigned: number
+  usersSkippedNoRequirements: number
+  
+  // Performance
+  batchesProcessed: number
+  progress: {
+    processed: number
+    total: number
+    percentage: number
+  }
+}
+
+export interface NullQueueBackfillOptions {
+  dryRun?: boolean
+  batchSize?: number
+  maxUsers?: number
+  offset?: number
+  timeoutSeconds?: number
 } 

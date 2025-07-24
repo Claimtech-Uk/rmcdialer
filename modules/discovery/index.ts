@@ -5,7 +5,7 @@
 export { NewUsersDiscoveryService } from './services/new-users-discovery.service'
 export { NewRequirementsDiscoveryService } from './services/new-requirements-discovery.service'
 export { SignatureConversionCleanupService } from './services/signature-conversion-cleanup.service'
-export { RequirementsToOutstandingMigrationService } from './services/requirements-to-outstanding-migration.service'
+export { NullQueueBackfillMigrationService } from './services/null-queue-backfill-migration.service'
 // TODO: Add remaining discovery services as they're implemented
 // export { UnsignedConversionService } from './services/unsigned-conversion.service'
 // export { RequirementsConversionService } from './services/requirements-conversion.service'
@@ -32,8 +32,8 @@ export type {
   NewRequirementData,
   
   // Migration types
-  RequirementsToOutstandingMigrationResult,
-  RequirementsMigrationOptions
+  NullQueueBackfillResult,
+  NullQueueBackfillOptions
 } from './types/discovery.types'
 
 export const DISCOVERY_MODULE_VERSION = '1.0.0' 
