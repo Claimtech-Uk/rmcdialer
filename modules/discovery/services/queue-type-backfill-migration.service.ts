@@ -146,6 +146,7 @@ export class QueueTypeBackfillMigrationService {
     try {
       const count = await prisma.userCallScore.count({
         where: {
+          // @ts-ignore - One-off migration, currentQueueType exists in schema
           currentQueueType: null
         }
       })
@@ -168,10 +169,12 @@ export class QueueTypeBackfillMigrationService {
       // Get batch of users with null queue type
       const usersToCheck = await prisma.userCallScore.findMany({
         where: {
+          // @ts-ignore - One-off migration, currentQueueType exists in schema
           currentQueueType: null
         },
         select: {
           userId: true,
+          // @ts-ignore - One-off migration, currentQueueType exists in schema
           currentQueueType: true
         },
         skip: offset,
@@ -194,8 +197,7 @@ export class QueueTypeBackfillMigrationService {
            current_signature_file_id,
            (current_signature_file_id IS NULL) as is_unsigned
          FROM users 
-         WHERE id IN (${userIds.join(',')})`,
-        []
+         WHERE id IN (${userIds.join(',')})`
       ) as Array<{
         id: string
         current_signature_file_id: number | null
@@ -222,9 +224,11 @@ export class QueueTypeBackfillMigrationService {
             userId: {
               in: unsignedUserIds
             },
+            // @ts-ignore - One-off migration, currentQueueType exists in schema
             currentQueueType: null
           },
           data: {
+            // @ts-ignore - One-off migration, currentQueueType exists in schema
             currentQueueType: 'unsigned_users'
           }
         })
