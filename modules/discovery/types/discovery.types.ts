@@ -93,4 +93,37 @@ export interface DiscoveryOptions {
   hoursBack?: number
   dryRun?: boolean
   forceRefresh?: boolean
+}
+
+// =============================================================================
+// ONE-OFF MIGRATION: Queue Type Backfill
+// =============================================================================
+// Types for the one-time migration to backfill currentQueueType for existing users
+
+export interface QueueTypeMigrationResult extends BaseDiscoveryResult {
+  totalUsersChecked: number
+  usersWithNullQueue: number
+  usersProcessed: number
+  unsignedUsersUpdated: number
+  signedUsersSkipped: number
+  batchesProcessed: number
+  progress: {
+    processed: number
+    total: number
+    percentage: number
+  }
+}
+
+export interface UserQueueMigrationData {
+  userId: bigint
+  currentQueueType: string | null
+  shouldBeUnsigned: boolean
+  hasSignature: boolean
+  currentSignatureFileId: number | null
+}
+
+export interface MigrationOptions extends DiscoveryOptions {
+  batchSize?: number
+  maxUsers?: number
+  offset?: number
 } 
