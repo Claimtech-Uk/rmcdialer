@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
-  // CRITICAL: Allow Twilio webhooks to bypass authentication
+  // CRITICAL: Allow Twilio webhooks and audio endpoints to bypass authentication
   const isWebhookPath = request.nextUrl.pathname.startsWith('/api/webhooks/twilio/') || 
-                       request.nextUrl.pathname.startsWith('/api/test-webhook-public')
+                       request.nextUrl.pathname.startsWith('/api/test-webhook-public') ||
+                       request.nextUrl.pathname.startsWith('/api/audio/')
   
   if (isWebhookPath) {
     console.log('🔓 Webhook bypass: Allowing unauthenticated access to', request.nextUrl.pathname)
