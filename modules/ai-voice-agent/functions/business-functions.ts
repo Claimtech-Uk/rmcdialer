@@ -4,6 +4,7 @@
 import { prisma } from '@/lib/db';
 import { replicaDb } from '@/lib/mysql';
 import { BusinessFunction, FunctionContext } from '../types/audio-streaming.types';
+import { MagicLinkService } from '@/modules/communications/services/magic-link.service';
 
 /**
  * Lookup caller information including claims and requirements
@@ -364,6 +365,128 @@ export const getHelpFunction: BusinessFunction = {
   }
 };
 
+/**
+ * Send a magic link to the user for portal access
+ */
+export const sendMagicLinkFunction: BusinessFunction = {
+  name: 'send_magic_link',
+  description: 'Send a secure magic link to the user giving them access to the customer portal',
+  parameters: {
+    type: 'object',
+    properties: {
+      deliveryMethod: {
+        type: 'string',
+        description: 'How to send the magic link: sms, whatsapp, or email'
+      },
+      phoneNumber: {
+        type: 'string',
+        description: 'Phone number for SMS or WhatsApp delivery (required for sms/whatsapp)'
+      },
+      email: {
+        type: 'string',
+        description: 'Email address for email delivery (required for email)'
+      },
+      userName: {
+        type: 'string',
+        description: 'User\'s name to personalize the message'
+      }
+    },
+    required: ['deliveryMethod']
+  },
+  handler: async (params: Record<string, any>, context: FunctionContext) => {
+    try {
+      console.log(`🔗 Sending magic link via ${params.deliveryMethod} to user`);
+
+      // Get user info from caller context
+      if (!context.callerInfo?.phoneNumber) {
+        return {
+          success: false,
+          message: 'Unable to send magic link - caller information not available'
+        };
+      }
+
+      // Find user ID from phone number
+      const normalizedNumbers = normalizePhoneNumber(context.callerInfo.phoneNumber);
+      const user = await replicaDb.user.findFirst({
+        where: {
+          phone_number: { in: normalizedNumbers },
+          is_enabled: true
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          phone_number: true,
+          email_address: true
+        }
+      });
+
+      if (!user) {
+        return {
+          success: false,
+          message: 'Unable to send magic link - user account not found'
+        };
+      }
+
+      // Initialize magic link service with minimal dependencies
+      const magicLinkService = new MagicLinkService({
+        authService: {
+          getCurrentAgent: async () => ({ id: 1, role: 'ai_agent' })
+        }
+      });
+
+      // Determine delivery details
+      let phoneNumber = params.phoneNumber || user.phone_number;
+      let email = params.email || user.email_address;
+      let userName = params.userName || `${user.first_name} ${user.last_name}`;
+
+      // Validate delivery method requirements
+      if (params.deliveryMethod === 'email' && !email) {
+        return {
+          success: false,
+          message: 'Email address is required for email delivery, but none is available'
+        };
+      }
+
+      if ((params.deliveryMethod === 'sms' || params.deliveryMethod === 'whatsapp') && !phoneNumber) {
+        return {
+          success: false,
+          message: 'Phone number is required for SMS/WhatsApp delivery, but none is available'
+        };
+      }
+
+      // Send magic link
+      const result = await magicLinkService.sendMagicLink({
+        userId: Number(user.id),
+        linkType: 'claimPortal',
+        deliveryMethod: params.deliveryMethod,
+        phoneNumber: phoneNumber,
+        email: email,
+        userName: userName,
+        callSessionId: context.callSid,
+        customMessage: `Hi ${userName}, here's your secure link to access your claim portal and manage your case online.`
+      });
+
+      console.log(`✅ Magic link sent successfully via ${params.deliveryMethod}`);
+
+      return {
+        success: true,
+        message: `I've sent a secure link to your ${params.deliveryMethod === 'sms' ? 'phone' : params.deliveryMethod} that will give you access to your customer portal. You can use this to view your claim details, upload documents, and track your progress.`,
+        deliveryMethod: params.deliveryMethod,
+        sentTo: params.deliveryMethod === 'email' ? email : phoneNumber,
+        trackingId: result.magicLink.trackingId
+      };
+
+    } catch (error) {
+      console.error('Failed to send magic link:', error);
+      return {
+        success: false,
+        message: 'I\'m sorry, I\'m having trouble sending the portal link right now. Our team can send it to you manually, or you can try calling back later.'
+      };
+    }
+  }
+};
+
 // Helper function to normalize phone numbers
 function normalizePhoneNumber(phoneNumber: string): string[] {
   const digits = phoneNumber.replace(/\D/g, '');
@@ -388,5 +511,6 @@ export const businessFunctions: BusinessFunction[] = [
   checkRequirementsFunction,
   transferToHumanFunction,
   scheduleAppointmentFunction,
-  getHelpFunction
+  getHelpFunction,
+  sendMagicLinkFunction
 ]; 
