@@ -9,12 +9,10 @@ export class AudioStorageService {
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
-    // Remove file system operations for Vercel compatibility
   }
 
   /**
-   * Save audio file to memory and return data URL for Vercel compatibility
-   * Instead of writing to disk, we'll return a data URL that can be used directly
+   * Store audio in memory and return API endpoint URL for Twilio
    */
   async saveAudioFile(base64Audio: string, generationId: string): Promise<string> {
     try {
@@ -23,25 +21,25 @@ export class AudioStorageService {
         throw new Error('Invalid base64 audio data');
       }
       
-      // For Vercel serverless, return data URL directly
-      // This works with Twilio's <Play> verb
-      const dataUrl = `data:audio/wav;base64,${base64Audio}`;
+      // Import the storeAudio function and store the audio
+      const { storeAudio } = await import('@/app/api/audio/[generationId]/route');
+      const audioUrl = storeAudio(generationId, base64Audio, 'audio/wav');
       
-      console.log(`💾 Created data URL for Hume audio: ${generationId} (${Math.round(base64Audio.length / 1024)}KB)`);
+      console.log(`💾 Stored Hume audio: ${audioUrl} (${Math.round(base64Audio.length / 1024)}KB)`);
       
-      return dataUrl;
+      return audioUrl;
       
     } catch (error) {
-      console.error('Failed to process audio data:', error);
-      throw new Error('Audio processing failed');
+      console.error('Failed to store audio:', error);
+      throw new Error('Audio storage failed');
     }
   }
 
   /**
-   * Cleanup function - no-op for data URLs
+   * Cleanup function - handled automatically by the audio API endpoint
    */
   async cleanupOldFiles(olderThanMinutes: number = 60): Promise<void> {
-    // No cleanup needed for data URLs
-    console.log('🧹 No cleanup needed for data URLs');
+    // Cleanup is handled automatically by the audio endpoint
+    console.log('🧹 Audio cleanup handled automatically by API endpoint');
   }
 } 

@@ -49,11 +49,11 @@ export class HumeTTSService {
 
       console.log(`🎤 Calling Hume TTS with:`, synthesisRequest);
 
-      // Use direct fetch call to Hume API to avoid SDK type issues
+      // Use direct fetch call to Hume API with correct authentication
       const humeResponse = await fetch('https://api.hume.ai/v0/tts', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'X-Hume-Api-Key': this.apiKey,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
