@@ -6,6 +6,7 @@ export { AudioPipelineService } from './services/audio-pipeline.service';
 export { WhisperService } from './services/whisper.service';
 export { HumeTTSService } from './services/hume-tts.service';
 export { ConversationEngineService } from './services/conversation-engine.service';
+export { AudioStorageService } from './services/audio-storage.service';
 
 // Legacy Service (for compatibility during migration)
 export { AIVoiceService } from './services/ai-voice.service';

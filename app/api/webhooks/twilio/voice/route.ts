@@ -159,10 +159,52 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           ? `Hello ${callerName}! Welcome to R M C Dialler. I'm your AI assistant and I'm here to help you with your claims. How can I assist you today?`
           : `Hello! Welcome to R M C Dialler. I'm your AI assistant and I'm here to help you with your claims. How can I assist you today?`;
         
-        // Generate TwiML using Speech Recognition + AI Response instead of Stream
-        // This avoids WebSocket complexity while still using Hume voice
-        // TODO: Replace Say with Play once Hume audio generation is complete
-        const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+        // Generate Hume audio for greeting
+        try {
+          const { HumeTTSService, AudioStorageService, voiceProfiles } = await import('@/modules/ai-voice-agent');
+          
+          const humeApiKey = process.env.HUME_API_KEY;
+          if (!humeApiKey) {
+            throw new Error('Missing HUME_API_KEY');
+          }
+          
+          // Use your specific voice ID
+          const selectedVoice = voiceProfiles.default;
+          const humeTTS = new HumeTTSService(humeApiKey, selectedVoice);
+          const audioStorage = new AudioStorageService(baseUrl);
+          
+          // Generate greeting audio with Hume
+          console.log('🎵 Generating greeting with Hume voice...');
+          const greetingAudio = await humeTTS.synthesizeText(greetingText);
+          const greetingUrl = await audioStorage.saveAudioFile(greetingAudio.audio, greetingAudio.generationId || `greeting_${Date.now()}`);
+          
+          const promptText = "Please tell me how I can help you today.";
+          const promptAudio = await humeTTS.synthesizeText(promptText);
+          const promptUrl = await audioStorage.saveAudioFile(promptAudio.audio, promptAudio.generationId || `prompt_${Date.now()}`);
+          
+          // Use Hume-generated audio
+          const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>${greetingUrl}</Play>
+    <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
+        <Play>${promptUrl}</Play>
+    </Gather>
+    <Redirect>/api/webhooks/twilio/voice-response</Redirect>
+</Response>`;
+          
+          console.log(`✅ Routing call ${callSid} to Hume AI voice agent`);
+          return new NextResponse(twimlResponse, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/xml',
+            },
+          });
+          
+        } catch (humeError) {
+          console.error('❌ Hume greeting generation failed, using fallback:', humeError);
+          
+          // Fallback to Polly if Hume fails
+          const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna">${greetingText}</Say>
     <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
@@ -170,6 +212,15 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
     </Gather>
     <Redirect>/api/webhooks/twilio/voice-response</Redirect>
 </Response>`;
+        
+        console.log(`✅ Routing call ${callSid} to AI voice agent (fallback mode)`);
+        return new NextResponse(twimlResponse, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml',
+          },
+        });
+        }
         
         // Stream version (disabled until WebSocket is working):
         /*
@@ -185,14 +236,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
     </Stream>
 </Response>`;
         */
-        
-        console.log(`✅ Routing call ${callSid} to new AI voice agent via WebSocket streaming`);
-        return new NextResponse(twimlResponse, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/xml',
-          },
-        });
+
       } catch (error) {
         console.error('❌ AI voice agent routing failed, falling back to human agents:', error);
         // Continue to human agent routing below

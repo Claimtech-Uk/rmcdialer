@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { ConversationEngineService, HumeTTSService, voiceProfiles } from '@/modules/ai-voice-agent';
+import { ConversationEngineService, HumeTTSService, AudioStorageService, voiceProfiles } from '@/modules/ai-voice-agent';
 import { businessFunctions } from '@/modules/ai-voice-agent/functions/business-functions';
 
 // Twilio Speech Recognition Webhook Schema
@@ -60,21 +60,22 @@ export async function POST(request: NextRequest) {
       throw new Error('Missing required API keys');
     }
 
-    // Select voice based on call context
-    let selectedVoice = voiceProfiles.default;
-    const currentHour = new Date().getHours();
-    if (currentHour >= 18 || currentHour <= 8) {
-      selectedVoice = voiceProfiles.calm;
-    }
+         // Select voice based on call context
+     let selectedVoice = voiceProfiles.default;
+     const currentHour = new Date().getHours();
+     if (currentHour >= 18 || currentHour <= 8) {
+       selectedVoice = voiceProfiles.calm;
+     }
 
-    // Initialize services
-    const conversationEngine = new ConversationEngineService(openaiApiKey);
-    const humeTTS = new HumeTTSService(humeApiKey, selectedVoice);
+     // Initialize services
+     const conversationEngine = new ConversationEngineService(openaiApiKey);
+     const humeTTS = new HumeTTSService(humeApiKey, selectedVoice);
+     const audioStorage = new AudioStorageService(new URL(request.url).origin);
 
-    // Register business functions
-    conversationEngine.registerFunctions(businessFunctions);
+     // Register business functions
+     conversationEngine.registerFunctions(businessFunctions);
 
-                   console.log('🤖 Processing conversation with AI...');
+     console.log('🤖 Processing conversation with AI...');
      
      // For now, use a simple AI response until we fix the complex type issues
      // TODO: Integrate with full conversation engine
@@ -91,24 +92,31 @@ export async function POST(request: NextRequest) {
      
      console.log('💬 AI Response:', aiResponseText);
 
-     // Generate speech using Hume TTS
-     console.log('🎵 Generating speech with Hume TTS...');
+     // Generate speech using Hume TTS with your voice ID
+     console.log(`🎵 Generating speech with Hume TTS (voice: ${selectedVoice.voiceId || 'dynamic'})...`);
      const audioResponse = await humeTTS.synthesizeText(aiResponseText);
      
-     // For now, we'll use a placeholder since the Hume API integration needs to be completed
-     // In production, you would:
-     // 1. Save the audio file to a publicly accessible URL (S3, etc.)
-     // 2. Use <Play> to play the audio file
+     // Save audio file to public URL
+     const audioUrl = await audioStorage.saveAudioFile(audioResponse.audio, audioResponse.generationId || `gen_${Date.now()}`);
      
-          // Temporary fallback - will replace with Hume-generated audio
+     // Generate follow-up questions with Hume voice
+     const followUpText = "Is there anything else I can help you with?";
+     const followUpAudio = await humeTTS.synthesizeText(followUpText);
+     const followUpUrl = await audioStorage.saveAudioFile(followUpAudio.audio, followUpAudio.generationId || `gen_${Date.now()}`);
+     
+     const closingText = "Thank you for calling RMC Dialler. Have a great day!";
+     const closingAudio = await humeTTS.synthesizeText(closingText);
+     const closingUrl = await audioStorage.saveAudioFile(closingAudio.audio, closingAudio.generationId || `gen_${Date.now()}`);
+     
+     // Use Hume-generated audio files with <Play>
      const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-     <Say voice="Polly.Joanna">${aiResponseText}</Say>
+     <Play>${audioUrl}</Play>
      <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
-         <Say voice="Polly.Joanna">Is there anything else I can help you with?</Say>
+         <Play>${followUpUrl}</Play>
      </Gather>
-     <Say voice="Polly.Joanna">Thank you for calling RMC Dialler. Have a great day!</Say>
-    <Hangup/>
+     <Play>${closingUrl}</Play>
+     <Hangup/>
 </Response>`;
 
     // TODO: When Hume TTS is fully integrated, use this approach:
