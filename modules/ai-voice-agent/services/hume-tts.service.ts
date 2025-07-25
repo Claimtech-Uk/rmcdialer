@@ -42,9 +42,9 @@ export class HumeTTSService {
       // Call Hume TTS API with proper parameters
       const synthesisRequest = {
         text: text.trim(),
-        ...(this.voiceId && { voice: this.voiceId }),
-        ...(this.voiceDescription && { description: this.voiceDescription }),
-        format: 'wav'
+        ...(this.voiceId && { voice: { id: this.voiceId } }), // Use object format
+        ...(this.voiceDescription && { description: this.voiceDescription })
+        // Remove format from utterances - it's not allowed here
       };
 
       console.log(`🎤 Calling Hume TTS with:`, synthesisRequest);
@@ -57,7 +57,8 @@ export class HumeTTSService {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          utterances: [synthesisRequest]
+          utterances: [synthesisRequest],
+          format: 'wav' // Move format to top level
         })
       });
 
