@@ -96,26 +96,28 @@ export async function POST(request: NextRequest) {
      console.log(`🎵 Generating speech with Hume TTS (voice: ${selectedVoice.voiceDescription ? 'custom' : 'dynamic'})...`);
      const audioResponse = await humeTTS.synthesizeText(aiResponseText);
      
-     // Save audio file to public URL
-     const audioUrl = await audioStorage.saveAudioFile(audioResponse.audio, audioResponse.generationId || `gen_${Date.now()}`);
-     
      // Generate follow-up questions with Hume voice
      const followUpText = "Is there anything else I can help you with?";
      const followUpAudio = await humeTTS.synthesizeText(followUpText);
-     const followUpUrl = await audioStorage.saveAudioFile(followUpAudio.audio, followUpAudio.generationId || `gen_${Date.now()}`);
      
      const closingText = "Thank you for calling RMC Dialler. Have a great day!";
      const closingAudio = await humeTTS.synthesizeText(closingText);
-     const closingUrl = await audioStorage.saveAudioFile(closingAudio.audio, closingAudio.generationId || `gen_${Date.now()}`);
      
-     // Use Hume-generated audio files with <Play>
+     // Use data URIs to embed audio directly in TwiML (no external URLs needed)
+     const responseDataUri = `data:audio/wav;base64,${audioResponse.audio}`;
+     const followUpDataUri = `data:audio/wav;base64,${followUpAudio.audio}`;
+     const closingDataUri = `data:audio/wav;base64,${closingAudio.audio}`;
+     
+     console.log(`🎵 Using data URIs for response audio (response: ${Math.round(audioResponse.audio.length/1024)}KB, followup: ${Math.round(followUpAudio.audio.length/1024)}KB, closing: ${Math.round(closingAudio.audio.length/1024)}KB)`);
+     
+     // Use Hume-generated audio via data URIs
      const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-     <Play>${audioUrl}</Play>
+     <Play>${responseDataUri}</Play>
      <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
-         <Play>${followUpUrl}</Play>
+         <Play>${followUpDataUri}</Play>
      </Gather>
-     <Play>${closingUrl}</Play>
+     <Play>${closingDataUri}</Play>
      <Hangup/>
 </Response>`;
 
