@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    console.log('🧹 [CRON] Outstanding Requirements Conversion Cleanup starting...')
+    console.log('🧹 [CRON] Outstanding Requirements Conversion Cleanup starting... v2')
     
     // Log start
     await logCronExecution('outstanding-requirements-conversion-cleanup', 'running', 0, { 
