@@ -1,8 +1,7 @@
 // Audio Storage Service
 // Handles saving and serving Hume-generated audio files
 
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { AudioMemoryStorageService } from './audio-memory-storage.service';
 
 export class AudioStorageService {
   private baseUrl: string;
@@ -21,9 +20,8 @@ export class AudioStorageService {
         throw new Error('Invalid base64 audio data');
       }
       
-      // Import the storeAudio function and store the audio
-      const { storeAudio } = await import('@/app/api/audio/[generationId]/route');
-      const audioUrl = storeAudio(generationId, base64Audio, 'audio/wav');
+      // Store the audio and get the URL
+      const audioUrl = AudioMemoryStorageService.storeAudio(generationId, base64Audio, 'audio/wav');
       
       console.log(`💾 Stored Hume audio: ${audioUrl} (${Math.round(base64Audio.length / 1024)}KB)`);
       
@@ -36,10 +34,11 @@ export class AudioStorageService {
   }
 
   /**
-   * Cleanup function - handled automatically by the audio API endpoint
+   * Cleanup function - handled automatically by the audio memory storage service
    */
   async cleanupOldFiles(olderThanMinutes: number = 60): Promise<void> {
-    // Cleanup is handled automatically by the audio endpoint
-    console.log('🧹 Audio cleanup handled automatically by API endpoint');
+    // Cleanup is handled automatically by the audio memory storage service
+    AudioMemoryStorageService.cleanup();
+    console.log('🧹 Audio cleanup completed');
   }
 } 
