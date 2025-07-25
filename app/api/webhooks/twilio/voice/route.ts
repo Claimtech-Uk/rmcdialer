@@ -179,22 +179,22 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           // Generate greeting audio with Hume
           console.log('🎵 Generating greeting with Hume voice...');
           const greetingAudio = await humeTTS.synthesizeText(greetingText);
+          const greetingUrl = await audioStorage.saveAudioFile(greetingAudio.audio, greetingAudio.generationId || `greeting_${Date.now()}`);
           
           const promptText = "Please tell me how I can help you today.";
           const promptAudio = await humeTTS.synthesizeText(promptText);
+          const promptUrl = await audioStorage.saveAudioFile(promptAudio.audio, promptAudio.generationId || `prompt_${Date.now()}`);
           
-          // Use data URIs to embed audio directly in TwiML (no external URLs needed)
-          const greetingDataUri = `data:audio/wav;base64,${greetingAudio.audio}`;
-          const promptDataUri = `data:audio/wav;base64,${promptAudio.audio}`;
+          console.log(`🎵 Generated audio URLs (greeting: ${Math.round(greetingAudio.audio.length/1024)}KB, prompt: ${Math.round(promptAudio.audio.length/1024)}KB)`);
+          console.log(`🔗 Greeting URL: ${greetingUrl}`);
+          console.log(`🔗 Prompt URL: ${promptUrl}`);
           
-          console.log(`🎵 Using data URIs for audio (greeting: ${Math.round(greetingAudio.audio.length/1024)}KB, prompt: ${Math.round(promptAudio.audio.length/1024)}KB)`);
-          
-          // Use Hume-generated audio via data URIs
+          // Use Hume-generated audio URLs (should now be publicly accessible via middleware)
           const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Play>${greetingDataUri}</Play>
+    <Play>${greetingUrl}</Play>
     <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
-        <Play>${promptDataUri}</Play>
+        <Play>${promptUrl}</Play>
     </Gather>
     <Redirect>/api/webhooks/twilio/voice-response</Redirect>
 </Response>`;
