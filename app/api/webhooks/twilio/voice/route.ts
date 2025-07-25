@@ -159,19 +159,16 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           ? `Hello ${callerName}! Welcome to R M C Dialler. I'm your AI assistant and I'm here to help you with your claims. How can I assist you today?`
           : `Hello! Welcome to R M C Dialler. I'm your AI assistant and I'm here to help you with your claims. How can I assist you today?`;
         
-        // Generate TwiML using <Stream> for real-time audio processing
-        // Note: The AI agent will handle the greeting, so we skip the <Say> tag
-        // TODO: Temporarily using Say instead of Stream until WebSocket is properly implemented
+        // Generate TwiML using Speech Recognition + AI Response instead of Stream
+        // This avoids WebSocket complexity while still using Hume voice
+        // TODO: Replace Say with Play once Hume audio generation is complete
         const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">${greetingText}</Say>
-    <Gather input="speech dtmf" timeout="5" speechTimeout="auto">
-        <Say voice="alice">Please tell me how I can help you today, or press any key to speak with an agent.</Say>
+    <Say voice="Polly.Joanna">${greetingText}</Say>
+    <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
+        <Say voice="Polly.Joanna">Please tell me how I can help you today.</Say>
     </Gather>
-    <Say voice="alice">Let me transfer you to one of our agents who can assist you further.</Say>
-    <Dial timeout="30">
-        <Queue>support</Queue>
-    </Dial>
+    <Redirect>/api/webhooks/twilio/voice-response</Redirect>
 </Response>`;
         
         // Stream version (disabled until WebSocket is working):
