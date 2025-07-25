@@ -1,0 +1,96 @@
+// AI Voice Agent Module Exports
+// Services, types, and utilities for the new AI voice agent architecture (Twilio → Whisper → Hume)
+
+// Core Services
+export { AudioPipelineService } from './services/audio-pipeline.service';
+export { WhisperService } from './services/whisper.service';
+export { HumeTTSService } from './services/hume-tts.service';
+export { ConversationEngineService } from './services/conversation-engine.service';
+
+// Legacy Service (for compatibility during migration)
+export { AIVoiceService } from './services/ai-voice.service';
+
+// New Architecture Types
+export type {
+  TwilioMediaStreamEvent,
+  WhisperTranscriptionChunk,
+  HumeTTSChunk,
+  AudioStreamSession,
+  ConversationTurn,
+  FunctionCall,
+  ConversationIntent,
+  AudioPipelineConfig,
+  AudioStreamError,
+  BusinessFunction,
+  FunctionContext
+} from './types/audio-streaming.types';
+
+// Legacy Types (for compatibility during migration)
+export type {
+  VoiceAgentConfig,
+  VoiceConversation,
+  ConversationOutcome,
+  VoiceAgentAnalytics,
+  VoiceAgentOptions,
+  TwilioAIAssistantConfig,
+  ConversationRelayConfig,
+  GeminiLiveConfig,
+  HumeEVIConfig
+} from './types/ai-voice.types';
+
+// Business Functions
+export { businessFunctions } from './functions/business-functions';
+export type { 
+  callerLookupFunction,
+  checkRequirementsFunction,
+  transferToHumanFunction,
+  scheduleAppointmentFunction,
+  getHelpFunction
+} from './functions/business-functions';
+
+// Legacy Configuration (for compatibility during migration)
+export { defaultHumeConfig } from './config/default-hume-config';
+
+// Default Configuration for New Architecture
+export const defaultAudioPipelineConfig = {
+  whisper: {
+    model: 'whisper-1' as const,
+    language: 'en',
+    responseFormat: 'verbose_json' as const
+  },
+  hume: {
+    voiceDescription: 'A professional, friendly, and empathetic customer service representative with a British accent',
+    format: 'wav' as const,
+    instantMode: true
+  },
+  conversation: {
+    systemPrompt: `You are a professional and empathetic customer service representative for RMC Dialler, a claims management company. 
+
+Your role is to:
+1. Assist customers with their claims and requirements
+2. Provide helpful information about their cases
+3. Schedule appointments when needed
+4. Escalate complex issues to human agents
+5. Maintain a friendly, professional tone at all times
+
+Guidelines:
+- Be concise but thorough in your responses
+- Always acknowledge the customer's concerns
+- Use the available functions to look up specific information
+- If you cannot help with something, offer to transfer to a human agent
+- Keep responses under 50 words when possible for natural conversation flow
+- Use empathetic language and show understanding
+
+Remember: You are speaking, not writing, so use natural conversational language.`,
+    maxTurns: 50,
+    responseTimeout: 10000,
+    silenceTimeout: 3000
+  }
+};
+
+// Components and Hooks (disabled for now)
+// Note: React components have been removed as they are not needed for the core voice agent functionality
+// export { VoiceAgentInterface } from './components/VoiceAgentInterface';
+// export { ConversationViewer } from './components/ConversationViewer';
+// export { VoiceAgentSettings } from './components/VoiceAgentSettings';
+// export { useVoiceAgent } from './hooks/useVoiceAgent'; 

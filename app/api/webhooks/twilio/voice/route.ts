@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { replicaDb } from '@/lib/mysql';
+// AI Voice Agent imports removed - now using new streaming architecture
 
 // Twilio Voice Webhook Schema
 const TwilioVoiceWebhookSchema = z.object({
@@ -16,6 +17,17 @@ const TwilioVoiceWebhookSchema = z.object({
   Duration: z.string().optional(),
   RecordingUrl: z.string().optional(),
 });
+
+// Helper function to determine if we should use AI voice agent
+function shouldUseAIAgent(callerInfo: any, from: string, to: string): boolean {
+  // For now, use AI for all inbound calls
+  // In the future, you might want to add logic based on:
+  // - Caller history
+  // - Time of day
+  // - Agent availability
+  // - Specific phone numbers
+  return true;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -130,7 +142,50 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       console.warn(`⚠️ Could not lookup caller ${from}:`, error);
     }
 
-    // 2. Find available agents with proper validation
+    // 2. Check if we should use AI voice agent (New Architecture: Twilio → Whisper → Hume)
+    const useAI = shouldUseAIAgent(callerInfo, from, to);
+    
+    if (useAI) {
+      try {
+        console.log(`🤖 Using new AI voice agent for call ${callSid} from ${from}`);
+        
+        // Set up WebSocket streaming URL for the new AI voice agent
+        const baseUrl = 'https://rmcdialer.vercel.app';
+        const streamUrl = `${baseUrl}/api/voice-agent/realtime?callSid=${callSid}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+        
+        // Generate caller greeting based on their information
+        const callerName = callerInfo?.user ? callerInfo.user.first_name : '';
+        const greetingText = callerName 
+          ? `Hello ${callerName}! Welcome to R M C Dialler. I'm your AI assistant and I'm here to help you with your claims. How can I assist you today?`
+          : `Hello! Welcome to R M C Dialler. I'm your AI assistant and I'm here to help you with your claims. How can I assist you today?`;
+        
+        // Generate TwiML using <Stream> for real-time audio processing
+        const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">${greetingText}</Say>
+    <Stream url="${streamUrl}">
+        <Parameter name="callSid" value="${callSid}" />
+        <Parameter name="from" value="${from}" />
+        <Parameter name="to" value="${to}" />
+        ${callerInfo?.user ? `<Parameter name="userId" value="${callerInfo.user.id}" />` : ''}
+        ${callerInfo?.user ? `<Parameter name="callerName" value="${callerInfo.user.first_name} ${callerInfo.user.last_name}" />` : ''}
+    </Stream>
+</Response>`;
+        
+        console.log(`✅ Routing call ${callSid} to new AI voice agent via WebSocket streaming`);
+        return new NextResponse(twimlResponse, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml',
+          },
+        });
+      } catch (error) {
+        console.error('❌ AI voice agent routing failed, falling back to human agents:', error);
+        // Continue to human agent routing below
+      }
+    }
+
+    // 3. Find available agents with proper validation (if not using AI)
     const availableAgents = await prisma.agentSession.findMany({
       where: {
         status: 'available',
@@ -177,7 +232,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       }
     }
 
-    // 3. Create call session regardless of agent availability - with proper agent validation
+    // 4. Create call session regardless of agent availability - with proper agent validation
     let callSession;
     try {
       if (userId && callerInfo?.user) {
@@ -331,7 +386,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       callSession = null;
     }
 
-    // 4. Generate appropriate TwiML response with caller context
+    // 5. Generate appropriate TwiML response with caller context (for human agents)
     if (validatedAgent) {
       const callerName = callerInfo?.user ? 
         `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 

@@ -92,8 +92,9 @@ export class SmartDiscoveryService {
   // Cron 1: New Users (hourly)
   async discoverNewUsers(hoursBack: number = 1) {
     // Only check users created in last hour
+    // Add all users
     // Determine if signed/unsigned
-    // Create user_call_scores entry with appropriate queue_type
+    // Create user_call_scores entry with appropriate queue_type  
     // Add new users with a score of 0 
     // Skip over any users that already exist 
   }
@@ -102,6 +103,12 @@ export class SmartDiscoveryService {
   async discoverNewRequirements(hoursBack: number = 1) {
     // Check claim_requirements created in last hour
     // Update user's queue_type to 'requirements'
+    // Search from claim_requirements > claims > users to connect upwards 
+    // do not include type : signature, vehicle_registration, cfa, solicitor_letter_of_authority, letter_of_authority
+    // only search for pending requirments
+    // do not add users that have not signed, unsigned takes priority here
+    // update user score to 0 
+    
   }
 
   // Cron 3: Unsigned Conversions (hourly)
