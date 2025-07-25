@@ -160,13 +160,14 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           : `Hello! Welcome to R M C Dialler. I'm your AI assistant and I'm here to help you with your claims. How can I assist you today?`;
         
         // Generate TwiML using <Stream> for real-time audio processing
+        // Note: The AI agent will handle the greeting, so we skip the <Say> tag
         const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">${greetingText}</Say>
     <Stream url="${streamUrl}">
         <Parameter name="callSid" value="${callSid}" />
         <Parameter name="from" value="${from}" />
         <Parameter name="to" value="${to}" />
+        <Parameter name="greetingText" value="${greetingText}" />
         ${callerInfo?.user ? `<Parameter name="userId" value="${callerInfo.user.id}" />` : ''}
         ${callerInfo?.user ? `<Parameter name="callerName" value="${callerInfo.user.first_name} ${callerInfo.user.last_name}" />` : ''}
     </Stream>

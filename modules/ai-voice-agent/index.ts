@@ -59,7 +59,7 @@ export const defaultAudioPipelineConfig = {
     responseFormat: 'verbose_json' as const
   },
   hume: {
-    voiceDescription: 'A professional, friendly, and empathetic customer service representative with a British accent',
+    voiceDescription: 'A sophisticated British customer service representative with a warm, professional tone. Think BBC presenter meets friendly bank manager - articulate, empathetic, and naturally authoritative.',
     format: 'wav' as const,
     instantMode: true
   },
@@ -85,6 +85,42 @@ Remember: You are speaking, not writing, so use natural conversational language.
     maxTurns: 50,
     responseTimeout: 10000,
     silenceTimeout: 3000
+  }
+};
+
+// Predefined Voice Configurations
+export const voiceProfiles = {
+  // Customer Service Voices
+  professionalBritish: {
+    voiceDescription: 'A sophisticated British customer service representative with a warm, professional tone. Think BBC presenter meets friendly bank manager - articulate, empathetic, and naturally authoritative.',
+    format: 'wav' as const,
+    instantMode: true
+  },
+  
+  friendlyAmerican: {
+    voiceDescription: 'A warm, approachable American customer service representative with a slight Midwestern accent. Friendly but professional, like a helpful neighbor who works in customer care.',
+    format: 'wav' as const,
+    instantMode: true
+  },
+  
+  // Specialized Voices
+  claimsSpecialist: {
+    voiceDescription: 'An experienced claims specialist with a calm, reassuring voice. Speaks with authority about insurance matters while maintaining warmth and empathy for difficult situations.',
+    format: 'wav' as const,
+    instantMode: true
+  },
+  
+  // Different Emotional Tones
+  urgentAssistant: {
+    voiceDescription: 'A professional assistant speaking with controlled urgency. Clear, direct, and slightly faster pace while maintaining professionalism.',
+    format: 'wav' as const,
+    instantMode: true
+  },
+  
+  calmingCounselor: {
+    voiceDescription: 'A therapeutic, calming voice like a counselor. Speaks slowly with deliberate pauses, very soothing and empathetic tone.',
+    format: 'wav' as const,
+    instantMode: true
   }
 };
 

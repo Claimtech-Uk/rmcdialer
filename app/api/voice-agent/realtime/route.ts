@@ -3,7 +3,8 @@
 
 import { NextRequest } from 'next/server';
 import { WebSocketServer, WebSocket } from 'ws';
-import { AudioPipelineService } from '@/modules/ai-voice-agent/services/audio-pipeline.service';
+import { AudioPipelineService } from '@/modules/ai-voice-agent';
+import { voiceProfiles } from '@/modules/ai-voice-agent';
 import { businessFunctions } from '@/modules/ai-voice-agent/functions/business-functions';
 
 // Initialize the audio pipeline service
@@ -103,11 +104,36 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🔌 WebSocket connection request for voice agent');
-
-    // Extract call information from request body
-    const body = await request.json();
-    const { callSid, from, to } = body;
+    console.log('🎤 Setting up WebSocket connection for Twilio Media Stream');
+    
+    // Extract parameters from the request
+    const { searchParams } = new URL(request.url);
+    const callSid = searchParams.get('callSid') || 'unknown';
+    const from = searchParams.get('from') || '';
+    const to = searchParams.get('to') || '';
+    
+    // Perform enhanced caller lookup
+    const callerInfo = await performEnhancedCallerLookup(from);
+    
+    // ✨ Customize voice based on call context
+    let selectedVoice = voiceProfiles.professionalBritish; // Default
+    
+    // Example: Use different voices based on caller or time
+    if (callerInfo?.user) {
+      selectedVoice = voiceProfiles.claimsSpecialist; // Returning customer gets specialist voice
+    } else if (new Date().getHours() >= 18 || new Date().getHours() <= 8) {
+      selectedVoice = voiceProfiles.calmingCounselor; // After hours = calmer voice
+    }
+    
+    // Initialize audio pipeline with custom voice
+    const audioPipeline = new AudioPipelineService(
+      process.env.OPENAI_API_KEY!,
+      process.env.HUME_API_KEY!,
+      {
+        hume: selectedVoice,
+        // ... other config
+      }
+    );
 
     if (!callSid || !from) {
       console.error('❌ Missing required parameters: callSid or from');
@@ -118,19 +144,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`📞 Setting up voice agent for call ${callSid} from ${from} to ${to}`);
-
-    // Perform caller lookup
-    let callerInfo = null;
-    try {
-      callerInfo = await performEnhancedCallerLookup(from);
-      if (callerInfo?.user) {
-        console.log(`👤 Caller identified: ${callerInfo.user.first_name} ${callerInfo.user.last_name}`);
-      } else {
-        console.log(`👤 Unknown caller: ${from}`);
-      }
-    } catch (error) {
-      console.warn('⚠️ Caller lookup failed:', error);
-    }
 
     // TODO: Initialize WebSocket connection to audio pipeline
     // For now, return success response with connection details
