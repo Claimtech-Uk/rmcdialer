@@ -116,12 +116,14 @@ function getNextRunTime() {
   const currentMinute = now.getMinutes();
   
   // Run every hour at minute 0
-  const nextHour = new Date(now);
-  nextHour.setHours(nextHour.getHours() + 1);
-  nextHour.setMinutes(0);
-  nextHour.setSeconds(0);
+  const nextRun = new Date(now);
+  if (currentMinute >= 0) {
+    nextRun.setHours(nextRun.getHours() + 1);
+  }
+  nextRun.setMinutes(0);
+  nextRun.setSeconds(0);
   
-  const minutesUntil = Math.round((nextHour.getTime() - now.getTime()) / (1000 * 60));
+  const minutesUntil = Math.round((nextRun.getTime() - now.getTime()) / (1000 * 60));
   
   return `${minutesUntil} minutes`;
 } 

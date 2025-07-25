@@ -10,13 +10,13 @@ export async function GET(request: NextRequest) {
   
   console.log(`🚀 [CRON] Smart New Users Discovery STARTED`)
   console.log(`   🕐 Started at: ${startDate.toISOString()}`)
-  console.log(`   🎯 Task: Discover users from last 1 hour`)
+  console.log(`   🎯 Task: Discover users from last 2 hours`)
   
   try {
     const discoveryService = new NewUsersDiscoveryService()
     
-    // Discover new users from the last hour
-    const result = await discoveryService.discoverNewUsers({ hoursBack: 1 })
+    // Discover new users from the last 2 hours (updated for safety buffer)
+    const result = await discoveryService.discoverNewUsers()
     
     const duration = Date.now() - startTime
     const endDate = new Date()
@@ -39,7 +39,8 @@ export async function GET(request: NextRequest) {
         unsigned: result.unsigned,
         signed: result.signed
       },
-      errors: result.errors
+      errors: result.errors,
+      nextRun: getNextRunTime()
     })
     
   } catch (error) {
@@ -55,11 +56,29 @@ export async function GET(request: NextRequest) {
       success: false,
       error: errorMessage,
       duration,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      nextRun: getNextRunTime()
     }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   return GET(request);
+}
+
+function getNextRunTime() {
+  const now = new Date();
+  const currentMinute = now.getMinutes();
+  
+  // Run every hour at minute 5
+  const nextRun = new Date(now);
+  if (currentMinute >= 5) {
+    nextRun.setHours(nextRun.getHours() + 1);
+  }
+  nextRun.setMinutes(5);
+  nextRun.setSeconds(0);
+  
+  const minutesUntil = Math.round((nextRun.getTime() - now.getTime()) / (1000 * 60));
+  
+  return `${minutesUntil} minutes`;
 } 

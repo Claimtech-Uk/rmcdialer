@@ -17,7 +17,7 @@ import type {
  * New Users Discovery Service
  * 
  * 🎯 CORE GOALS:
- * 1. Find users created in the last hour
+ * 1. Find users created in the last 2 hours (safety buffer)
  * 2. Add new users with score 0 (highest priority)
  * 3. Assign queue based on signature status:
  *    - No signature → unsigned_users queue
@@ -41,7 +41,7 @@ export class NewUsersDiscoveryService {
    */
   async discoverNewUsers(options: DiscoveryOptions = {}): Promise<NewUsersDiscoveryResult> {
     this.startTime = Date.now()
-    const { hoursBack = 1, dryRun = false } = options
+    const { hoursBack = 2, dryRun = false } = options
 
     const result: NewUsersDiscoveryResult = {
       timestamp: new Date(),

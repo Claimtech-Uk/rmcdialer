@@ -43,6 +43,18 @@ export interface SignatureConversionResult extends BaseDiscoveryResult {
   conversions: SignatureConversionData[]
 }
 
+// Outstanding Requirements Conversion Cleanup
+export interface OutstandingRequirementsConversionResult extends BaseDiscoveryResult {
+  totalOutstandingUsers: number
+  usersChecked: number
+  conversionsFound: number
+  usersUpdated: number
+  batchesProcessed: number
+  processingStrategy: string
+  completed: boolean
+  conversions: OutstandingRequirementsConversionData[]
+}
+
 // Cron 2: Unsigned Conversion Tracking (Legacy)
 export interface UnsignedConversionResult extends BaseDiscoveryResult {
   usersChecked: number
@@ -65,6 +77,7 @@ export interface NewRequirementsDiscoveryResult extends BaseDiscoveryResult {
   newRequirementsFound: number
   usersUpdated: number
   skippedUnsigned: number
+  skippedNotInSystem: number
   excludedTypes: number
 }
 
@@ -79,6 +92,12 @@ export interface SignatureConversionData {
   userId: bigint
   signatureFileId: number
   convertedAt: Date
+}
+
+export interface OutstandingRequirementsConversionData {
+  userId: bigint
+  completedAt: Date
+  finalPendingRequirements: number
 }
 
 export interface ConversionData {

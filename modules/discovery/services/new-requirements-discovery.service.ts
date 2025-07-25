@@ -17,11 +17,12 @@ import type {
  * New Requirements Discovery Service
  * 
  * 🎯 CORE GOALS:
- * 1. Find new requirements created in the last hour
+ * 1. Find new requirements created in the last 2 hours (safety buffer)
  * 2. Connect requirements → claims → users
- * 3. Update user queue type to 'requirements'
+ * 3. Update existing users to 'outstanding_requests' queue type
  * 4. Exclude specific requirement types
  * 5. Skip unsigned users (unsigned takes priority)
+ * 6. Skip users not yet in system (handled by new users discovery)
  * 
  * 🚫 EXCLUDED REQUIREMENT TYPES:
  * - signature
@@ -49,7 +50,7 @@ export class NewRequirementsDiscoveryService {
    */
   async discoverNewRequirements(options: DiscoveryOptions = {}): Promise<NewRequirementsDiscoveryResult> {
     this.startTime = Date.now()
-    const { hoursBack = 1, dryRun = false } = options
+    const { hoursBack = 2, dryRun = false } = options
 
     const result: NewRequirementsDiscoveryResult = {
       timestamp: new Date(),
@@ -61,6 +62,7 @@ export class NewRequirementsDiscoveryService {
       newRequirementsFound: 0,
       usersUpdated: 0,
       skippedUnsigned: 0,
+      skippedNotInSystem: 0,
       excludedTypes: 0
     }
 
@@ -98,9 +100,10 @@ export class NewRequirementsDiscoveryService {
       }
 
       result.success = true
-      result.summary = `✅ New Requirements Discovery: ${result.usersUpdated} users updated to outstanding_requests queue`
+      result.summary = `✅ New Requirements Discovery: ${result.usersUpdated} users updated, ${result.skippedNotInSystem} skipped (not in system)`
       
       logger.info(result.summary)
+      logger.info(`🎯 [SEPARATION] Only updated existing users - ${result.skippedNotInSystem} new users will be handled by user discovery at :05`)
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
@@ -290,7 +293,7 @@ export class NewRequirementsDiscoveryService {
 
       const batch = userIds.slice(i, i + this.BATCH_SIZE)
       
-      // Update existing user_call_scores or create new ones
+      // Only update existing user_call_scores (don't create new ones)
       for (const userId of batch) {
         try {
           const existingScore = await prisma.userCallScore.findUnique({
@@ -310,23 +313,12 @@ export class NewRequirementsDiscoveryService {
                 lastQueueCheck: new Date()
               }
             })
+            updated++
           } else {
-            // Create new user score entry for outstanding_requests queue
-            await prisma.userCallScore.create({
-              data: {
-                userId,
-                // @ts-ignore - currentQueueType exists in schema
-                currentQueueType: 'outstanding_requests',
-                currentScore: 0,
-                totalAttempts: 0,
-                isActive: true,
-                // @ts-ignore - lastQueueCheck exists in schema
-                lastQueueCheck: new Date()
-              }
-            })
+            // Skip users not yet in system - they'll be picked up by new users discovery
+            result.skippedNotInSystem++
+            logger.debug(`⏭️  Skipped user ${userId} - not yet in user_call_scores (will be created by new users discovery at :05)`)
           }
-          
-          updated++
           
         } catch (error) {
           logger.error(`Failed to update user ${userId}:`, error)
@@ -334,7 +326,7 @@ export class NewRequirementsDiscoveryService {
         }
       }
       
-      logger.info(`✅ Batch ${Math.floor(i / this.BATCH_SIZE) + 1}: Updated ${batch.length} users to outstanding_requests queue (${updated}/${userIds.length} total)`)
+              logger.info(`✅ Batch ${Math.floor(i / this.BATCH_SIZE) + 1}: Processed ${batch.length} users - ${updated} updated, ${result.skippedNotInSystem} skipped (not in system)`)
     }
     
     result.usersUpdated = updated

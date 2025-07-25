@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { NewRequirementsDiscoveryService } from '@/modules/discovery/services/new-requirements-discovery.service'
+import { OutstandingRequirementsConversionCleanupService } from '@/modules/discovery/services/outstanding-requirements-conversion-cleanup.service'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,70 +30,68 @@ async function logCronExecution(jobName: string, status: 'running' | 'success' |
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
-  const startDate = new Date()
-  
-  console.log(`🚀 [CRON] Requirements Lookup & Discovery STARTED`)
-  console.log(`   🕐 Started at: ${startDate.toISOString()}`)
-  console.log(`   🎯 Task: Lookup new claim requirements from last 1 hour`)
   
   try {
+    console.log('🧹 [CRON] Outstanding Requirements Conversion Cleanup starting...')
+    
     // Log start
-    await logCronExecution('discover-new-requirements', 'running', 0, { 
-      message: 'Requirements lookup and discovery started',
-      timestamp: startDate.toISOString()
+    await logCronExecution('outstanding-requirements-conversion-cleanup', 'running', 0, { 
+      message: 'Outstanding requirements conversion cleanup started',
+      timestamp: new Date().toISOString()
     });
     
-    const discoveryService = new NewRequirementsDiscoveryService()
-    
-    // Discover new requirements from the last hour
-    const result = await discoveryService.discoverNewRequirements({ hoursBack: 1 })
+    const cleanupService = new OutstandingRequirementsConversionCleanupService()
+    const result = await cleanupService.cleanupOutstandingRequirementsConversions()
     
     const duration = Date.now() - startTime
-    const endDate = new Date()
     
-    console.log(`✅ [CRON] Requirements Lookup & Discovery COMPLETED`)
-    console.log(`   🕐 Finished at: ${endDate.toISOString()}`)
-    console.log(`   ⏱️  Duration: ${duration}ms (${(duration/1000).toFixed(2)}s)`)
-    console.log(`   📊 Result: ${result.summary}`)
+    console.log(`✅ [CRON] Outstanding Requirements Conversion Cleanup completed: ${result.summary} (${duration}ms)`)
     
     // Log success
-    await logCronExecution('discover-new-requirements', 'success', duration, {
-      requirementsChecked: result.requirementsChecked,
-      newRequirementsFound: result.newRequirementsFound,
+    await logCronExecution('outstanding-requirements-conversion-cleanup', 'success', duration, {
+      totalOutstandingUsers: result.totalOutstandingUsers,
+      usersChecked: result.usersChecked,
+      conversionsFound: result.conversionsFound,
       usersUpdated: result.usersUpdated,
-      skippedUnsigned: result.skippedUnsigned,
-      excludedTypes: result.excludedTypes,
+      batchesProcessed: result.batchesProcessed,
+      processingStrategy: result.processingStrategy,
+      completed: result.completed,
       summary: result.summary
     });
     
+    // Convert BigInt values to strings for JSON serialization
+    const serializedConversions = result.conversions.map(conversion => ({
+      ...conversion,
+      userId: conversion.userId.toString()
+    }))
+
     return NextResponse.json({
       success: result.success,
       duration,
       timestamp: result.timestamp,
       summary: result.summary,
-      details: {
-        requirementsChecked: result.requirementsChecked,
-        newRequirementsFound: result.newRequirementsFound,
+      stats: {
+        totalOutstandingUsers: result.totalOutstandingUsers,
+        usersChecked: result.usersChecked,
+        conversionsFound: result.conversionsFound,
         usersUpdated: result.usersUpdated,
-        skippedUnsigned: result.skippedUnsigned,
-        skippedNotInSystem: result.skippedNotInSystem,
-        excludedTypes: result.excludedTypes
+        batchesProcessed: result.batchesProcessed,
+        processingStrategy: result.processingStrategy,
+        completed: result.completed
       },
+      conversions: serializedConversions,
       errors: result.errors,
       nextRun: getNextRunTime()
     })
-    
+
   } catch (error) {
     const duration = Date.now() - startTime
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     
-    console.error(`❌ [CRON] Requirements Lookup & Discovery FAILED`)
-    console.error(`   🕐 Failed at: ${new Date().toISOString()}`)
-    console.error(`   ⏱️  Duration: ${duration}ms`)
-    console.error(`   ❗ Error: ${errorMessage}`)
+    console.error('❌ [CRON] Outstanding Requirements Conversion Cleanup failed:', error)
     
     // Log failure
-    await logCronExecution('discover-new-requirements', 'failed', duration, {
+    await logCronExecution('outstanding-requirements-conversion-cleanup', 'failed', duration, {
       errorMessage,
       errorStack: error instanceof Error ? error.stack : undefined
     }, errorMessage);
@@ -117,12 +115,12 @@ function getNextRunTime() {
   const now = new Date();
   const currentMinute = now.getMinutes();
   
-  // Run every hour at minute 15
+  // Run every hour at minute 10
   const nextRun = new Date(now);
-  if (currentMinute >= 15) {
+  if (currentMinute >= 10) {
     nextRun.setHours(nextRun.getHours() + 1);
   }
-  nextRun.setMinutes(15);
+  nextRun.setMinutes(10);
   nextRun.setSeconds(0);
   
   const minutesUntil = Math.round((nextRun.getTime() - now.getTime()) / (1000 * 60));
