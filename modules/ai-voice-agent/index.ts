@@ -59,7 +59,7 @@ export const defaultAudioPipelineConfig = {
     responseFormat: 'verbose_json' as const
   },
   hume: {
-    voiceDescription: 'A sophisticated British customer service representative with a warm, professional tone. Think BBC presenter meets friendly bank manager - articulate, empathetic, and naturally authoritative.',
+    voiceId: 'd1248151-8613-41c1-b524-4ce242b02090',
     format: 'wav' as const,
     instantMode: true
   },
@@ -90,7 +90,36 @@ Remember: You are speaking, not writing, so use natural conversational language.
 
 // Predefined Voice Configurations
 export const voiceProfiles = {
-  // Customer Service Voices
+  // Primary Voice (using specific voice ID)
+  default: {
+    voiceId: 'd1248151-8613-41c1-b524-4ce242b02090',
+    format: 'wav' as const,
+    instantMode: true
+  },
+  
+  // Acting instructions for the primary voice (different emotional tones)
+  calm: {
+    voiceId: 'd1248151-8613-41c1-b524-4ce242b02090',
+    voiceDescription: 'speaking in a calm, reassuring tone with deliberate pauses',
+    format: 'wav' as const,
+    instantMode: true
+  },
+  
+  urgent: {
+    voiceId: 'd1248151-8613-41c1-b524-4ce242b02090',
+    voiceDescription: 'speaking with controlled urgency and slightly faster pace',
+    format: 'wav' as const,
+    instantMode: true
+  },
+  
+  empathetic: {
+    voiceId: 'd1248151-8613-41c1-b524-4ce242b02090',
+    voiceDescription: 'speaking with extra warmth and empathy, very understanding tone',
+    format: 'wav' as const,
+    instantMode: true
+  },
+  
+  // Alternative voices (using voice descriptions for variety)
   professionalBritish: {
     voiceDescription: 'A sophisticated British customer service representative with a warm, professional tone. Think BBC presenter meets friendly bank manager - articulate, empathetic, and naturally authoritative.',
     format: 'wav' as const,

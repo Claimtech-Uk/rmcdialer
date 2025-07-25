@@ -116,14 +116,20 @@ export async function POST(request: NextRequest) {
     const callerInfo = await performEnhancedCallerLookup(from);
     
     // ✨ Customize voice based on call context
-    let selectedVoice = voiceProfiles.professionalBritish; // Default
+    let selectedVoice = voiceProfiles.default; // Use the specific voice ID as default
     
-    // Example: Use different voices based on caller or time
+    // Example: Use different emotional tones based on call context
     if (callerInfo?.user) {
-      selectedVoice = voiceProfiles.claimsSpecialist; // Returning customer gets specialist voice
+      // Returning customer - use empathetic tone
+      selectedVoice = voiceProfiles.empathetic;
     } else if (new Date().getHours() >= 18 || new Date().getHours() <= 8) {
-      selectedVoice = voiceProfiles.calmingCounselor; // After hours = calmer voice
+      // After hours - use calm, soothing tone
+      selectedVoice = voiceProfiles.calm;
     }
+    // Could add more logic here:
+    // - High priority claims: voiceProfiles.urgent
+    // - Complaint calls: voiceProfiles.empathetic
+    // - General inquiries: voiceProfiles.default
     
     // Initialize audio pipeline with custom voice
     const audioPipeline = new AudioPipelineService(
