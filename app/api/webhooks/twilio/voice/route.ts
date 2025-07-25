@@ -161,6 +161,21 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         
         // Generate TwiML using <Stream> for real-time audio processing
         // Note: The AI agent will handle the greeting, so we skip the <Say> tag
+        // TODO: Temporarily using Say instead of Stream until WebSocket is properly implemented
+        const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">${greetingText}</Say>
+    <Gather input="speech dtmf" timeout="5" speechTimeout="auto">
+        <Say voice="alice">Please tell me how I can help you today, or press any key to speak with an agent.</Say>
+    </Gather>
+    <Say voice="alice">Let me transfer you to one of our agents who can assist you further.</Say>
+    <Dial timeout="30">
+        <Queue>support</Queue>
+    </Dial>
+</Response>`;
+        
+        // Stream version (disabled until WebSocket is working):
+        /*
         const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Stream url="${streamUrl}">
@@ -172,6 +187,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         ${callerInfo?.user ? `<Parameter name="callerName" value="${callerInfo.user.first_name} ${callerInfo.user.last_name}" />` : ''}
     </Stream>
 </Response>`;
+        */
         
         console.log(`✅ Routing call ${callSid} to new AI voice agent via WebSocket streaming`);
         return new NextResponse(twimlResponse, {
