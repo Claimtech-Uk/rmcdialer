@@ -168,6 +168,9 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             throw new Error('Missing HUME_API_KEY');
           }
           
+          // Debug API key (mask for security)
+          console.log(`🔑 Hume API Key present: ${humeApiKey ? 'Yes' : 'No'}, Length: ${humeApiKey?.length || 0}, Prefix: ${humeApiKey?.substring(0, 8)}...`);
+          
           // Use your specific voice ID
           const selectedVoice = voiceProfiles.default;
           const humeTTS = new HumeTTSService(humeApiKey, selectedVoice);

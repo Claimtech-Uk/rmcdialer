@@ -6,71 +6,42 @@ import { join } from 'path';
 
 export class AudioStorageService {
   private baseUrl: string;
-  private audioDir: string;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
-    this.audioDir = join(process.cwd(), 'public', 'audio');
-    this.ensureAudioDirectory();
-  }
-
-  private async ensureAudioDirectory(): Promise<void> {
-    try {
-      await mkdir(this.audioDir, { recursive: true });
-    } catch (error) {
-      console.error('Failed to create audio directory:', error);
-    }
+    // Remove file system operations for Vercel compatibility
   }
 
   /**
-   * Save base64 audio data to a publicly accessible file
+   * Save audio file to memory and return data URL for Vercel compatibility
+   * Instead of writing to disk, we'll return a data URL that can be used directly
    */
   async saveAudioFile(base64Audio: string, generationId: string): Promise<string> {
     try {
-      // Convert base64 to buffer
-      const audioBuffer = Buffer.from(base64Audio, 'base64');
+      // Validate base64 audio
+      if (!base64Audio || typeof base64Audio !== 'string') {
+        throw new Error('Invalid base64 audio data');
+      }
       
-      // Generate filename
-      const filename = `hume_${generationId}_${Date.now()}.wav`;
-      const filePath = join(this.audioDir, filename);
+      // For Vercel serverless, return data URL directly
+      // This works with Twilio's <Play> verb
+      const dataUrl = `data:audio/wav;base64,${base64Audio}`;
       
-      // Save file
-      await writeFile(filePath, audioBuffer);
+      console.log(`💾 Created data URL for Hume audio: ${generationId} (${Math.round(base64Audio.length / 1024)}KB)`);
       
-      // Return public URL
-      const publicUrl = `${this.baseUrl}/audio/${filename}`;
-      
-      console.log(`💾 Saved Hume audio: ${publicUrl}`);
-      return publicUrl;
+      return dataUrl;
       
     } catch (error) {
-      console.error('Failed to save audio file:', error);
-      throw new Error('Audio storage failed');
+      console.error('Failed to process audio data:', error);
+      throw new Error('Audio processing failed');
     }
   }
 
   /**
-   * Clean up old audio files (optional - could be run periodically)
+   * Cleanup function - no-op for data URLs
    */
   async cleanupOldFiles(olderThanMinutes: number = 60): Promise<void> {
-    try {
-      const { readdir, unlink, stat } = await import('fs/promises');
-      const files = await readdir(this.audioDir);
-      const cutoffTime = Date.now() - (olderThanMinutes * 60 * 1000);
-      
-      for (const file of files) {
-        if (file.startsWith('hume_') && file.endsWith('.wav')) {
-          const filePath = join(this.audioDir, file);
-          const stats = await stat(filePath);
-          
-          if (stats.mtime.getTime() < cutoffTime) {
-            await unlink(filePath);
-            console.log(`🗑️ Cleaned up old audio file: ${file}`);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Audio cleanup failed:', error);
-    }
+    // No cleanup needed for data URLs
+    console.log('🧹 No cleanup needed for data URLs');
   }
 } 
