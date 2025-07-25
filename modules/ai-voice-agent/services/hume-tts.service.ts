@@ -24,30 +24,19 @@ export class HumeTTSService {
     try {
       console.log(`🎵 Synthesizing text with Hume TTS: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
 
-      // Build utterance for Hume TTS API
+      // Call Hume TTS API with proper parameters according to documentation
       const utterance: any = {
         text: text.trim()
       };
 
-      // Add voice configuration
+      // Use either voice ID or description, not both (per Hume docs)
       if (this.voiceId) {
-        utterance.voice = { name: this.voiceId };
-      }
-      if (this.voiceDescription) {
+        utterance.voice = { id: this.voiceId };
+      } else if (this.voiceDescription) {
         utterance.description = this.voiceDescription;
       }
 
-      console.log(`🎤 Using voice config:`, { voiceId: this.voiceId, voiceDescription: this.voiceDescription });
-
-      // Call Hume TTS API with proper parameters
-      const synthesisRequest = {
-        text: text.trim(),
-        ...(this.voiceId && { voice: { id: this.voiceId } }), // Use object format
-        ...(this.voiceDescription && { description: this.voiceDescription })
-        // Remove format from utterances - it's not allowed here
-      };
-
-      console.log(`🎤 Calling Hume TTS with:`, synthesisRequest);
+      console.log('🎤 Hume TTS request utterance:', JSON.stringify(utterance, null, 2));
 
       // Use direct fetch call to Hume API with correct authentication
       const humeResponse = await fetch('https://api.hume.ai/v0/tts', {
@@ -57,8 +46,8 @@ export class HumeTTSService {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          utterances: [synthesisRequest],
-          format: 'wav' // Move format to top level
+          utterances: [utterance],
+          format: 'wav'
         })
       });
 
