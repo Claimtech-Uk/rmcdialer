@@ -92,8 +92,8 @@ export async function POST(request: NextRequest) {
      
      console.log('💬 AI Response:', aiResponseText);
 
-     // Generate speech using Hume TTS with your voice ID
-     console.log(`🎵 Generating speech with Hume TTS (voice: ${selectedVoice.voiceId || 'dynamic'})...`);
+     // Generate speech using Hume TTS with voice description
+     console.log(`🎵 Generating speech with Hume TTS (voice: ${selectedVoice.voiceDescription ? 'custom' : 'dynamic'})...`);
      const audioResponse = await humeTTS.synthesizeText(aiResponseText);
      
      // Save audio file to public URL

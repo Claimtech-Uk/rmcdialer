@@ -61,7 +61,7 @@ export const defaultAudioPipelineConfig = {
     responseFormat: 'verbose_json' as const
   },
   hume: {
-    voiceId: 'd1248151-8613-41c1-b524-4ce242b02090',
+    voiceDescription: 'A professional, friendly, and empathetic customer service representative with a warm British accent',
     format: 'wav' as const,
     instantMode: true
   },
@@ -92,31 +92,28 @@ Remember: You are speaking, not writing, so use natural conversational language.
 
 // Predefined Voice Configurations
 export const voiceProfiles = {
-  // Primary Voice (using specific voice ID)
+  // Primary Voice (using voice description instead of unavailable voice ID)
   default: {
-    voiceId: 'd1248151-8613-41c1-b524-4ce242b02090',
+    voiceDescription: 'A professional, friendly, and empathetic customer service representative with a warm British accent',
     format: 'wav' as const,
     instantMode: true
   },
   
-  // Acting instructions for the primary voice (different emotional tones)
+  // Acting instructions for different emotional tones
   calm: {
-    voiceId: 'd1248151-8613-41c1-b524-4ce242b02090',
-    voiceDescription: 'speaking in a calm, reassuring tone with deliberate pauses',
+    voiceDescription: 'A professional customer service representative speaking in a calm, reassuring tone with deliberate pauses and a warm British accent',
     format: 'wav' as const,
     instantMode: true
   },
   
   urgent: {
-    voiceId: 'd1248151-8613-41c1-b524-4ce242b02090',
-    voiceDescription: 'speaking with controlled urgency and slightly faster pace',
+    voiceDescription: 'A professional customer service representative speaking with controlled urgency and slightly faster pace, maintaining clarity and authority',
     format: 'wav' as const,
     instantMode: true
   },
   
   empathetic: {
-    voiceId: 'd1248151-8613-41c1-b524-4ce242b02090',
-    voiceDescription: 'speaking with extra warmth and empathy, very understanding tone',
+    voiceDescription: 'A professional customer service representative speaking with extra warmth and empathy, very understanding tone, like a caring counselor',
     format: 'wav' as const,
     instantMode: true
   },
