@@ -20,13 +20,15 @@ const TwilioVoiceWebhookSchema = z.object({
 
 // Helper function to determine if we should use AI voice agent
 function shouldUseAIAgent(callerInfo: any, from: string, to: string): boolean {
-  // For now, use AI for all inbound calls
-  // In the future, you might want to add logic based on:
+  // AI voice agents are currently disabled - routing all calls to human agents
+  // Will re-enable once Azure infrastructure with WebSocket support is ready
+  // 
+  // Future logic to consider when re-enabling:
   // - Caller history
   // - Time of day
   // - Agent availability
   // - Specific phone numbers
-  return true;
+  return false;
 }
 
 export async function POST(request: NextRequest) {
