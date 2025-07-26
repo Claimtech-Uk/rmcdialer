@@ -9,37 +9,82 @@ import type {
 export class NotInterestedOutcome implements CallOutcomeHandler {
   readonly type = 'not_interested' as const;
   readonly displayName = 'Not Interested';
-  readonly description = 'User explicitly stated they are not interested';
+  readonly description = 'Customer explicitly stated they are not interested';
   readonly category = 'negative' as const;
   
+  // Scoring: Bad outcome, significantly lower priority
+  readonly scoringRules = {
+    scoreAdjustment: 100,
+    description: 'Customer not interested - very low priority',
+    shouldTriggerConversion: false
+  };
+  
   async validate(context: CallOutcomeContext, data?: any): Promise<CallOutcomeValidation> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    
+    if (!context.callDurationSeconds || context.callDurationSeconds < 30) {
+      warnings.push('Very short call for expressing disinterest - verify customer actually spoke');
+    }
+    
     return {
-      isValid: true,
-      errors: [],
-      warnings: [],
+      isValid: errors.length === 0,
+      errors,
+      warnings,
       requiredFields: []
     };
   }
   
   async execute(context: CallOutcomeContext, data?: any): Promise<CallOutcomeResult> {
+    const nextActions = await this.getNextActions(context, data);
+    
     return {
       success: true,
       outcomeType: this.type,
-      nextActions: await this.getNextActions(context, data),
-      scoreAdjustment: this.getScoreAdjustment(context),
-      nextCallDelayHours: this.getDelayHours(context)
+      nextActions,
+      scoreAdjustment: this.scoringRules.scoreAdjustment,
+      nextCallDelayHours: this.getDelayHours(context),
+      outcomeNotes: data?.notes || 'Customer expressed they are not interested'
     };
   }
   
   async getNextActions(context: CallOutcomeContext, data?: any): Promise<NextAction[]> {
-    return [];
-  }
-  
-  getScoreAdjustment(context: CallOutcomeContext): number {
-    return 100; // Significant penalty
+    const actions: NextAction[] = [];
+    
+    // Flag for review after multiple not interested responses
+    if (context.previousOutcomes && 
+        context.previousOutcomes.filter(o => o === 'not_interested').length >= 1) {
+      actions.push({
+        type: 'flag_for_review',
+        description: 'Multiple "not interested" responses - consider removing from queue',
+        required: true,
+        priority: 'medium'
+      });
+    }
+    
+    // Consider opt-out if customer is adamant
+    if (data?.adamantRefusal) {
+      actions.push({
+        type: 'remove_from_queue',
+        description: 'Customer adamantly refused - consider permanent removal',
+        required: false,
+        priority: 'high'
+      });
+    }
+    
+    return actions;
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    return 720; // Wait 30 days
+    // Long delay for not interested customers
+    const previousNotInterestedCount = context.previousOutcomes?.filter(o => o === 'not_interested').length || 0;
+    
+    if (previousNotInterestedCount >= 2) {
+      return 168; // 1 week (should probably be removed)
+    } else if (previousNotInterestedCount >= 1) {
+      return 72; // 3 days
+    }
+    
+    return 48; // 2 days for first "not interested"
   }
 } 

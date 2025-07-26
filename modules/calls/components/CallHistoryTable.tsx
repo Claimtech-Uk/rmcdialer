@@ -28,15 +28,28 @@ interface Filters {
 }
 
 const OUTCOME_COLORS: Record<string, string> = {
+  // New unified vocabulary
+  'completed_form': 'bg-green-100 text-green-800',
+  'going_to_complete': 'bg-blue-100 text-blue-800',
+  'might_complete': 'bg-yellow-100 text-yellow-800',
+  'call_back': 'bg-purple-100 text-purple-800',
+  'no_answer': 'bg-gray-100 text-gray-800',
+  'hung_up': 'bg-orange-100 text-orange-800',
+  'bad_number': 'bg-red-100 text-red-800',
+  'no_claim': 'bg-gray-200 text-gray-800',
+  'not_interested': 'bg-red-100 text-red-800',
+  'do_not_contact': 'bg-red-200 text-red-900',
+  
+  // Legacy fallbacks for backward compatibility
   'contacted': 'bg-green-100 text-green-800',
-  'no_answer': 'bg-yellow-100 text-yellow-800',
   'voicemail': 'bg-blue-100 text-blue-800',
   'busy': 'bg-orange-100 text-orange-800',
   'wrong_number': 'bg-red-100 text-red-800',
-  'not_interested': 'bg-gray-100 text-gray-800',
   'callback_requested': 'bg-purple-100 text-purple-800',
   'documents_discussed': 'bg-indigo-100 text-indigo-800',
   'magic_link_sent': 'bg-cyan-100 text-cyan-800',
+  'left_voicemail': 'bg-blue-100 text-blue-800',
+  'failed': 'bg-red-100 text-red-800'
 }
 
 export function CallHistoryTable({ 
@@ -411,12 +424,23 @@ export function CallHistoryTable({
     
     // Map common outcomes to better display names
     const outcomeMap: Record<string, string> = {
-      'contacted': 'Contacted',
+      // New unified vocabulary
+      'completed_form': 'Completed Form',
+      'going_to_complete': 'Going to Complete',
+      'might_complete': 'Might Complete',
+      'call_back': 'Callback Requested',
       'no_answer': 'No Answer',
+      'hung_up': 'Hung Up',
+      'bad_number': 'Bad Number',
+      'no_claim': 'No Claim',
+      'not_interested': 'Not Interested',
+      'do_not_contact': 'Do Not Contact',
+      
+      // Legacy fallbacks
+      'contacted': 'Contacted',
       'voicemail': 'Voicemail',
       'busy': 'Busy',
       'wrong_number': 'Wrong Number',
-      'not_interested': 'Not Interested',
       'callback_requested': 'Callback Requested',
       'documents_discussed': 'Documents Discussed',
       'magic_link_sent': 'Magic Link Sent',

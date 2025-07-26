@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     // With EVI, all conversation flow is handled via WebSocket streaming
     // This webhook should not normally be called since EVI manages everything
     console.log('ℹ️ EVI is handling conversation flow - this webhook should not be needed');
-    
+     
     // Simple TwiML response that acknowledges but doesn't interfere with EVI
     const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('❌ Voice response webhook error:', error);
     
-    const errorTwiML = `<?xml version="1.0" encoding="UTF-8"?>
+     const errorTwiML = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Joanna">There was an issue with the call. Please try again.</Say>
     <Hangup/>

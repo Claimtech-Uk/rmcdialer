@@ -15,6 +15,21 @@ import { UserService } from '@/modules/users';
 import { PriorityScoringService } from '@/modules/scoring/services/priority-scoring.service';
 import { prisma } from '@/lib/db';
 import { replicaDb } from '@/lib/mysql';
+import { CallOutcomeType } from '@/modules/call-outcomes/types/call-outcome.types';
+
+// Create array of outcome types for validation
+const outcomeTypeValues = [
+  'completed_form',
+  'going_to_complete', 
+  'might_complete',
+  'call_back',
+  'no_answer',
+  'hung_up',
+  'bad_number',
+  'no_claim',
+  'not_interested',
+  'do_not_contact'
+] as const;
 
 // Create logger instance (in production this would come from a shared logger service)
 const logger = {
@@ -48,7 +63,7 @@ const UpdateCallStatusSchema = z.object({
 
 const RecordOutcomeSchema = z.object({
   sessionId: callSessionValidation.schema.shape.id, // Use our UUID validation
-  outcomeType: z.enum(['contacted', 'no_answer', 'busy', 'wrong_number', 'not_interested', 'callback_requested', 'left_voicemail', 'failed']),
+  outcomeType: z.enum(outcomeTypeValues), // Updated to use new vocabulary
   outcomeNotes: z.string().optional(),
   magicLinkSent: z.boolean().default(false),
   smsSent: z.boolean().default(false),

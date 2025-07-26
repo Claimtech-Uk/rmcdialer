@@ -21,6 +21,8 @@ import {
 } from '../types/call.types';
 import { UserService } from '../../users/services/user.service';
 import { PriorityScoringService } from '../../scoring/services/priority-scoring.service';
+import { CallOutcomeManager } from '@/modules/call-outcomes/services/call-outcome-manager.service'
+import type { CallOutcomeContext } from '@/modules/call-outcomes/types/call-outcome.types'
 
 // Dependencies that will be injected
 interface CallServiceDependencies {
@@ -36,10 +38,12 @@ interface CallServiceDependencies {
 
 export class CallService {
   private userService: UserService;
+  private callOutcomeManager: CallOutcomeManager
 
   constructor(private deps: CallServiceDependencies) {
     // Initialize UserService if not provided
     this.userService = deps.userService || new UserService();
+    this.callOutcomeManager = new CallOutcomeManager()
   }
 
   /**
@@ -180,7 +184,7 @@ export class CallService {
         data: {
           status: 'completed',
           endedAt: new Date(),
-          lastOutcomeType: 'failed',
+          lastOutcomeType: 'hung_up', // Updated to new vocabulary
           lastOutcomeNotes: reason,
           lastOutcomeAgentId: agentId,
           lastOutcomeAt: new Date()
@@ -284,6 +288,7 @@ export class CallService {
 
   /**
    * Record call outcome and disposition with enhanced conversion tracking
+   * Now using CallOutcomeManager for outcome processing
    */
   async recordCallOutcome(
     sessionId: string,
@@ -319,16 +324,32 @@ export class CallService {
           throw new Error(`Call session ${sessionId} not found`);
         }
 
+        // Process outcome using CallOutcomeManager
+                 const outcomeContext: CallOutcomeContext = {
+           sessionId,
+           userId: Number(callSession.userId),
+           agentId,
+           callDurationSeconds: callSession.durationSeconds || 0,
+           callStartedAt: callSession.startedAt,
+           queueType: callSession.sourceQueueType || undefined
+         };
+
+        const outcomeResult = await this.callOutcomeManager.processOutcome(
+          outcome.outcomeType as any,
+          outcomeContext,
+          outcome
+        );
+
         // 1. Create CallOutcome record (preserve existing pattern)
         const callOutcome = await tx.callOutcome.create({
           data: {
             callSessionId: sessionId,
             outcomeType: outcome.outcomeType,
-            outcomeNotes: outcome.outcomeNotes,
-            nextCallDelayHours: outcome.nextCallDelayHours,
-            magicLinkSent: outcome.magicLinkSent || false,
-            smsSent: outcome.smsSent || false,
-            documentsRequested: outcome.documentsRequested || [],
+            outcomeNotes: outcomeResult.outcomeNotes || outcome.outcomeNotes,
+            nextCallDelayHours: outcomeResult.nextCallDelayHours || outcome.nextCallDelayHours,
+            magicLinkSent: outcomeResult.magicLinkSent || outcome.magicLinkSent || false,
+            smsSent: outcomeResult.smsSent || outcome.smsSent || false,
+            documentsRequested: outcomeResult.documentsRequested || outcome.documentsRequested || [],
             recordedByAgentId: agentId,
           },
         });
@@ -338,51 +359,54 @@ export class CallService {
           where: { id: sessionId },
           data: {
             lastOutcomeType: outcome.outcomeType,
-            lastOutcomeNotes: outcome.outcomeNotes,
+            lastOutcomeNotes: outcomeResult.outcomeNotes || outcome.outcomeNotes,
             lastOutcomeAgentId: agentId,
             lastOutcomeAt: new Date(),
-            magicLinkSent: outcome.magicLinkSent || false,
-            smsSent: outcome.smsSent || false,
-            callbackScheduled: outcome.outcomeType === 'callback_requested',
-            followUpRequired: outcome.nextCallDelayHours !== null && outcome.nextCallDelayHours !== undefined,
+            magicLinkSent: outcomeResult.magicLinkSent || outcome.magicLinkSent || false,
+            smsSent: outcomeResult.smsSent || outcome.smsSent || false,
+            callbackScheduled: outcome.outcomeType === 'call_back',
+            followUpRequired: (outcomeResult.nextCallDelayHours !== null && outcomeResult.nextCallDelayHours !== undefined),
             updatedAt: new Date()
           },
         });
 
         // 3. Create callback if requested
-        if (outcome.outcomeType === 'callback_requested' && outcome.callbackDateTime) {
+        if (outcome.outcomeType === 'call_back' && (outcome.callbackDateTime || outcomeResult.callbackDateTime)) {
           await tx.callback.create({
             data: {
               userId: callSession.userId,
-              scheduledFor: outcome.callbackDateTime,
-              callbackReason: outcome.callbackReason || 'Agent scheduled callback',
+              scheduledFor: outcomeResult.callbackDateTime || outcome.callbackDateTime!,
+              callbackReason: outcomeResult.callbackReason || outcome.callbackReason || 'Agent scheduled callback',
               originalCallSessionId: sessionId,
               status: 'pending',
             },
           });
-          console.log(`📞 Created callback for ${outcome.callbackDateTime}`);
+          console.log(`📞 Created callback for ${outcomeResult.callbackDateTime || outcome.callbackDateTime}`);
         }
 
-        // 4. Handle conversions - track successful outcomes with agent attribution
-        if (this.isConversionOutcome(outcome.outcomeType)) {
-          await this.createConversion({
-            tx,
-            userId: Number(callSession.userId),
-            agentId,
-            outcomeType: outcome.outcomeType,
-            outcomeNotes: outcome.outcomeNotes,
-            documentsRequested: outcome.documentsRequested,
-            queueType: callSession.sourceQueueType || 'unknown',
-            totalAttempts: callSession.callQueue?.userCallScore?.totalAttempts || 0,
-            claimId: callSession.callQueue?.claimId ? Number(callSession.callQueue.claimId) : undefined
-          });
+        // 4. Handle conversions using outcome result
+        if (outcomeResult.conversions && outcomeResult.conversions.length > 0) {
+          for (const conversion of outcomeResult.conversions) {
+            await this.createConversion({
+              tx,
+              userId: Number(callSession.userId),
+              agentId,
+              outcomeType: outcome.outcomeType,
+              outcomeNotes: outcomeResult.outcomeNotes,
+              documentsRequested: outcomeResult.documentsRequested,
+              queueType: callSession.sourceQueueType || 'unknown',
+              totalAttempts: callSession.callQueue?.userCallScore?.totalAttempts || 0,
+              claimId: callSession.callQueue?.claimId ? Number(callSession.callQueue.claimId) : undefined
+            });
+          }
         }
 
-        // 5. Update user score based on outcome
+        // 5. Update user score using outcome result score adjustment
         await this.updateUserScoreAfterCall(
           tx,
           Number(callSession.userId),
-          outcome.outcomeType
+          outcome.outcomeType,
+          outcomeResult.scoreAdjustment
         );
 
         console.log(`✅ Call outcome recorded successfully for session ${sessionId}`);
@@ -604,13 +628,13 @@ export class CallService {
       'in-progress': 'connected',
       'completed': 'completed',
       'busy': 'no_answer',
-      'failed': 'failed',
+      'failed': 'hung_up', // Updated to new vocabulary
       'no-answer': 'no_answer',
-      'canceled': 'failed'
+      'canceled': 'hung_up' // Updated to new vocabulary
     };
 
     const updateData: CallUpdateOptions = {
-      status: statusMap[CallStatus] as any || 'failed'
+              status: statusMap[CallStatus] as any || 'hung_up' // Updated to new vocabulary
     };
 
     // Set times based on status
@@ -618,7 +642,7 @@ export class CallService {
       updateData.connectedAt = new Date();
     }
 
-    if (['completed', 'busy', 'failed', 'no-answer', 'canceled'].includes(CallStatus)) {
+          if (['completed', 'busy', 'hung_up', 'no-answer', 'canceled'].includes(CallStatus)) {
       updateData.endedAt = new Date();
     }
 
@@ -738,31 +762,20 @@ export class CallService {
   }
 
   private getDefaultDelayHours(outcomeType: string): number {
-    const delayMap: Record<string, number> = {
+    // Use CallOutcomeManager for delay logic
+    const handler = this.callOutcomeManager.getHandler(outcomeType as any);
+    if (handler) {
+      return handler.getDelayHours({} as any); // Simplified context for delay calculation
+    }
+    
+    // Fallback mapping for legacy outcomes not in our new system
+    const legacyDelayMap: Record<string, number> = {
       'contacted': 24,
-      'no_answer': 4,
       'busy': 2,
-      'wrong_number': 48,
-      'not_interested': 48,
-      'callback_requested': 0,
       'left_voicemail': 8,
       'failed': 1
     };
-    return delayMap[outcomeType] || 4;
-  }
-
-  private getScoreAdjustment(outcomeType: string): number {
-    const adjustmentMap: Record<string, number> = {
-      'contacted': -10,      // Lower score = higher priority for follow-up
-      'no_answer': 5,        // Slight penalty
-      'callback_requested': -5, // Medium priority for follow-up
-      'not_interested': 20,  // Large penalty - lower priority
-      'wrong_number': 15,    // Penalty but not as severe
-      'busy': 3,            // Minor penalty
-      'left_voicemail': 0,  // Neutral
-      'failed': 0
-    };
-    return adjustmentMap[outcomeType] || 0;
+    return legacyDelayMap[outcomeType] || 4;
   }
 
   private async updateUserScoreAfterCall(
@@ -854,7 +867,7 @@ export class CallService {
             lastOutcome: outcomeType,
             lastCallAt: new Date(),
             totalAttempts: scoringContext.totalAttempts,
-            successfulCalls: outcomeType === 'contacted' ? { increment: 1 } : undefined,
+            successfulCalls: ['completed_form', 'going_to_complete', 'call_back'].includes(outcomeType) ? { increment: 1 } : undefined,
             lastQueueCheck: new Date(),
         updatedAt: new Date()
       },
@@ -867,7 +880,7 @@ export class CallService {
         lastOutcome: outcomeType,
         lastCallAt: new Date(),
         totalAttempts: 1,
-            successfulCalls: outcomeType === 'contacted' ? 1 : 0
+            successfulCalls: ['completed_form', 'going_to_complete', 'call_back'].includes(outcomeType) ? 1 : 0
           }
         });
 
@@ -875,7 +888,7 @@ export class CallService {
       }
 
       // Remove from queue if converted or callback requested
-      if (shouldConvert || outcomeType === 'callback_requested') {
+              if (shouldConvert || outcomeType === 'call_back') {
         await tx.callQueue.updateMany({
           where: { 
             userId: BigInt(userId),
@@ -916,58 +929,27 @@ export class CallService {
   private mapToCallSession(dbSession: any): CallSession {
     return {
       id: dbSession.id,
-      userId: Number(dbSession.userId),
+      userId: BigInt(dbSession.userId),
       agentId: dbSession.agentId,
-      callQueueId: dbSession.callQueueId,
-      twilioCallSid: dbSession.twilioCallSid,
       status: dbSession.status,
-      direction: dbSession.direction,
-      startedAt: dbSession.startedAt,
-      connectedAt: dbSession.connectedAt,
-      endedAt: dbSession.endedAt,
+      twilioCallSid: dbSession.twilioCallSid,
       durationSeconds: dbSession.durationSeconds,
-      talkTimeSeconds: dbSession.talkTimeSeconds,
-      userClaimsContext: dbSession.userClaimsContext,
-      
-      // Recording fields
       recordingUrl: dbSession.recordingUrl,
-      recordingSid: dbSession.recordingSid,
+      recordingDuration: dbSession.recordingDurationSeconds,
       recordingStatus: dbSession.recordingStatus,
-      recordingDurationSeconds: dbSession.recordingDurationSeconds,
-      
-      // Call outcome fields (denormalized for performance)
+      startedAt: dbSession.startedAt,
+      endedAt: dbSession.endedAt,
       lastOutcomeType: dbSession.lastOutcomeType,
       lastOutcomeNotes: dbSession.lastOutcomeNotes,
       lastOutcomeAgentId: dbSession.lastOutcomeAgentId,
       lastOutcomeAt: dbSession.lastOutcomeAt,
-      
-      // Quick action flags
       magicLinkSent: dbSession.magicLinkSent || false,
       smsSent: dbSession.smsSent || false,
       callbackScheduled: dbSession.callbackScheduled || false,
       followUpRequired: dbSession.followUpRequired || false,
-      
-      // Queue & priority context (snapshots at time of call)
-      sourceQueueType: dbSession.sourceQueueType,
-      userPriorityScore: dbSession.userPriorityScore,
-      queuePosition: dbSession.queuePosition,
-      callAttemptNumber: dbSession.callAttemptNumber,
-      callSource: dbSession.callSource,
-      
-      // Call transcripts
-      transcriptUrl: dbSession.transcriptUrl,
+      recordingTranscript: dbSession.transcriptText,
       transcriptStatus: dbSession.transcriptStatus,
-      transcriptText: dbSession.transcriptText,
-      transcriptSummary: dbSession.transcriptSummary,
-      
-      // Call scoring & quality
-      callScore: dbSession.callScore,
-      sentimentScore: dbSession.sentimentScore ? Number(dbSession.sentimentScore) : undefined,
-      agentPerformanceScore: dbSession.agentPerformanceScore,
-      
-      // Sales & conversion (simplified)
-      saleMade: dbSession.saleMade || false,
-      
+      sourceQueueType: dbSession.sourceQueueType,
       createdAt: dbSession.createdAt,
       updatedAt: dbSession.updatedAt
     };

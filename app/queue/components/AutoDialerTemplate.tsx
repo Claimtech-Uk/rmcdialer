@@ -113,7 +113,7 @@ export function AutoDialerTemplate({ teamType }: AutoDialerTemplateProps) {
     setSessionStats(prev => ({
       ...prev,
       callsCompleted: prev.callsCompleted + 1,
-      successfulContacts: prev.successfulContacts + (outcome.outcomeType === 'contacted' ? 1 : 0),
+              successfulContacts: prev.successfulContacts + (['completed_form', 'going_to_complete', 'call_back'].includes(outcome.outcomeType) ? 1 : 0),
       lastCallAt: new Date()
     }));
 

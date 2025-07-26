@@ -404,17 +404,33 @@ export class QueueService {
         // Wait 48 hours after "not interested"
         return new Date(now.getTime() + 48 * 60 * 60 * 1000);
         
-      case 'callback_requested':
+      case 'call_back': // Updated from 'callback_requested'
         // Try again in 4 hours if no specific callback time
         return new Date(now.getTime() + 4 * 60 * 60 * 1000);
         
-      case 'wrong_number':
+      case 'bad_number': // Updated from 'wrong_number'
         // Wait 24 hours to verify number update
         return new Date(now.getTime() + 24 * 60 * 60 * 1000);
         
       case 'no_answer':
         // Try again in 2 hours
         return new Date(now.getTime() + 2 * 60 * 60 * 1000);
+        
+      case 'hung_up':
+        // Wait longer after hang-up
+        return new Date(now.getTime() + 6 * 60 * 60 * 1000);
+        
+      case 'do_not_contact':
+        // Should not be in queue, but if somehow here, wait very long
+        return new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
+        
+      case 'no_claim':
+        // Should not be in queue, but if somehow here, wait very long  
+        return new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
+        
+      case 'completed_form':
+        // Should not be in queue, but if somehow here, wait very long
+        return new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
         
       default:
         // Standard retry delay: 1 hour

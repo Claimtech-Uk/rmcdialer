@@ -8,43 +8,81 @@ import type {
 
 export class GoingToCompleteOutcome implements CallOutcomeHandler {
   readonly type = 'going_to_complete' as const;
-  readonly displayName = 'Going To Complete';
-  readonly description = 'User committed to completing their form';
+  readonly displayName = 'Going to Complete';
+  readonly description = 'Customer committed to completing their form soon';
   readonly category = 'positive' as const;
   
+  // Scoring: Very good outcome, high priority boost
+  readonly scoringRules = {
+    scoreAdjustment: -25,
+    description: 'Customer committed to completing form - high priority',
+    shouldTriggerConversion: false
+  };
+  
   async validate(context: CallOutcomeContext, data?: any): Promise<CallOutcomeValidation> {
-    // TODO: Implement validation logic
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    
+    if (!context.callDurationSeconds || context.callDurationSeconds < 60) {
+      warnings.push('Short call for a commitment - verify customer understanding');
+    }
+    
+    if (!data?.timeframe) {
+      warnings.push('Consider capturing expected completion timeframe');
+    }
+    
     return {
-      isValid: true,
-      errors: [],
-      warnings: [],
+      isValid: errors.length === 0,
+      errors,
+      warnings,
       requiredFields: []
     };
   }
   
   async execute(context: CallOutcomeContext, data?: any): Promise<CallOutcomeResult> {
-    // TODO: Implement execution logic
+    const nextActions = await this.getNextActions(context, data);
+    
     return {
       success: true,
       outcomeType: this.type,
-      nextActions: await this.getNextActions(context, data),
-      scoreAdjustment: this.getScoreAdjustment(context),
-      nextCallDelayHours: this.getDelayHours(context)
+      nextActions,
+      scoreAdjustment: this.scoringRules.scoreAdjustment,
+      nextCallDelayHours: this.getDelayHours(context),
+      magicLinkSent: data?.magicLinkSent || false,
+      outcomeNotes: data?.notes || 'Customer committed to completing their form'
     };
   }
   
   async getNextActions(context: CallOutcomeContext, data?: any): Promise<NextAction[]> {
-    // TODO: Define next actions for going to complete
-    return [];
-  }
-  
-  getScoreAdjustment(context: CallOutcomeContext): number {
-    // TODO: Calculate score adjustment 
-    return -25; // Higher priority
+    const actions: NextAction[] = [];
+    
+    // Send magic link if not already sent
+    if (!data?.magicLinkSent) {
+      actions.push({
+        type: 'send_magic_link',
+        description: 'Send magic link to help customer complete form',
+        required: true,
+        priority: 'high'
+      });
+    }
+    
+    // Send follow-up SMS
+    actions.push({
+      type: 'send_sms',
+      description: 'Send reminder SMS about form completion',
+      required: false,
+      priority: 'medium',
+      parameters: {
+        messageType: 'completion_reminder',
+        timeframe: data?.timeframe
+      }
+    });
+    
+    return actions;
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    // TODO: Calculate delay for follow-up
-    return 24; // Follow up in 24 hours
+    // Follow up relatively quickly to maintain momentum
+    return 12; // 12 hours to check on progress
   }
 } 

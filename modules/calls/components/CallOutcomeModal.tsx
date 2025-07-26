@@ -14,7 +14,9 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Send
+  Send,
+  Ban,
+  UserX
 } from 'lucide-react';
 import type { CallOutcomeOptions, UserCallContext } from '../types/call.types';
 
@@ -28,41 +30,63 @@ interface CallOutcomeModalProps {
   isSubmitting?: boolean;
 }
 
+// Updated to match call-outcomes service vocabulary
 const OUTCOME_TYPES = [
   {
-    type: 'contacted' as const,
-    label: 'Successfully Contacted',
+    type: 'completed_form' as const,
+    label: 'Completed Form',
     icon: CheckCircle,
     color: 'bg-green-500',
-    description: 'Spoke with the customer'
+    description: 'Customer completed their form'
+  },
+  {
+    type: 'going_to_complete' as const,
+    label: 'Going to Complete',
+    icon: Clock,
+    color: 'bg-blue-500',
+    description: 'Customer committed to completing form'
+  },
+  {
+    type: 'might_complete' as const,
+    label: 'Might Complete',
+    icon: MessageSquare,
+    color: 'bg-yellow-500',
+    description: 'Customer showed interest'
+  },
+  {
+    type: 'call_back' as const,
+    label: 'Callback Requested',
+    icon: Calendar,
+    color: 'bg-purple-500',
+    description: 'Customer requested a callback'
   },
   {
     type: 'no_answer' as const,
     label: 'No Answer',
     icon: PhoneOff,
-    color: 'bg-yellow-500',
+    color: 'bg-gray-400',
     description: 'Phone rang but no answer'
   },
   {
-    type: 'left_voicemail' as const,
-    label: 'Left Voicemail',
-    icon: MessageSquare,
-    color: 'bg-blue-500',
-    description: 'Left a voicemail message'
-  },
-  {
-    type: 'busy' as const,
-    label: 'Line Busy',
+    type: 'hung_up' as const,
+    label: 'Hung Up',
     icon: Phone,
     color: 'bg-orange-500',
-    description: 'Phone line was busy'
+    description: 'Customer hung up during call'
   },
   {
-    type: 'callback_requested' as const,
-    label: 'Callback Requested',
-    icon: Calendar,
-    color: 'bg-purple-500',
-    description: 'Schedule a callback'
+    type: 'bad_number' as const,
+    label: 'Bad Number',
+    icon: AlertCircle,
+    color: 'bg-red-400',
+    description: 'Incorrect or disconnected number'
+  },
+  {
+    type: 'no_claim' as const,
+    label: 'No Claim',
+    icon: Ban,
+    color: 'bg-gray-500',
+    description: 'Customer has no valid claim'
   },
   {
     type: 'not_interested' as const,
@@ -72,18 +96,11 @@ const OUTCOME_TYPES = [
     description: 'Customer not interested'
   },
   {
-    type: 'wrong_number' as const,
-    label: 'Wrong Number',
-    icon: AlertCircle,
-    color: 'bg-gray-500',
-    description: 'Wrong person or number'
-  },
-  {
-    type: 'failed' as const,
-    label: 'Call Failed',
-    icon: XCircle,
-    color: 'bg-red-600',
-    description: 'Technical issues'
+    type: 'do_not_contact' as const,
+    label: 'Do Not Contact',
+    icon: UserX,
+    color: 'bg-red-700',
+    description: 'Customer requested no further contact'
   }
 ];
 
@@ -111,7 +128,7 @@ export function CallOutcomeModal({
   const handleOutcomeChange = (outcomeType: string) => {
     setSelectedOutcome(outcomeType);
     
-    if (outcomeType === 'callback_requested' && !callbackDateTime) {
+    if (outcomeType === 'call_back' && !callbackDateTime) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(10, 0, 0, 0); // Default to 10 AM
@@ -123,7 +140,7 @@ export function CallOutcomeModal({
     if (!selectedOutcome) return;
 
     // Validation for callback scheduling
-    if (selectedOutcome === 'callback_requested') {
+    if (selectedOutcome === 'call_back') {
       if (!callbackDateTime) {
         alert('Please select a callback date and time');
         return;
@@ -138,10 +155,26 @@ export function CallOutcomeModal({
       }
     }
 
+    // Validation for do not contact - requires notes
+    if (selectedOutcome === 'do_not_contact') {
+      if (!notes.trim()) {
+        alert('Notes are required for "Do Not Contact" outcomes to document the customer request');
+        return;
+      }
+      
+      // Confirmation dialog for serious action
+      const confirmed = confirm(
+        'Are you sure the customer explicitly requested not to be contacted? This will remove them from all calling queues and mark them as opted out.'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     const outcome: CallOutcomeOptions = {
       outcomeType: selectedOutcome as any,
       outcomeNotes: notes.trim() || undefined,
-      ...(selectedOutcome === 'callback_requested' && callbackDateTime && {
+      ...(selectedOutcome === 'call_back' && callbackDateTime && {
         callbackDateTime: new Date(callbackDateTime),
         callbackReason: callbackReason.trim() || 'Customer requested callback',
         callbackScheduled: true
@@ -207,7 +240,7 @@ export function CallOutcomeModal({
           </div>
 
           {/* Callback Scheduling */}
-          {selectedOutcome === 'callback_requested' && (
+          {selectedOutcome === 'call_back' && (
             <div className="border rounded-lg p-4 bg-purple-50 border-purple-200">
               <h3 className="font-semibold mb-3 flex items-center gap-2 text-purple-800">
                 <Calendar className="w-4 h-4" />
@@ -294,19 +327,45 @@ export function CallOutcomeModal({
             </div>
           )}
 
+          {/* Do Not Contact Warning */}
+          {selectedOutcome === 'do_not_contact' && (
+            <div className="border rounded-lg p-4 bg-red-50 border-red-200">
+              <div className="flex items-center gap-2 text-red-800 font-semibold mb-2">
+                <UserX className="w-5 h-5" />
+                ⚠️ Critical: Do Not Contact Request
+              </div>
+              <p className="text-red-700 text-sm mb-2">
+                This action will <strong>permanently remove</strong> the customer from all calling queues and mark them as opted out. 
+                This should only be used when the customer explicitly requests not to be contacted.
+              </p>
+              <p className="text-red-600 text-xs">
+                Notes are <strong>required</strong> to document the customer's explicit request for legal compliance.
+              </p>
+            </div>
+          )}
+
           {/* Notes */}
           <div>
             <Label htmlFor="notes" className="text-base font-semibold mb-3 block">
-              Call Notes
+              Call Notes {selectedOutcome === 'do_not_contact' && <span className="text-red-500">*Required</span>}
             </Label>
             
             <textarea
               id="notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value.slice(0, 500))}
-              placeholder="Add notes about the conversation, customer responses, concerns, or any other relevant information..."
-              className="w-full p-3 border rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder={
+                selectedOutcome === 'do_not_contact' 
+                  ? "REQUIRED: Document the customer's explicit request not to be contacted. Include exact words used and context..."
+                  : "Add notes about the conversation, customer responses, concerns, or any other relevant information..."
+              }
+              className={`w-full p-3 border rounded-lg resize-none focus:ring-2 ${
+                selectedOutcome === 'do_not_contact' 
+                  ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
+                  : 'focus:ring-blue-500 focus:border-blue-500'
+              }`}
               rows={4}
+              required={selectedOutcome === 'do_not_contact'}
             />
             <div className="text-sm text-gray-500 mt-1">
               {notes.length}/500 characters
@@ -329,19 +388,37 @@ export function CallOutcomeModal({
             disabled={
               !selectedOutcome || 
               isSubmitting || 
-              (selectedOutcome === 'callback_requested' && !callbackDateTime)
+              (selectedOutcome === 'call_back' && !callbackDateTime) ||
+              (selectedOutcome === 'do_not_contact' && !notes.trim())
             }
-            className="bg-blue-600 hover:bg-blue-700"
+            className={selectedOutcome === 'do_not_contact' 
+              ? "bg-red-600 hover:bg-red-700" 
+              : "bg-blue-600 hover:bg-blue-700"
+            }
           >
             {isSubmitting ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                {selectedOutcome === 'callback_requested' ? 'Scheduling Callback...' : 'Saving...'}
+                {selectedOutcome === 'call_back' 
+                  ? 'Scheduling Callback...' 
+                  : selectedOutcome === 'do_not_contact'
+                  ? 'Processing Opt-Out...'
+                  : 'Saving...'
+                }
               </>
             ) : (
               <>
-                <Send className="w-4 h-4 mr-2" />
-                {selectedOutcome === 'callback_requested' ? 'Schedule Callback' : 'Save Outcome'}
+                {selectedOutcome === 'do_not_contact' ? (
+                  <UserX className="w-4 h-4 mr-2" />
+                ) : (
+                  <Send className="w-4 h-4 mr-2" />
+                )}
+                {selectedOutcome === 'call_back' 
+                  ? 'Schedule Callback' 
+                  : selectedOutcome === 'do_not_contact'
+                  ? 'Confirm Opt-Out'
+                  : 'Save Outcome'
+                }
               </>
             )}
           </Button>

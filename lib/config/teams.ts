@@ -73,7 +73,7 @@ export const TEAM_CONFIGS: Record<TeamType, TeamConfig> = {
       callback: "Perfect, I'll schedule a callback for {callbackTime}. We'll call you then to complete your signature process.",
       success: "Great! Your signature has been received. Your claim can now proceed to the next stage."
     },
-    successMetrics: ['signature_obtained', 'signed', 'contacted'],
+    successMetrics: ['completed_form', 'going_to_complete', 'call_back'], // Updated to new vocabulary
     routes: {
       autoDialer: '/queue/unsigned/auto-dialer',
       manual: '/queue/unsigned',
@@ -86,8 +86,8 @@ export const TEAM_CONFIGS: Record<TeamType, TeamConfig> = {
       smsEnabled: true
     },
     outcomes: {
-      primary: ['signature_obtained', 'signed', 'contacted'],
-      secondary: ['callback_requested', 'left_voicemail', 'no_answer']
+      primary: ['completed_form', 'going_to_complete', 'call_back'], // Updated to new vocabulary
+      secondary: ['might_complete', 'no_answer', 'hung_up'] // Updated to new vocabulary
     }
   },
   
@@ -117,7 +117,7 @@ export const TEAM_CONFIGS: Record<TeamType, TeamConfig> = {
       callback: "Great, I'll schedule a callback for {callbackTime} to discuss the required documents and help you upload them.",
       success: "Perfect! All required documents have been received. Your claim is now complete and will be processed."
     },
-    successMetrics: ['documents_received', 'requirements_completed', 'contacted'],
+    successMetrics: ['completed_form', 'going_to_complete', 'call_back'], // Updated to new vocabulary
     routes: {
       autoDialer: '/queue/requirements/auto-dialer',
       manual: '/queue/requirements',
@@ -130,8 +130,8 @@ export const TEAM_CONFIGS: Record<TeamType, TeamConfig> = {
       smsEnabled: true
     },
     outcomes: {
-      primary: ['documents_received', 'requirements_completed', 'contacted'],
-      secondary: ['callback_requested', 'left_voicemail', 'no_answer']
+      primary: ['completed_form', 'going_to_complete', 'call_back'], // Updated to new vocabulary
+      secondary: ['might_complete', 'no_answer', 'hung_up'] // Updated to new vocabulary
     }
   }
 };

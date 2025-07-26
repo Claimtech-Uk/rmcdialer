@@ -12,6 +12,7 @@ export { HungUpOutcome } from './services/hung-up.outcome'
 export { BadNumberOutcome } from './services/bad-number.outcome'
 export { NoClaimOutcome } from './services/no-claim.outcome'
 export { NotInterestedOutcome } from './services/not-interested.outcome'
+export { DoNotContactOutcome } from './services/do-not-contact.outcome'
 
 // Types
 export type {

@@ -164,7 +164,7 @@ export function useGlobalCall(): GlobalCallState {
       // For now, call with a basic outcome - in a full implementation,
       // this would show the outcome modal
       currentCall.onCallComplete({
-        outcomeType: 'contacted',
+        outcomeType: 'completed_form', // Updated to new vocabulary
         outcomeNotes: 'Call ended via global call system',
         magicLinkSent: false,
         smsSent: false,

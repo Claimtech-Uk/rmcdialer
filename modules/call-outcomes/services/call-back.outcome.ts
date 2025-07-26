@@ -9,44 +9,84 @@ import type {
 export class CallBackOutcome implements CallOutcomeHandler {
   readonly type = 'call_back' as const;
   readonly displayName = 'Call Back';
-  readonly description = 'User requested a callback at specific time';
-  readonly category = 'neutral' as const;
+  readonly description = 'Customer requested a callback at a specific time';
+  readonly category = 'positive' as const;
+  
+  // Scoring: Excellent outcome, customer wants to engage
+  readonly scoringRules = {
+    scoreAdjustment: -15,
+    description: 'Customer requested callback - high priority',
+    shouldTriggerConversion: false
+  };
   
   async validate(context: CallOutcomeContext, data?: any): Promise<CallOutcomeValidation> {
     const errors: string[] = [];
+    const warnings: string[] = [];
     
     if (data?.callbackDateTime && new Date(data.callbackDateTime) <= new Date()) {
-      errors.push('Callback time must be in the future');
+      errors.push('Callback date/time must be in the future');
+    }
+    
+    if (!data?.callbackReason) {
+      warnings.push('Consider adding a callback reason for better context');
     }
     
     return {
       isValid: errors.length === 0,
       errors,
-      warnings: [],
+      warnings,
       requiredFields: ['callbackDateTime']
     };
   }
   
   async execute(context: CallOutcomeContext, data?: any): Promise<CallOutcomeResult> {
+    const nextActions = await this.getNextActions(context, data);
+    
     return {
       success: true,
       outcomeType: this.type,
-      nextActions: await this.getNextActions(context, data),
-      scoreAdjustment: this.getScoreAdjustment(context),
+      nextActions,
+      scoreAdjustment: this.scoringRules.scoreAdjustment,
+      nextCallDelayHours: this.getDelayHours(context),
       callbackDateTime: data?.callbackDateTime,
-      callbackReason: data?.callbackReason || 'User requested callback'
+      callbackReason: data?.callbackReason || 'Customer requested callback',
+      outcomeNotes: data?.notes || 'Customer requested a callback'
     };
   }
   
   async getNextActions(context: CallOutcomeContext, data?: any): Promise<NextAction[]> {
-    return [];
-  }
-  
-  getScoreAdjustment(context: CallOutcomeContext): number {
-    return -10; // Slightly higher priority
+    const actions: NextAction[] = [];
+    
+    // Schedule the callback
+    actions.push({
+      type: 'schedule_callback',
+      description: `Schedule callback for ${data?.callbackDateTime || 'requested time'}`,
+      required: true,
+      priority: 'critical',
+      dueDate: data?.callbackDateTime ? new Date(data.callbackDateTime) : undefined,
+      parameters: {
+        callbackReason: data?.callbackReason,
+        preferredTime: data?.callbackDateTime
+      }
+    });
+    
+    // Send confirmation SMS
+    actions.push({
+      type: 'send_sms',
+      description: 'Send callback confirmation SMS',
+      required: false,
+      priority: 'medium',
+      parameters: {
+        messageType: 'callback_confirmation',
+        callbackTime: data?.callbackDateTime
+      }
+    });
+    
+    return actions;
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    return 0; // Scheduled time overrides delay
+    // No standard delay - callback happens at requested time
+    return 0;
   }
 } 

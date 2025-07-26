@@ -1,61 +1,44 @@
+import type { CallOutcomeType } from '@/modules/call-outcomes/types/call-outcome.types';
+
 // Calls Module Types
 // Call sessions, outcomes, Twilio integration, and call analytics
 
 // Call session types
 export interface CallSession {
   id: string;
-  userId: number;
+  userId: bigint;
   agentId: number;
-  callQueueId: string;
-  twilioCallSid?: string;
   status: 'initiated' | 'connecting' | 'ringing' | 'connected' | 'completed' | 'failed' | 'no_answer';
-  direction: 'outbound' | 'inbound';
-  startedAt: Date;
-  connectedAt?: Date;
-  endedAt?: Date;
+  twilioCallSid?: string;
   durationSeconds?: number;
-  talkTimeSeconds?: number;
-  userClaimsContext?: any; // JSON snapshot of user's claims at call time
-  
-  // Recording fields
-  recordingUrl?: string; // Twilio recording URL
-  recordingSid?: string; // Twilio recording ID
+  recordingUrl?: string;
+  recordingDuration?: number;
   recordingStatus?: 'in-progress' | 'completed' | 'absent' | 'failed';
-  recordingDurationSeconds?: number; // Recording duration
-  
-  // Call outcome fields (denormalized for performance)
-  lastOutcomeType?: 'contacted' | 'no_answer' | 'busy' | 'wrong_number' | 'not_interested' | 'callback_requested' | 'left_voicemail' | 'failed';
+  startedAt: Date;
+  endedAt?: Date;
+  lastOutcomeType?: CallOutcomeType; // Updated to use unified type
   lastOutcomeNotes?: string;
   lastOutcomeAgentId?: number;
   lastOutcomeAt?: Date;
-  
-  // Quick action flags
   magicLinkSent: boolean;
   smsSent: boolean;
   callbackScheduled: boolean;
   followUpRequired: boolean;
-  
-  // Queue & priority context (snapshots at time of call)
-  sourceQueueType?: 'unsigned_users' | 'outstanding_requests' | 'callback';
-  userPriorityScore?: number;
-  queuePosition?: number;
-  callAttemptNumber?: number;
-  callSource?: 'queue' | 'manual' | 'callback';
-  
-  // Call transcripts
-  transcriptUrl?: string;
+  callOutcomes?: CallOutcome[];
+  recordingTranscript?: string;
   transcriptStatus?: 'processing' | 'completed' | 'failed';
-  transcriptText?: string;
-  transcriptSummary?: string;
-  
-  // Call scoring & quality
-  callScore?: number; // 1-10
-  sentimentScore?: number; // -1 to 1
-  agentPerformanceScore?: number; // 1-10
-  
-  // Sales & conversion (simplified)
-  saleMade: boolean;
-  
+  sourceQueueType?: string;
+  // New fields for enhanced call management
+  pausedAt?: Date;
+  pausedByAgentId?: number;
+  resumedAt?: Date;
+  transferredTo?: number;
+  transferReason?: string;
+  escalatedAt?: Date;
+  escalationReason?: string;
+  customerSatisfactionScore?: number;
+  callQuality?: 'excellent' | 'good' | 'fair' | 'poor';
+  notes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -129,7 +112,7 @@ export interface UserCallContext {
 export interface CallOutcome {
   id: string;
   callSessionId: string;
-  outcomeType: 'contacted' | 'no_answer' | 'busy' | 'wrong_number' | 'not_interested' | 'callback_requested' | 'left_voicemail' | 'failed';
+  outcomeType: CallOutcomeType; // Updated to use unified type
   outcomeNotes?: string;
   nextCallDelayHours: number;
   scoreAdjustment: number;
@@ -142,7 +125,7 @@ export interface CallOutcome {
 
 // Call outcome options for disposition
 export interface CallOutcomeOptions {
-  outcomeType: 'contacted' | 'no_answer' | 'busy' | 'wrong_number' | 'not_interested' | 'callback_requested' | 'left_voicemail' | 'failed';
+  outcomeType: CallOutcomeType; // Updated to use unified type
   outcomeNotes?: string;
   magicLinkSent?: boolean;
   smsSent?: boolean;

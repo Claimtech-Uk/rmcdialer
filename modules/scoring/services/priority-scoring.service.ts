@@ -1,16 +1,25 @@
 // Priority Scoring Service
 // Implements event-based scoring system with fresh starts and queue transitions
 
-import type { 
-  ScoringContext, 
-  PriorityScore, 
-  ScoreFactor, 
-  ScoringServiceDependencies,
-  ScoreExplanation 
-} from '../types/scoring.types'
+import type { ScoringContext, PriorityScore, ScoreFactor, ScoreExplanation } from '../types/scoring.types'
+import type { PriorityScore as PS } from '@/modules/queue/types/queue.types'
+import { CallOutcomeManager } from '@/modules/call-outcomes/services/call-outcome-manager.service'
+
+// Dependencies interface for better testability
+interface ScoringDependencies {
+  logger: {
+    info: (message: string, context: any) => void
+    warn: (message: string, context: any) => void
+    error: (message: string, context: any) => void
+  }
+}
 
 export class PriorityScoringService {
-  constructor(private dependencies: ScoringServiceDependencies) {}
+  private outcomeManager: CallOutcomeManager
+
+  constructor(private dependencies: ScoringDependencies) {
+    this.outcomeManager = new CallOutcomeManager()
+  }
 
   /**
    * Calculate priority score for a user using the event-based 0-200 system
@@ -34,7 +43,7 @@ export class PriorityScoringService {
         // 2. Start with current score and apply event-based adjustments
         finalScore = context.currentScore || 0
         
-        // 3. Apply outcome-based adjustments (main scoring mechanism)
+        // 3. Apply outcome-based adjustments using CallOutcomeManager
         if (context.lastOutcome) {
           const outcomeFactor = this.calculateOutcomeAdjustment(context.lastOutcome)
           factors.push(outcomeFactor)
@@ -69,25 +78,14 @@ export class PriorityScoringService {
         userId: context.userId,
         finalScore,
         factors,
-        calculatedAt: context.currentTime
+        calculatedAt: new Date()
       }
     } catch (error) {
-      this.dependencies.logger.error('Failed to calculate priority score', {
+      this.dependencies.logger.error('Error calculating priority score', {
         userId: context.userId,
-        error
+        error: error instanceof Error ? error.message : 'Unknown error'
       })
-      
-      // Return default score if calculation fails
-      return {
-        userId: context.userId,
-        finalScore: 50, // Middle-range default
-        factors: [{
-          name: 'error_fallback',
-          value: 50,
-          reason: 'Scoring calculation failed, using default score'
-        }],
-        calculatedAt: context.currentTime
-      }
+      throw error
     }
   }
 
@@ -123,40 +121,27 @@ export class PriorityScoringService {
   }
 
   /**
-   * Calculate outcome-based score adjustments per specification
+   * Calculate outcome-based score adjustments using CallOutcomeManager
    */
   private calculateOutcomeAdjustment(lastOutcome: string): ScoreFactor {
-    const outcomeAdjustments: Record<string, { value: number; description: string }> = {
-      // GOOD OUTCOMES (Lower score = Higher priority)
-      'callback_requested': { value: -10, description: 'User wants to talk!' },
-      'interested_but_busy': { value: -5, description: 'Showed interest' },
-      'making_progress': { value: -5, description: 'Making progress in conversation' },
-      'partial_completion': { value: -15, description: 'Started completing requirements' },
-      'contacted': { value: -5, description: 'Successfully contacted' },
-
-      // NEUTRAL/MINOR OUTCOMES
-      'answered_but_busy': { value: 2, description: 'Minor bump - try again soon' },
-      'left_voicemail': { value: 5, description: 'Left message' },
-
-      // BAD OUTCOMES (Higher score = Lower priority)
-      'no_answer': { value: 10, description: 'Harder to reach' },
-      'busy': { value: 10, description: 'Line was busy' },
-      'wrong_number': { value: 50, description: 'Big problem - incorrect contact info' },
-      'not_interested': { value: 100, description: 'Very low priority' },
-      'hostile_aggressive': { value: 150, description: 'Remove from queue soon' },
-      'opted_out': { value: 200, description: 'Should be converted/removed' },
-
-      // COMPLETION OUTCOMES (should trigger conversion)
-      'requirements_completed': { value: 200, description: 'Success - should be converted' },
-      'already_completed': { value: 200, description: 'Data sync issue - should be converted' }
+    // Get the score adjustment from the call outcome handler
+    const scoreAdjustment = this.outcomeManager.getScoreAdjustment(lastOutcome as any)
+    const handler = this.outcomeManager.getHandler(lastOutcome as any)
+    
+    if (handler) {
+      return {
+        name: 'outcome_adjustment',
+        value: scoreAdjustment,
+        reason: `${handler.displayName}: ${handler.scoringRules.description}`
+      }
     }
-
-    const adjustment = outcomeAdjustments[lastOutcome] || { value: 0, description: 'Unknown outcome' }
-
+    
+    // Fallback for unknown outcomes
+    this.dependencies.logger.warn('Unknown outcome type in scoring', { outcome: lastOutcome })
     return {
       name: 'outcome_adjustment',
-      value: adjustment.value,
-      reason: `Last outcome: ${lastOutcome} - ${adjustment.description}`
+      value: 0,
+      reason: `Unknown outcome: ${lastOutcome} - no adjustment applied`
     }
   }
 

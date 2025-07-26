@@ -1,5 +1,6 @@
 // Call Outcome Types - Shared interfaces for call disposition handling
 
+// Ground truth vocabulary for call outcomes across the entire system
 export type CallOutcomeType = 
   | 'completed_form'
   | 'going_to_complete'
@@ -9,7 +10,8 @@ export type CallOutcomeType =
   | 'hung_up'
   | 'bad_number'
   | 'no_claim'
-  | 'not_interested';
+  | 'not_interested'
+  | 'do_not_contact';
 
 export type NextActionType = 
   | 'schedule_callback'
@@ -84,9 +86,15 @@ export interface CallOutcomeHandler {
   readonly description: string;
   readonly category: 'positive' | 'neutral' | 'negative' | 'administrative';
   
+  // NEW: Scoring rules owned by each outcome
+  readonly scoringRules: {
+    scoreAdjustment: number;
+    description: string;
+    shouldTriggerConversion?: boolean;
+  };
+  
   validate(context: CallOutcomeContext, data?: any): Promise<CallOutcomeValidation>;
   execute(context: CallOutcomeContext, data?: any): Promise<CallOutcomeResult>;
   getNextActions(context: CallOutcomeContext, data?: any): Promise<NextAction[]>;
-  getScoreAdjustment(context: CallOutcomeContext): number;
   getDelayHours(context: CallOutcomeContext): number;
 } 

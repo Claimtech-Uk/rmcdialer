@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { replicaDb } from '@/lib/mysql';
+import { SimpleHumeTTSService } from '@/modules/ai-voice-agent/services/simple-hume-tts.service';
+import { isWithinBusinessHours, businessHoursService } from '@/lib/utils/business-hours';
 // AI Voice Agent imports removed - now using new streaming architecture
 
 // Twilio Voice Webhook Schema
@@ -155,7 +157,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         const baseUrl = 'https://rmcdialer.vercel.app';
         const streamUrl = `${baseUrl}/api/voice-agent/realtime?callSid=${callSid}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
         
-        // Generate caller greeting based on their information  
+        // Generate caller greeting based on their information
         const callerName = callerInfo?.user ? callerInfo.user.first_name : '';
         // Use shorter text to reduce data URI size
         const greetingText = callerName 
@@ -497,9 +499,71 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         userId: callerInfo?.user?.id || 'N/A'
       });
 
-      return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+      // SCENARIO 3: During hours with agents available - use Hume TTS connecting greeting
+      const connectingFirstName = callerInfo?.user?.first_name || '';
+      const connectingCallerName = callerInfo?.user ? 
+        `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 
+        '';
+      
+      console.log(`🎵 Generating Hume TTS connecting greeting for ${connectingCallerName || from} before transfer`);
+      
+      // Try to use Hume TTS for natural connecting greeting
+      try {
+        const humeTTSService = new SimpleHumeTTSService();
+        const audioBase64 = await humeTTSService.generateConnectingGreeting(connectingFirstName);
+        
+        console.log('✅ Using Hume TTS for connecting greeting');
+        
+        try {
+          console.log('🔧 Generating TwiML with Hume audio...');
+          
+          const twimlContent = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Hello${callerInfo?.user ? ' ' + callerInfo.user.first_name : ''}! Welcome to R M C Dialler. Please hold while we connect you to an available agent.</Say>
+    <Play>${audioBase64}</Play>
+    <Dial timeout="30" 
+          record="record-from-answer" 
+          recordingStatusCallback="${recordingCallbackUrl}"
+          statusCallback="${statusCallbackUrl}"
+          statusCallbackEvent="initiated ringing answered completed busy no-answer failed"
+          statusCallbackMethod="POST"
+          action="${statusCallbackUrl}">
+        <Client>
+            <Identity>${agentClientName}</Identity>
+            <Parameter name="originalCallSid" value="${callSid}" />
+            <Parameter name="callerPhone" value="${from}" />
+            <Parameter name="callSessionId" value="${callSession?.id || 'unknown'}" />
+            ${callerInfo?.user ? `<Parameter name="callerName" value="${callerInfo.user.first_name} ${callerInfo.user.last_name}" />` : ''}
+            ${callerInfo?.user ? `<Parameter name="userId" value="${callerInfo.user.id}" />` : ''}
+        </Client>
+    </Dial>
+    <Say voice="alice">I'm sorry, the agent couldn't be reached right now. We'll have someone call you back as soon as possible. Thank you!</Say>
+    <Hangup/>
+</Response>`;
+
+          console.log('📄 TwiML content length:', twimlContent.length);
+          console.log('🎵 Audio URL:', audioBase64.startsWith('http') ? audioBase64 : 'Data URI (fallback)');
+          
+          const response = new NextResponse(twimlContent, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/xml',
+            },
+          });
+          
+          console.log('✅ TwiML response created successfully');
+          return response;
+          
+        } catch (twimlError) {
+          console.error('❌ TwiML generation failed:', twimlError);
+          throw new Error('TwiML generation failed: ' + (twimlError instanceof Error ? twimlError.message : String(twimlError)));
+        }
+      } catch (error) {
+        console.warn('⚠️ Hume TTS connecting greeting failed, using Alice voice:', error instanceof Error ? error.message : String(error));
+        
+        // Fallback to Alice voice connecting greeting
+        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Hello${connectingFirstName ? ' ' + connectingFirstName : ''}! Welcome to R M C Dialler. Please hold while we connect you to an available agent.</Say>
     <Dial timeout="30" 
           record="record-from-answer" 
           recordingStatusCallback="${recordingCallbackUrl}"
@@ -519,30 +583,79 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
     <Say voice="alice">I'm sorry, the agent couldn't be reached right now. We'll have someone call you back as soon as possible. Thank you!</Say>
     <Hangup/>
 </Response>`, {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/xml',
-        },
-      });
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml',
+          },
+        });
+      }
     } else {
+      // No agents available - determine the appropriate response based on business hours
       const callerName = callerInfo?.user ? 
         `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 
         '';
+      const firstName = callerInfo?.user?.first_name || '';
       
-      console.log(`❌ No available agents - marking as missed call from ${callerName || from}`);
+      // Check if we're within business hours
+      const withinBusinessHours = isWithinBusinessHours();
+      const businessStatus = businessHoursService.getBusinessHoursStatus();
       
-      return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+      console.log(`📅 Business hours check: ${withinBusinessHours ? 'OPEN' : 'CLOSED'} (${businessStatus.reason})`);
+      console.log(`👥 Available agents: ${availableAgents.length}`);
+      
+      let greetingType: string;
+      let humeTTSMethod: string;
+      let fallbackMessage: string;
+      
+      if (!withinBusinessHours) {
+        // SCENARIO 1: Out of hours (outside business hours)
+        greetingType = 'out-of-hours';
+        humeTTSMethod = 'generateOutOfHoursGreeting';
+        fallbackMessage = `Thank you for calling R M C Dialler${firstName ? ', ' + firstName : ''}. Unfortunately, you've caught us outside of our normal working hours. We will call you back as soon as possible.`;
+        console.log(`🕐 ${greetingType.toUpperCase()}: Outside business hours - no agents expected`);
+      } else {
+        // SCENARIO 2: During hours but no agents online
+        greetingType = 'busy-agents';
+        humeTTSMethod = 'generateBusyGreeting';
+        fallbackMessage = `Thank you for calling R M C Dialler${firstName ? ', ' + firstName : ''}. All our agents are currently busy helping other customers. We'll have someone call you back shortly.`;
+        console.log(`⏰ ${greetingType.toUpperCase()}: During business hours but no agents available`);
+      }
+      
+      console.log(`🎵 Generating Hume TTS ${greetingType} greeting for ${callerName || from}`);
+      
+      // Try to use Hume TTS for natural greeting
+      try {
+        const humeTTSService = new SimpleHumeTTSService();
+        const audioBase64 = await (humeTTSService as any)[humeTTSMethod](firstName);
+        
+        console.log(`✅ Using Hume TTS for ${greetingType} greeting`);
+        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Thank you for calling R M C Dialler${callerName ? ', ' + callerInfo.user.first_name : ''}. Unfortunately, all our agents are currently busy or offline.</Say>
-    <Pause length="1"/>
-    <Say voice="alice">Your call is important to us and we will call you back as soon as possible. Thank you for your patience.</Say>
+    <Play>${audioBase64}</Play>
     <Hangup/>
 </Response>`, {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/xml',
-        },
-      });
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml',
+          },
+        });
+      } catch (error) {
+        console.warn(`⚠️ Hume TTS ${greetingType} greeting failed, falling back to Alice voice:`, error instanceof Error ? error.message : String(error));
+        
+        // Fallback to Alice voice greeting
+        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">${fallbackMessage}</Say>
+    <Pause length="1"/>
+    <Say voice="alice">Thank you for your patience.</Say>
+    <Hangup/>
+</Response>`, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml',
+          },
+        });
+      }
     }
 
   } catch (error) {
