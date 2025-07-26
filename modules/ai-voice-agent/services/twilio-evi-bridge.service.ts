@@ -1,7 +1,7 @@
 // Twilio-EVI Bridge Service
 // Bridges Twilio media streams with Hume EVI WebSocket connections
 
-import { HumeEVIService, BusinessContext, EVIMessage } from './hume-evi.service';
+import { HumeEVIService, ComprehensiveBusinessContext, EVIMessage } from './hume-evi.service';
 import { EventEmitter } from 'events';
 
 export interface TwilioMediaMessage {
@@ -48,7 +48,7 @@ export class TwilioEVIBridge extends EventEmitter {
    */
   async startSession(
     callSid: string, 
-    context: BusinessContext,
+    context: ComprehensiveBusinessContext,
     ws: any // WebSocket connection from Twilio
   ): Promise<void> {
     try {

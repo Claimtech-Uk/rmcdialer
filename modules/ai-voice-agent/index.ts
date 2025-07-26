@@ -4,6 +4,7 @@
 // Export EVI services (new simplified architecture)
 export { HumeEVIService } from './services/hume-evi.service';
 export { TwilioEVIBridge } from './services/twilio-evi-bridge.service';
+export { EVIBusinessFunctionsService } from './services/evi-business-functions.service';
 
 // Export remaining services (if needed for other features)
 export { WhisperService } from './services/whisper.service';
@@ -14,13 +15,18 @@ export { AIVoiceService } from './services/ai-voice.service';
 export type { 
   EVIConfig, 
   EVIMessage, 
-  BusinessContext 
+  ComprehensiveBusinessContext 
 } from './services/hume-evi.service';
 
 export type { 
   TwilioMediaMessage, 
   CallSession 
 } from './services/twilio-evi-bridge.service';
+
+export type {
+  FunctionCallRequest,
+  FunctionCallResult
+} from './services/evi-business-functions.service';
 
 // Legacy Types (for compatibility during migration)
 export type {

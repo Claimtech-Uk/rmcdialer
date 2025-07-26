@@ -4,7 +4,7 @@
 import { NextRequest } from 'next/server';
 import { WebSocketServer } from 'ws';
 import { TwilioEVIBridge, TwilioMediaMessage } from '@/modules/ai-voice-agent/services/twilio-evi-bridge.service';
-import { BusinessContext } from '@/modules/ai-voice-agent/services/hume-evi.service';
+import { ComprehensiveBusinessContext } from '@/modules/ai-voice-agent/services/hume-evi.service';
 
 // Global bridge instance (in production, consider using Redis or similar for scaling)
 let evibridge: TwilioEVIBridge | null = null;
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Create business context
-    const businessContext: BusinessContext = {
+    const businessContext: ComprehensiveBusinessContext = {
       callSid,
       callerPhone: from,
       callerName: callerName || undefined,
