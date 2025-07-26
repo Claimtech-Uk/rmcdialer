@@ -95,30 +95,30 @@ export async function POST(request: NextRequest) {
      // Generate speech using Hume TTS with voice description
      console.log(`🎵 Generating speech with Hume TTS (voice: ${selectedVoice.voiceDescription ? 'custom' : 'dynamic'})...`);
      const audioResponse = await humeTTS.synthesizeText(aiResponseText);
-     const responseUrl = await audioStorage.saveAudioFile(audioResponse.audio, audioResponse.generationId || `response_${Date.now()}`);
      
      // Generate follow-up questions with Hume voice
      const followUpText = "Is there anything else I can help you with?";
      const followUpAudio = await humeTTS.synthesizeText(followUpText);
-     const followUpUrl = await audioStorage.saveAudioFile(followUpAudio.audio, followUpAudio.generationId || `followup_${Date.now()}`);
      
      const closingText = "Thank you for calling RMC Dialler. Have a great day!";
      const closingAudio = await humeTTS.synthesizeText(closingText);
-     const closingUrl = await audioStorage.saveAudioFile(closingAudio.audio, closingAudio.generationId || `closing_${Date.now()}`);
      
-     console.log(`🎵 Generated response audio URLs (response: ${Math.round(audioResponse.audio.length/1024)}KB, followup: ${Math.round(followUpAudio.audio.length/1024)}KB, closing: ${Math.round(closingAudio.audio.length/1024)}KB)`);
-     console.log(`🔗 Response URL: ${responseUrl}`);
-     console.log(`🔗 FollowUp URL: ${followUpUrl}`);
-     console.log(`🔗 Closing URL: ${closingUrl}`);
+     // Convert to data URIs to avoid authentication issues
+     const responseDataUri = `data:audio/wav;base64,${audioResponse.audio}`;
+     const followUpDataUri = `data:audio/wav;base64,${followUpAudio.audio}`;
+     const closingDataUri = `data:audio/wav;base64,${closingAudio.audio}`;
      
-     // Use Hume-generated audio URLs (should now be publicly accessible via middleware)
+     console.log(`🎵 Generated response data URIs (response: ${Math.round(audioResponse.audio.length/1024)}KB, followup: ${Math.round(followUpAudio.audio.length/1024)}KB, closing: ${Math.round(closingAudio.audio.length/1024)}KB)`);
+     console.log(`🔗 Using data URIs to avoid 401 auth issues`);
+     
+     // Use Hume-generated audio via data URIs (no external URLs needed)
      const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-     <Play>${responseUrl}</Play>
+     <Play>${responseDataUri}</Play>
      <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
-         <Play>${followUpUrl}</Play>
+         <Play>${followUpDataUri}</Play>
      </Gather>
-     <Play>${closingUrl}</Play>
+     <Play>${closingDataUri}</Play>
      <Hangup/>
 </Response>`;
 

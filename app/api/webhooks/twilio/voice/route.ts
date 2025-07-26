@@ -179,22 +179,23 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           // Generate greeting audio with Hume
           console.log('🎵 Generating greeting with Hume voice...');
           const greetingAudio = await humeTTS.synthesizeText(greetingText);
-          const greetingUrl = await audioStorage.saveAudioFile(greetingAudio.audio, greetingAudio.generationId || `greeting_${Date.now()}`);
           
           const promptText = "Please tell me how I can help you today.";
           const promptAudio = await humeTTS.synthesizeText(promptText);
-          const promptUrl = await audioStorage.saveAudioFile(promptAudio.audio, promptAudio.generationId || `prompt_${Date.now()}`);
           
-          console.log(`🎵 Generated audio URLs (greeting: ${Math.round(greetingAudio.audio.length/1024)}KB, prompt: ${Math.round(promptAudio.audio.length/1024)}KB)`);
-          console.log(`🔗 Greeting URL: ${greetingUrl}`);
-          console.log(`🔗 Prompt URL: ${promptUrl}`);
+          // Convert to data URIs to avoid authentication issues
+          const greetingDataUri = `data:audio/wav;base64,${greetingAudio.audio}`;
+          const promptDataUri = `data:audio/wav;base64,${promptAudio.audio}`;
           
-          // Use Hume-generated audio URLs (should now be publicly accessible via middleware)
+          console.log(`🎵 Generated data URIs (greeting: ${Math.round(greetingAudio.audio.length/1024)}KB, prompt: ${Math.round(promptAudio.audio.length/1024)}KB)`);
+          console.log(`🔗 Embedding audio directly in TwiML to avoid 401 auth issues`);
+          
+          // Use Hume-generated audio via data URIs (no external URLs needed)
           const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Play>${greetingUrl}</Play>
+    <Play>${greetingDataUri}</Play>
     <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
-        <Play>${promptUrl}</Play>
+        <Play>${promptDataUri}</Play>
     </Gather>
     <Redirect>/api/webhooks/twilio/voice-response</Redirect>
 </Response>`;
