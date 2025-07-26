@@ -74,8 +74,9 @@ export class R2AudioHostingService {
 
       await this.s3Client.send(uploadCommand);
 
-      // Generate public URL using the public development domain
-      const publicUrl = `https://pub-c469bcbe5947499d91894e9b2ddc5423.r2.dev/${filename}`;
+      // Generate public URL using Vercel API proxy
+      const filenameOnly = filename.split('/').pop(); // Extract just the filename
+      const publicUrl = `https://rmcdialer.vercel.app/api/audio/hume-tts/${filenameOnly}`;
 
       console.log('✅ Successfully uploaded Hume TTS audio to R2:', {
         url: publicUrl,
@@ -85,22 +86,22 @@ export class R2AudioHostingService {
 
       // Test URL accessibility before returning
       try {
-        console.log('🔍 Testing R2 URL accessibility...');
+        console.log('🔍 Testing Vercel API proxy accessibility...');
         const testResponse = await fetch(publicUrl, { 
           method: 'HEAD',
-          signal: AbortSignal.timeout(5000) // 5 second timeout
+          signal: AbortSignal.timeout(10000) // 10 second timeout for API calls
         });
         
         if (testResponse.ok) {
-          console.log('✅ R2 URL is accessible, returning URL');
+          console.log('✅ Vercel API proxy is accessible, returning URL');
           return publicUrl;
         } else {
-          console.warn(`⚠️ R2 URL returned ${testResponse.status}, will fall back to data URI`);
-          throw new Error(`URL returned ${testResponse.status}`);
+          console.warn(`⚠️ Vercel API proxy returned ${testResponse.status}, will fall back to data URI`);
+          throw new Error(`API proxy returned ${testResponse.status}`);
         }
       } catch (urlTestError) {
-        console.warn('⚠️ R2 URL not accessible yet, falling back to data URI:', urlTestError instanceof Error ? urlTestError.message : String(urlTestError));
-        throw new Error('R2 URL not accessible');
+        console.warn('⚠️ Vercel API proxy not accessible, falling back to data URI:', urlTestError instanceof Error ? urlTestError.message : String(urlTestError));
+        throw new Error('API proxy not accessible');
       }
 
     } catch (error) {

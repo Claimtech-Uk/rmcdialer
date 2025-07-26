@@ -110,8 +110,9 @@ async function testR2HumeIntegration() {
 
     await s3Client.send(uploadCommand);
 
-    // Generate public URL using the public development domain
-    const publicUrl = `https://pub-c469bcbe5947499d91894e9b2ddc5423.r2.dev/${filename}`;
+    // Generate public URL using Vercel API proxy (will work once deployed)
+    const filenameOnly = filename.split('/').pop();
+    const publicUrl = `https://rmcdialer.vercel.app/api/audio/hume-tts/${filenameOnly}`;
     
     console.log('✅ R2 upload successful!');
     console.log('🔗 Public URL:', publicUrl);
