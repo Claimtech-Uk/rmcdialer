@@ -160,72 +160,43 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           ? `Hello ${callerName}! Welcome to RMC Dialler.`
           : `Hello! Welcome to RMC Dialler.`;
         
-        // Generate Hume audio for greeting
+        // Connect to Hume EVI for real-time conversation
         try {
-          const { HumeTTSService, AudioStorageService, voiceProfiles } = await import('@/modules/ai-voice-agent');
-          
           const humeApiKey = process.env.HUME_API_KEY;
           if (!humeApiKey) {
             throw new Error('Missing HUME_API_KEY');
           }
           
-          // Debug API key (mask for security)
-          console.log(`🔑 Hume API Key present: ${humeApiKey ? 'Yes' : 'No'}, Length: ${humeApiKey?.length || 0}, Prefix: ${humeApiKey?.substring(0, 8)}...`);
+          console.log(`🔑 Hume API Key present: ${humeApiKey ? 'Yes' : 'No'}, Length: ${humeApiKey?.length || 0}`);
           
-          // Use your specific voice ID
-          const selectedVoice = voiceProfiles.default;
-          const humeTTS = new HumeTTSService(humeApiKey, selectedVoice);
-          const audioStorage = new AudioStorageService(baseUrl);
+          // Create WebSocket stream URL for EVI
+          let streamUrl = `${baseUrl}/api/voice-agent/evi-stream?callSid=${callSid}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
           
-          // Generate greeting audio with Hume
-          console.log('🎵 Generating greeting with Hume voice...');
-          const greetingAudio = await humeTTS.synthesizeText(greetingText);
-          
-          // Use shorter prompt to reduce total TwiML size
-          const promptText = "How can I help you?";
-          const promptAudio = await humeTTS.synthesizeText(promptText);
-          
-          // Convert to data URIs but check size first
-          const greetingDataUri = `data:audio/wav;base64,${greetingAudio.audio}`;
-          const promptDataUri = `data:audio/wav;base64,${promptAudio.audio}`;
-          
-          const totalSize = Math.round((greetingAudio.audio.length + promptAudio.audio.length)/1024);
-          console.log(`🎵 Generated data URIs (greeting: ${Math.round(greetingAudio.audio.length/1024)}KB, prompt: ${Math.round(promptAudio.audio.length/1024)}KB, total: ${totalSize}KB)`);
-          
-          // If still too large (>800KB), fall back to simple Say
-          if (totalSize > 800) {
-            console.log(`⚠️ Data URIs too large (${totalSize}KB), falling back to Polly to avoid TwiML size limits`);
-            const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Joanna">${greetingText} I'm your AI assistant.</Say>
-    <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
-        <Say voice="Polly.Joanna">${promptText}</Say>
-    </Gather>
-    <Redirect>/api/webhooks/twilio/voice-response</Redirect>
-</Response>`;
-            
-            console.log(`✅ Routing call ${callSid} to AI voice agent (Polly fallback)`);
-            return new NextResponse(twimlResponse, {
-              status: 200,
-              headers: {
-                'Content-Type': 'application/xml',
-              },
-            });
+          // Add caller context to stream URL
+          if (callerInfo?.user) {
+            const params = new URLSearchParams();
+            params.set('userId', callerInfo.user.id.toString());
+            params.set('callerName', `${callerInfo.user.first_name} ${callerInfo.user.last_name}`);
+            streamUrl += `&${params.toString()}`;
           }
           
-          console.log(`🔗 Embedding audio directly in TwiML (size OK: ${totalSize}KB)`);
+          console.log(`🎤 Connecting call ${callSid} to Hume EVI stream`);
           
-          // Use Hume-generated audio via data URIs (if size is acceptable)
+          // Simple TwiML that streams to EVI - no complex audio generation needed!
           const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Play>${greetingDataUri}</Play>
-    <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
-        <Play>${promptDataUri}</Play>
-    </Gather>
-    <Redirect>/api/webhooks/twilio/voice-response</Redirect>
+    <Stream url="${streamUrl}">
+        <Parameter name="callSid" value="${callSid}" />
+        <Parameter name="from" value="${from}" />
+        <Parameter name="to" value="${to}" />
+        ${callerInfo?.user ? `<Parameter name="userId" value="${callerInfo.user.id}" />` : ''}
+        ${callerInfo?.user ? `<Parameter name="callerName" value="${callerInfo.user.first_name} ${callerInfo.user.last_name}" />` : ''}
+        ${callerInfo?.claimsCount ? `<Parameter name="claimsCount" value="${callerInfo.claimsCount}" />` : ''}
+        ${callerInfo?.priorityScore ? `<Parameter name="priorityScore" value="${callerInfo.priorityScore}" />` : ''}
+    </Stream>
 </Response>`;
           
-          console.log(`✅ Routing call ${callSid} to Hume AI voice agent`);
+          console.log(`✅ Routing call ${callSid} to Hume EVI (real-time conversation)`);
           return new NextResponse(twimlResponse, {
             status: 200,
             headers: {
@@ -233,15 +204,15 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             },
           });
           
-        } catch (humeError) {
-          console.error('❌ Hume greeting generation failed, using fallback:', humeError);
+        } catch (eviError) {
+          console.error('❌ EVI connection failed, using fallback:', eviError);
           
-          // Fallback to Polly if Hume fails
+          // Fallback to simple Say if EVI fails
           const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna">${greetingText}</Say>
+    <Say voice="Polly.Joanna">${greetingText} I'm your AI assistant.</Say>
     <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
-        <Say voice="Polly.Joanna">Please tell me how I can help you today.</Say>
+        <Say voice="Polly.Joanna">How can I help you today?</Say>
     </Gather>
     <Redirect>/api/webhooks/twilio/voice-response</Redirect>
 </Response>`;

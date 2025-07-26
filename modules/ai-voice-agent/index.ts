@@ -1,31 +1,26 @@
-// AI Voice Agent Module Exports
-// Services, types, and utilities for the new AI voice agent architecture (Twilio → Whisper → Hume)
+// AI Voice Agent Module - EVI Integration
+// Simplified architecture using Hume EVI for real-time conversations
 
-// Core Services
-export { AudioPipelineService } from './services/audio-pipeline.service';
+// Export EVI services (new simplified architecture)
+export { HumeEVIService } from './services/hume-evi.service';
+export { TwilioEVIBridge } from './services/twilio-evi-bridge.service';
+
+// Export remaining services (if needed for other features)
 export { WhisperService } from './services/whisper.service';
-export { HumeTTSService } from './services/hume-tts.service';
 export { ConversationEngineService } from './services/conversation-engine.service';
-export { AudioStorageService } from './services/audio-storage.service';
-export { AudioMemoryStorageService } from './services/audio-memory-storage.service';
-
-// Legacy Service (for compatibility during migration)
 export { AIVoiceService } from './services/ai-voice.service';
 
-// New Architecture Types
-export type {
-  TwilioMediaStreamEvent,
-  WhisperTranscriptionChunk,
-  HumeTTSChunk,
-  AudioStreamSession,
-  ConversationTurn,
-  FunctionCall,
-  ConversationIntent,
-  AudioPipelineConfig,
-  AudioStreamError,
-  BusinessFunction,
-  FunctionContext
-} from './types/audio-streaming.types';
+// Export types
+export type { 
+  EVIConfig, 
+  EVIMessage, 
+  BusinessContext 
+} from './services/hume-evi.service';
+
+export type { 
+  TwilioMediaMessage, 
+  CallSession 
+} from './services/twilio-evi-bridge.service';
 
 // Legacy Types (for compatibility during migration)
 export type {
