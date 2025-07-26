@@ -96,22 +96,44 @@ export async function POST(request: NextRequest) {
      console.log(`🎵 Generating speech with Hume TTS (voice: ${selectedVoice.voiceDescription ? 'custom' : 'dynamic'})...`);
      const audioResponse = await humeTTS.synthesizeText(aiResponseText);
      
-     // Generate follow-up questions with Hume voice
-     const followUpText = "Is there anything else I can help you with?";
+     // Generate follow-up questions with Hume voice (shorter text)
+     const followUpText = "Anything else?";
      const followUpAudio = await humeTTS.synthesizeText(followUpText);
      
-     const closingText = "Thank you for calling RMC Dialler. Have a great day!";
+     const closingText = "Thank you for calling!";
      const closingAudio = await humeTTS.synthesizeText(closingText);
      
-     // Convert to data URIs to avoid authentication issues
+     // Convert to data URIs but check size first
      const responseDataUri = `data:audio/wav;base64,${audioResponse.audio}`;
      const followUpDataUri = `data:audio/wav;base64,${followUpAudio.audio}`;
      const closingDataUri = `data:audio/wav;base64,${closingAudio.audio}`;
      
-     console.log(`🎵 Generated response data URIs (response: ${Math.round(audioResponse.audio.length/1024)}KB, followup: ${Math.round(followUpAudio.audio.length/1024)}KB, closing: ${Math.round(closingAudio.audio.length/1024)}KB)`);
-     console.log(`🔗 Using data URIs to avoid 401 auth issues`);
+     const totalSize = Math.round((audioResponse.audio.length + followUpAudio.audio.length + closingAudio.audio.length)/1024);
+     console.log(`🎵 Generated response data URIs (response: ${Math.round(audioResponse.audio.length/1024)}KB, followup: ${Math.round(followUpAudio.audio.length/1024)}KB, closing: ${Math.round(closingAudio.audio.length/1024)}KB, total: ${totalSize}KB)`);
      
-     // Use Hume-generated audio via data URIs (no external URLs needed)
+     // If too large, fall back to Polly
+     if (totalSize > 800) {
+       console.log(`⚠️ Response data URIs too large (${totalSize}KB), falling back to Polly to avoid TwiML size limits`);
+       const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+     <Say voice="Polly.Joanna">${aiResponseText}</Say>
+     <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
+         <Say voice="Polly.Joanna">Anything else?</Say>
+     </Gather>
+     <Say voice="Polly.Joanna">Thank you for calling!</Say>
+     <Hangup/>
+</Response>`;
+       return new NextResponse(twimlResponse, {
+         status: 200,
+         headers: {
+           'Content-Type': 'application/xml',
+         },
+       });
+     }
+     
+     console.log(`🔗 Using data URIs for response (size OK: ${totalSize}KB)`);
+     
+     // Use Hume-generated audio via data URIs (if size is acceptable)
      const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
      <Play>${responseDataUri}</Play>

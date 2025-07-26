@@ -153,11 +153,12 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         const baseUrl = 'https://rmcdialer.vercel.app';
         const streamUrl = `${baseUrl}/api/voice-agent/realtime?callSid=${callSid}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
         
-        // Generate caller greeting based on their information
+        // Generate caller greeting based on their information  
         const callerName = callerInfo?.user ? callerInfo.user.first_name : '';
+        // Use shorter text to reduce data URI size
         const greetingText = callerName 
-          ? `Hello ${callerName}! Welcome to R M C Dialler. I'm your AI assistant and I'm here to help you with your claims. How can I assist you today?`
-          : `Hello! Welcome to R M C Dialler. I'm your AI assistant and I'm here to help you with your claims. How can I assist you today?`;
+          ? `Hello ${callerName}! Welcome to RMC Dialler.`
+          : `Hello! Welcome to RMC Dialler.`;
         
         // Generate Hume audio for greeting
         try {
@@ -180,17 +181,41 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           console.log('🎵 Generating greeting with Hume voice...');
           const greetingAudio = await humeTTS.synthesizeText(greetingText);
           
-          const promptText = "Please tell me how I can help you today.";
+          // Use shorter prompt to reduce total TwiML size
+          const promptText = "How can I help you?";
           const promptAudio = await humeTTS.synthesizeText(promptText);
           
-          // Convert to data URIs to avoid authentication issues
+          // Convert to data URIs but check size first
           const greetingDataUri = `data:audio/wav;base64,${greetingAudio.audio}`;
           const promptDataUri = `data:audio/wav;base64,${promptAudio.audio}`;
           
-          console.log(`🎵 Generated data URIs (greeting: ${Math.round(greetingAudio.audio.length/1024)}KB, prompt: ${Math.round(promptAudio.audio.length/1024)}KB)`);
-          console.log(`🔗 Embedding audio directly in TwiML to avoid 401 auth issues`);
+          const totalSize = Math.round((greetingAudio.audio.length + promptAudio.audio.length)/1024);
+          console.log(`🎵 Generated data URIs (greeting: ${Math.round(greetingAudio.audio.length/1024)}KB, prompt: ${Math.round(promptAudio.audio.length/1024)}KB, total: ${totalSize}KB)`);
           
-          // Use Hume-generated audio via data URIs (no external URLs needed)
+          // If still too large (>800KB), fall back to simple Say
+          if (totalSize > 800) {
+            console.log(`⚠️ Data URIs too large (${totalSize}KB), falling back to Polly to avoid TwiML size limits`);
+            const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna">${greetingText} I'm your AI assistant.</Say>
+    <Gather input="speech" timeout="5" speechTimeout="auto" action="/api/webhooks/twilio/voice-response" method="POST">
+        <Say voice="Polly.Joanna">${promptText}</Say>
+    </Gather>
+    <Redirect>/api/webhooks/twilio/voice-response</Redirect>
+</Response>`;
+            
+            console.log(`✅ Routing call ${callSid} to AI voice agent (Polly fallback)`);
+            return new NextResponse(twimlResponse, {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/xml',
+              },
+            });
+          }
+          
+          console.log(`🔗 Embedding audio directly in TwiML (size OK: ${totalSize}KB)`);
+          
+          // Use Hume-generated audio via data URIs (if size is acceptable)
           const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Play>${greetingDataUri}</Play>
