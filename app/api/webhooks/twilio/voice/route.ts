@@ -686,7 +686,10 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           await outcomeManager.processOutcome(
             'missed_call',
             outcomeContext,
-            { notes: 'No agents available during business hours' }
+            { 
+              notes: 'No agents available during business hours',
+              missedCallTime: new Date().toISOString() // Required field for missed call validation
+            }
           );
 
           // Update call session status and context
@@ -962,7 +965,8 @@ async function createMissedCallSession(
         'missed_call',
         outcomeContext,
         { 
-          notes: reason === 'out_of_hours' ? 'Called outside business hours' : 'No agents available' 
+          notes: reason === 'out_of_hours' ? 'Called outside business hours' : 'No agents available',
+          missedCallTime: new Date().toISOString() // Required field for missed call validation
         }
       );
 
