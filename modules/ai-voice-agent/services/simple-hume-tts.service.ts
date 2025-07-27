@@ -33,15 +33,15 @@ export class SimpleHumeTTSService {
     try {
       console.log('🎵 Generating Hume TTS out-of-hours greeting...');
       
-      const greeting = callerName 
-        ? `Hello ${callerName}, welcome to Resolve Your Claim.
+              const greeting = callerName 
+          ? `Hello ${callerName}, welcome to Resolve My Claim.
 
 Unfortunately, you've caught us outside of our normal working hours.
 
 I've made a note in the system for one of our agents to give you a call back as soon as possible.
 
 Have a great day!`
-        : `Hello, welcome to Resolve Your Claim.
+          : `Hello, welcome to Resolve My Claim.
 
 Unfortunately, you've caught us outside of our normal working hours.
 
@@ -79,15 +79,15 @@ Have a great day!`;
     try {
       console.log('🎵 Generating Hume TTS busy greeting...');
       
-      const greeting = callerName 
-        ? `Hello ${callerName}, welcome to Resolve Your Claim.
+              const greeting = callerName 
+          ? `Hello ${callerName}, welcome to Resolve My Claim.
 
 All of our agents are currently busy helping other customers.
 
 Your call is important to us, and we'll have someone call you back shortly.
 
 Thank you for your patience!`
-        : `Hello, welcome to Resolve Your Claim.
+          : `Hello, welcome to Resolve My Claim.
 
 All of our agents are currently busy helping other customers.
 
@@ -126,12 +126,12 @@ Thank you for your patience!`;
       console.log('🎵 Generating Hume TTS connecting greeting...');
       
       const greeting = callerName 
-        ? `Hello ${callerName}, welcome to Resolve Your Claim.
+        ? `Hello ${callerName}, welcome to Resolve My Claim.
 
 Please hold for just a moment while I connect you to one of our available agents.
 
 Thank you for calling!`
-        : `Hello, welcome to Resolve Your Claim.
+        : `Hello, welcome to Resolve My Claim.
 
 Please hold for just a moment while I connect you to one of our available agents.
 

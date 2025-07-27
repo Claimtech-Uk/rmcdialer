@@ -452,7 +452,60 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       callSession = null;
     }
 
-    // 5. Generate appropriate TwiML response with caller context (for human agents)
+    // 5. Check business hours FIRST, before agent availability
+    const withinBusinessHours = isWithinBusinessHours();
+    const businessStatus = businessHoursService.getBusinessHoursStatus();
+    
+    console.log(`📅 Business hours check: ${withinBusinessHours ? 'OPEN' : 'CLOSED'} (${businessStatus.reason})`);
+    console.log(`👥 Available agents: ${availableAgents.length}`);
+    
+    // SCENARIO 1: Out of business hours (always takes priority)
+    if (!withinBusinessHours) {
+      const firstName = callerInfo?.user?.first_name || '';
+      const callerName = callerInfo?.user ? 
+        `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 
+        '';
+      
+      console.log(`🕐 OUT-OF-HOURS: Outside business hours - playing out-of-hours greeting`);
+      console.log(`🎵 Generating Hume TTS out-of-hours greeting for ${callerName || from}`);
+      
+      // Try to use Hume TTS for natural out-of-hours greeting
+      try {
+        const humeTTSService = new SimpleHumeTTSService();
+        const audioBase64 = await humeTTSService.generateOutOfHoursGreeting(firstName);
+        
+        console.log('✅ Using Hume TTS for out-of-hours greeting');
+        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>${audioBase64}</Play>
+    <Hangup/>
+</Response>`, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml',
+          },
+        });
+      } catch (error) {
+        console.warn(`⚠️ Hume TTS out-of-hours greeting failed, falling back to Alice voice:`, error instanceof Error ? error.message : String(error));
+        
+        // Fallback to Alice voice greeting
+        const fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. Unfortunately, you've caught us outside of our normal working hours. We will call you back as soon as possible.`;
+        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">${fallbackMessage}</Say>
+    <Pause length="1"/>
+    <Say voice="alice">Thank you for your patience.</Say>
+    <Hangup/>
+</Response>`, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml',
+          },
+        });
+      }
+    }
+
+    // 6. Generate appropriate TwiML response with caller context (for human agents during business hours)
     if (validatedAgent) {
       const callerName = callerInfo?.user ? 
         `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 
@@ -611,13 +664,13 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         // SCENARIO 1: Out of hours (outside business hours)
         greetingType = 'out-of-hours';
         humeTTSMethod = 'generateOutOfHoursGreeting';
-        fallbackMessage = `Thank you for calling R M C Dialler${firstName ? ', ' + firstName : ''}. Unfortunately, you've caught us outside of our normal working hours. We will call you back as soon as possible.`;
+        fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. Unfortunately, you've caught us outside of our normal working hours. We will call you back as soon as possible.`;
         console.log(`🕐 ${greetingType.toUpperCase()}: Outside business hours - no agents expected`);
       } else {
         // SCENARIO 2: During hours but no agents online
         greetingType = 'busy-agents';
         humeTTSMethod = 'generateBusyGreeting';
-        fallbackMessage = `Thank you for calling R M C Dialler${firstName ? ', ' + firstName : ''}. All our agents are currently busy helping other customers. We'll have someone call you back shortly.`;
+        fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. All our agents are currently busy helping other customers. We'll have someone call you back shortly.`;
         console.log(`⏰ ${greetingType.toUpperCase()}: During business hours but no agents available`);
       }
       
