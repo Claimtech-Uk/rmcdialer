@@ -696,7 +696,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
               status: 'missed_call',
               endedAt: new Date(),
               userClaimsContext: JSON.stringify({
-                ...JSON.parse(callSession.userClaimsContext || '{}'),
+                ...JSON.parse(String(callSession.userClaimsContext || '{}')),
                 outcome: 'missed_call',
                 outcomeNotes: 'No agents available during business hours',
                 missedCallReason: 'no_agents_available'

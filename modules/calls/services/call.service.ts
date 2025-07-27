@@ -364,24 +364,25 @@ export class CallService {
             lastOutcomeAt: new Date(),
             magicLinkSent: outcomeResult.magicLinkSent || outcome.magicLinkSent || false,
             smsSent: outcomeResult.smsSent || outcome.smsSent || false,
-            callbackScheduled: outcome.outcomeType === 'call_back',
+            callbackScheduled: !!(outcome.callbackDateTime || outcomeResult.callbackDateTime),
             followUpRequired: (outcomeResult.nextCallDelayHours !== null && outcomeResult.nextCallDelayHours !== undefined),
             updatedAt: new Date()
           },
         });
 
-        // 3. Create callback if requested
-        if (outcome.outcomeType === 'call_back' && (outcome.callbackDateTime || outcomeResult.callbackDateTime)) {
+        // 3. Create callback if any outcome has callback data
+        if (outcome.callbackDateTime || outcomeResult.callbackDateTime) {
           await tx.callback.create({
             data: {
               userId: callSession.userId,
               scheduledFor: outcomeResult.callbackDateTime || outcome.callbackDateTime!,
-              callbackReason: outcomeResult.callbackReason || outcome.callbackReason || 'Agent scheduled callback',
+              callbackReason: outcomeResult.callbackReason || outcome.callbackReason || `Callback for ${outcome.outcomeType} outcome`,
+              preferredAgentId: agentId, // Assign to current agent who processed the outcome
               originalCallSessionId: sessionId,
               status: 'pending',
             },
           });
-          console.log(`📞 Created callback for ${outcomeResult.callbackDateTime || outcome.callbackDateTime}`);
+          console.log(`📞 Created callback for ${outcomeResult.callbackDateTime || outcome.callbackDateTime} (outcome: ${outcome.outcomeType}) assigned to agent ${agentId}`);
         }
 
         // 4. Handle conversions using outcome result
