@@ -171,7 +171,7 @@ Thank you for calling!`;
       
       const requestBody = {
         utterances: [{
-          description: "Conversational English Guy",
+          description: "A polished, professional British voice speaking clearly with a calm and sophisticated tone, authoritative yet warm and approachable, perfect for customer service",
           text: text
         }]
       };
