@@ -66,15 +66,7 @@ export class NoAnswerOutcome implements CallOutcomeHandler {
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    // Progressive delay based on attempt count
-    const attemptCount = context.previousOutcomes?.filter(o => o === 'no_answer').length || 0;
-    
-    if (attemptCount >= 3) {
-      return 48; // 2 days after multiple no-answers
-    } else if (attemptCount >= 1) {
-      return 24; // 1 day after first no-answer
-    }
-    
-    return 4; // 4 hours for first attempt
+    // Fixed 4 hour delay for no answer calls
+    return 4;
   }
 } 

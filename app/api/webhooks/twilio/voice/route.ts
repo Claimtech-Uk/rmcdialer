@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { replicaDb } from '@/lib/mysql';
 import { SimpleHumeTTSService } from '@/modules/ai-voice-agent/services/simple-hume-tts.service';
 import { isWithinBusinessHours, businessHoursService } from '@/lib/utils/business-hours';
+import { CallOutcomeManager } from '@/modules/call-outcomes/services/call-outcome-manager.service';
 // AI Voice Agent imports removed - now using new streaming architecture
 
 // Twilio Voice Webhook Schema
@@ -151,7 +152,16 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       
       console.log(`🎵 Generating out-of-hours greeting for ${callerName || from}`);
       
-      // Generate out-of-hours greeting and hangup immediately
+      // Create missed call session for proper tracking
+      try {
+        await createMissedCallSession(from, callSid, nameInfo, 'out_of_hours');
+        console.log('✅ Out-of-hours missed call logged successfully');
+      } catch (sessionError) {
+        console.error('❌ Failed to create out-of-hours missed call session:', sessionError);
+        // Continue with greeting anyway
+      }
+      
+      // Generate out-of-hours greeting and hangup
       try {
         const humeTTSService = new SimpleHumeTTSService();
         const audioBase64 = await humeTTSService.generateOutOfHoursGreeting(firstName);
@@ -659,6 +669,48 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       console.log(`⏰ BUSY-AGENTS: During business hours but no agents available`);
       console.log(`🎵 Generating Hume TTS busy greeting for ${callerName || from}`);
       
+      // Create missed call session for proper tracking (since call session was already created above)
+      try {
+        // Apply missed call outcome to the existing call session
+        if (callSession) {
+          const outcomeManager = new CallOutcomeManager();
+          const outcomeContext = {
+            sessionId: String(callSession.id),
+            userId: Number(userId),
+            agentId: callSession.agentId,
+            callDurationSeconds: 0,
+            callStartedAt: callSession.startedAt,
+            previousOutcomes: []
+          };
+
+          await outcomeManager.processOutcome(
+            'missed_call',
+            outcomeContext,
+            { notes: 'No agents available during business hours' }
+          );
+
+          // Update call session status and context
+          await prisma.callSession.update({
+            where: { id: String(callSession.id) },
+            data: {
+              status: 'missed_call',
+              endedAt: new Date(),
+              userClaimsContext: JSON.stringify({
+                ...JSON.parse(callSession.userClaimsContext || '{}'),
+                outcome: 'missed_call',
+                outcomeNotes: 'No agents available during business hours',
+                missedCallReason: 'no_agents_available'
+              })
+            }
+          });
+
+          console.log('✅ No-agents-available missed call logged successfully');
+        }
+      } catch (sessionError) {
+        console.error('❌ Failed to log no-agents-available missed call:', sessionError);
+        // Continue with greeting anyway
+      }
+      
       // Try to use Hume TTS for natural busy greeting
       try {
         const humeTTSService = new SimpleHumeTTSService();
@@ -826,6 +878,103 @@ async function performEnhancedCallerLookup(phoneNumber: string): Promise<any> {
   } catch (error) {
     console.error('❌ [Voice Webhook] Enhanced caller lookup failed:', error);
     return null;
+  }
+}
+
+// Helper function to create missed call session with proper outcome logging
+async function createMissedCallSession(
+  from: string, 
+  callSid: string, 
+  nameInfo: { firstName?: string; lastName?: string; userId?: number } | null,
+  reason: 'out_of_hours' | 'no_agents_available'
+): Promise<string> {
+  try {
+    const userId = nameInfo?.userId || 999999; // Special ID for unknown callers
+    const callerName = nameInfo ? `${nameInfo.firstName} ${nameInfo.lastName}` : 'Unknown Caller';
+    
+    console.log(`📝 Creating missed call session for ${callerName} (${from}) - Reason: ${reason}`);
+    
+    // Create call queue entry for missed call
+    const missedCallQueue = await prisma.callQueue.create({
+      data: {
+        userId: BigInt(userId),
+        queueType: 'inbound_call',
+        priorityScore: 0,
+        status: 'missed',
+        queueReason: `Missed call: ${reason === 'out_of_hours' ? 'Called outside business hours' : 'No agents available'}`,
+        assignedToAgentId: null,
+        assignedAt: null,
+      }
+    });
+
+    // Find a valid agent ID for tracking purposes
+    const fallbackAgent = await prisma.agent.findFirst({
+      where: { isActive: true },
+      select: { id: true }
+    });
+
+    if (!fallbackAgent) {
+      throw new Error('No valid agents found for missed call tracking');
+    }
+
+    // Create call session with missed call status
+    const callSession = await prisma.callSession.create({
+      data: {
+        userId: BigInt(userId),
+        agentId: fallbackAgent.id,
+        callQueueId: missedCallQueue.id,
+        twilioCallSid: callSid,
+        status: 'missed_call',
+        direction: 'inbound',
+        startedAt: new Date(),
+        endedAt: new Date(), // Immediate end for missed calls
+        callSource: 'inbound',
+        userClaimsContext: JSON.stringify({
+          callerName,
+          phoneNumber: from,
+          missedCallReason: reason,
+          lookupStatus: 'complete',
+          outcome: 'missed_call',
+          outcomeNotes: reason === 'out_of_hours' ? 'Called outside business hours' : 'No agents available'
+        })
+      }
+    });
+
+    // Apply missed call outcome using CallOutcomeManager
+    try {
+      const outcomeManager = new CallOutcomeManager();
+      const outcomeContext = {
+        sessionId: callSession.id,
+        userId: Number(userId),
+        agentId: fallbackAgent.id,
+        callDurationSeconds: 0,
+        callStartedAt: callSession.startedAt,
+        previousOutcomes: [] // Could be enhanced to get actual previous outcomes
+      };
+
+      const outcomeResult = await outcomeManager.processOutcome(
+        'missed_call',
+        outcomeContext,
+        { 
+          notes: reason === 'out_of_hours' ? 'Called outside business hours' : 'No agents available' 
+        }
+      );
+
+      console.log(`✅ Applied missed call outcome to session ${callSession.id}:`, {
+        scoreAdjustment: outcomeResult.scoreAdjustment,
+        nextCallDelayHours: outcomeResult.nextCallDelayHours
+      });
+    } catch (outcomeError) {
+      console.error(`⚠️ Failed to apply missed call outcome to session ${callSession.id}:`, outcomeError);
+      // Continue anyway - the session is still created
+    }
+
+    console.log(`✅ Created missed call session ${callSession.id} for ${callerName} - Reason: ${reason}`);
+    return callSession.id;
+
+  } catch (error) {
+    console.error(`❌ Failed to create missed call session for ${from}:`, error);
+    throw error;
   }
 }
 

@@ -12,6 +12,7 @@ import { GoingToCompleteOutcome } from './going-to-complete.outcome';
 import { MightCompleteOutcome } from './might-complete.outcome';
 import { CallBackOutcome } from './call-back.outcome';
 import { NoAnswerOutcome } from './no-answer.outcome';
+import { MissedCallOutcome } from './missed-call.outcome';
 import { HungUpOutcome } from './hung-up.outcome';
 import { BadNumberOutcome } from './bad-number.outcome';
 import { NoClaimOutcome } from './no-claim.outcome';
@@ -34,6 +35,7 @@ export class CallOutcomeManager {
       new MightCompleteOutcome(),
       new CallBackOutcome(),
       new NoAnswerOutcome(),
+      new MissedCallOutcome(),
       new HungUpOutcome(),
       new BadNumberOutcome(),
       new NoClaimOutcome(),

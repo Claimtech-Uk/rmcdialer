@@ -7,6 +7,7 @@ export type CallOutcomeType =
   | 'might_complete'
   | 'call_back'
   | 'no_answer'
+  | 'missed_call'
   | 'hung_up'
   | 'bad_number'
   | 'no_claim'

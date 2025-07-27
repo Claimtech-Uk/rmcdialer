@@ -94,7 +94,7 @@ export class CompletedFormOutcome implements CallOutcomeHandler {
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    // No further calls needed - form is complete
-    return 0;
+    // 1 day follow-up to confirm completion
+    return 24;
   }
 } 

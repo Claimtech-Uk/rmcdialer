@@ -66,13 +66,7 @@ export class HungUpOutcome implements CallOutcomeHandler {
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    // Progressive delay after hang-ups
-    const hangUpCount = context.previousOutcomes?.filter(o => o === 'hung_up').length || 0;
-    
-    if (hangUpCount >= 2) {
-      return 72; // 3 days after multiple hang-ups
-    }
-    
-    return 24; // 1 day delay
+    // Fixed 2 day delay after hang-ups
+    return 48;
   }
 } 

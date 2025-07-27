@@ -75,7 +75,7 @@ export class BadNumberOutcome implements CallOutcomeHandler {
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    // Very long delay until contact info is updated
-    return 720; // 30 days
+    // 7 day delay until contact info is updated
+    return 168;
   }
 } 
