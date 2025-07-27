@@ -128,7 +128,68 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
   try {
     console.log(`📞 Processing inbound call from ${from} to ${to}`);
     
-    // 1. Enhanced caller lookup with smart phone number matching
+    // 1. BUSINESS HOURS CHECK FIRST (for maximum efficiency)
+    const withinBusinessHours = isWithinBusinessHours();
+    const businessStatus = businessHoursService.getBusinessHoursStatus();
+    
+    console.log(`📅 Business hours check: ${withinBusinessHours ? 'OPEN' : 'CLOSED'} (${businessStatus.reason})`);
+    
+    // 2. OUT-OF-HOURS FAST PATH - Lightweight processing for maximum speed
+    if (!withinBusinessHours) {
+      console.log(`🕐 OUT-OF-HOURS FAST PATH: Minimal processing for speed`);
+      
+      // Lightweight name lookup for greeting personalization only
+      let nameInfo: { firstName?: string; lastName?: string; userId?: number } | null = null;
+      try {
+        nameInfo = await performLightweightNameLookup(from);
+      } catch (error) {
+        console.warn(`⚠️ Lightweight name lookup failed:`, error);
+      }
+      
+      const firstName = nameInfo?.firstName || '';
+      const callerName = nameInfo ? `${nameInfo.firstName} ${nameInfo.lastName}` : '';
+      
+      console.log(`🎵 Generating out-of-hours greeting for ${callerName || from}`);
+      
+      // Generate out-of-hours greeting and hangup immediately
+      try {
+        const humeTTSService = new SimpleHumeTTSService();
+        const audioBase64 = await humeTTSService.generateOutOfHoursGreeting(firstName);
+        
+        console.log('✅ Out-of-hours Hume TTS greeting generated - hanging up');
+        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>${audioBase64}</Play>
+    <Hangup/>
+</Response>`, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml',
+          },
+        });
+      } catch (error) {
+        console.warn(`⚠️ Hume TTS out-of-hours greeting failed, falling back to Alice voice:`, error instanceof Error ? error.message : String(error));
+        
+        const fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. Unfortunately, you've caught us outside of our normal working hours. We will call you back as soon as possible.`;
+        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">${fallbackMessage}</Say>
+    <Pause length="1"/>
+    <Say voice="alice">Thank you for your patience.</Say>
+    <Hangup/>
+</Response>`, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml',
+          },
+        });
+      }
+    }
+    
+    // 3. BUSINESS HOURS FULL PATH - Complete processing for agent routing
+    console.log(`⏰ BUSINESS HOURS FULL PATH: Complete caller lookup and agent routing`);
+    
+    // Enhanced caller lookup with smart phone number matching
     let callerInfo: any = null;
     let userId: number | null = null;
     
@@ -146,7 +207,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       console.warn(`⚠️ Could not lookup caller ${from}:`, error);
     }
 
-    // 2. Check if we should use AI voice agent (New Architecture: Twilio → Whisper → Hume)
+    // 4. Check if we should use AI voice agent (New Architecture: Twilio → Whisper → Hume)
     const useAI = shouldUseAIAgent(callerInfo, from, to);
     
     if (useAI) {
@@ -452,58 +513,8 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       callSession = null;
     }
 
-    // 5. Check business hours FIRST, before agent availability
-    const withinBusinessHours = isWithinBusinessHours();
-    const businessStatus = businessHoursService.getBusinessHoursStatus();
-    
-    console.log(`📅 Business hours check: ${withinBusinessHours ? 'OPEN' : 'CLOSED'} (${businessStatus.reason})`);
+    // 5. Now we're in business hours - route to available agents
     console.log(`👥 Available agents: ${availableAgents.length}`);
-    
-    // SCENARIO 1: Out of business hours (always takes priority)
-    if (!withinBusinessHours) {
-      const firstName = callerInfo?.user?.first_name || '';
-      const callerName = callerInfo?.user ? 
-        `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 
-        '';
-      
-      console.log(`🕐 OUT-OF-HOURS: Outside business hours - playing out-of-hours greeting`);
-      console.log(`🎵 Generating Hume TTS out-of-hours greeting for ${callerName || from}`);
-      
-      // Try to use Hume TTS for natural out-of-hours greeting
-      try {
-        const humeTTSService = new SimpleHumeTTSService();
-        const audioBase64 = await humeTTSService.generateOutOfHoursGreeting(firstName);
-        
-        console.log('✅ Using Hume TTS for out-of-hours greeting');
-        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Play>${audioBase64}</Play>
-    <Hangup/>
-</Response>`, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/xml',
-          },
-        });
-      } catch (error) {
-        console.warn(`⚠️ Hume TTS out-of-hours greeting failed, falling back to Alice voice:`, error instanceof Error ? error.message : String(error));
-        
-        // Fallback to Alice voice greeting
-        const fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. Unfortunately, you've caught us outside of our normal working hours. We will call you back as soon as possible.`;
-        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="alice">${fallbackMessage}</Say>
-    <Pause length="1"/>
-    <Say voice="alice">Thank you for your patience.</Say>
-    <Hangup/>
-</Response>`, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/xml',
-          },
-        });
-      }
-    }
 
     // 6. Generate appropriate TwiML response with caller context (for human agents during business hours)
     if (validatedAgent) {
@@ -643,45 +654,21 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         });
       }
     } else {
-      // No agents available - determine the appropriate response based on business hours
+      // SCENARIO: Business hours but no agents available - play busy greeting
       const callerName = callerInfo?.user ? 
         `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 
         '';
       const firstName = callerInfo?.user?.first_name || '';
       
-      // Check if we're within business hours
-      const withinBusinessHours = isWithinBusinessHours();
-      const businessStatus = businessHoursService.getBusinessHoursStatus();
+      console.log(`⏰ BUSY-AGENTS: During business hours but no agents available`);
+      console.log(`🎵 Generating Hume TTS busy greeting for ${callerName || from}`);
       
-      console.log(`📅 Business hours check: ${withinBusinessHours ? 'OPEN' : 'CLOSED'} (${businessStatus.reason})`);
-      console.log(`👥 Available agents: ${availableAgents.length}`);
-      
-      let greetingType: string;
-      let humeTTSMethod: string;
-      let fallbackMessage: string;
-      
-      if (!withinBusinessHours) {
-        // SCENARIO 1: Out of hours (outside business hours)
-        greetingType = 'out-of-hours';
-        humeTTSMethod = 'generateOutOfHoursGreeting';
-        fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. Unfortunately, you've caught us outside of our normal working hours. We will call you back as soon as possible.`;
-        console.log(`🕐 ${greetingType.toUpperCase()}: Outside business hours - no agents expected`);
-      } else {
-        // SCENARIO 2: During hours but no agents online
-        greetingType = 'busy-agents';
-        humeTTSMethod = 'generateBusyGreeting';
-        fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. All our agents are currently busy helping other customers. We'll have someone call you back shortly.`;
-        console.log(`⏰ ${greetingType.toUpperCase()}: During business hours but no agents available`);
-      }
-      
-      console.log(`🎵 Generating Hume TTS ${greetingType} greeting for ${callerName || from}`);
-      
-      // Try to use Hume TTS for natural greeting
+      // Try to use Hume TTS for natural busy greeting
       try {
         const humeTTSService = new SimpleHumeTTSService();
-        const audioBase64 = await (humeTTSService as any)[humeTTSMethod](firstName);
+        const audioBase64 = await humeTTSService.generateBusyGreeting(firstName);
         
-        console.log(`✅ Using Hume TTS for ${greetingType} greeting`);
+        console.log(`✅ Using Hume TTS for busy greeting`);
         return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Play>${audioBase64}</Play>
@@ -693,9 +680,10 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           },
         });
       } catch (error) {
-        console.warn(`⚠️ Hume TTS ${greetingType} greeting failed, falling back to Alice voice:`, error instanceof Error ? error.message : String(error));
+        console.warn(`⚠️ Hume TTS busy greeting failed, falling back to Alice voice:`, error instanceof Error ? error.message : String(error));
         
         // Fallback to Alice voice greeting
+        const fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. All our agents are currently busy helping other customers. We'll have someone call you back shortly.`;
         return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="alice">${fallbackMessage}</Say>
@@ -841,6 +829,54 @@ async function performEnhancedCallerLookup(phoneNumber: string): Promise<any> {
 
   } catch (error) {
     console.error('❌ [Voice Webhook] Enhanced caller lookup failed:', error);
+    return null;
+  }
+}
+
+// NEW: Lightweight caller name lookup for out-of-hours greetings
+async function performLightweightNameLookup(phoneNumber: string): Promise<{ firstName?: string; lastName?: string; userId?: number } | null> {
+  try {
+    console.log(`🔍 [Voice Webhook] Starting lightweight name lookup for: ${phoneNumber}`);
+    
+    // Normalize phone number to multiple formats for matching
+    const normalizedNumbers = normalizePhoneNumber(phoneNumber);
+    
+    // Search for user - ONLY get name fields
+    const user = await replicaDb.user.findFirst({
+      where: {
+        AND: [
+          {
+            phone_number: {
+              in: normalizedNumbers
+            }
+          },
+          {
+            is_enabled: true
+          }
+        ]
+      },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true
+      }
+    });
+
+    if (!user) {
+      console.log(`❌ [Voice Webhook] No user found for phone: ${phoneNumber} (lightweight lookup)`);
+      return null;
+    }
+
+    console.log(`✅ [Voice Webhook] Name found: ${user.first_name} ${user.last_name} (ID: ${user.id}) - lightweight lookup`);
+
+    return {
+      firstName: user.first_name || undefined,
+      lastName: user.last_name || undefined,
+      userId: Number(user.id)
+    };
+
+  } catch (error) {
+    console.error('❌ [Voice Webhook] Lightweight name lookup failed:', error);
     return null;
   }
 }
