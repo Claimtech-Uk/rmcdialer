@@ -11,11 +11,13 @@ const logger = {
   warn: (message: string, meta?: any) => console.warn(`[Queue WARN] ${message}`, meta)
 };
 
-// Initialize scoring service first
+// Initialize scoring service (for legacy compatibility)
 const scoringService = new PriorityScoringService({ logger });
 
-// Initialize queue service with dependencies including scoring service
-const queueService = new QueueService({ prisma, scoringService, logger });
+// Initialize queue service with simplified dependencies
+// QueueService is now QueueAdapterService (aliased in index.ts)
+// The adapter will handle legacy service initialization internally
+const queueService = new QueueService({ prisma, logger });
 
 // Input validation schemas
 const GetQueueInput = z.object({
@@ -43,27 +45,28 @@ const HealthCheckSchema = z.object({
 });
 
 export const queueRouter = createTRPCRouter({
-  // Get the current queue with filtering and pagination
+  // Get queue with filtering and pagination
   getQueue: protectedProcedure
     .input(GetQueueInput)
     .query(async ({ input, ctx }) => {
-      // Thin layer - delegate to module service
-      return await queueService.getQueue(input);
+      // Extract queueType from input and pass to service
+      return await queueService.getQueue(input.queueType || 'unsigned_users');
     }),
 
   // Refresh the entire queue by recalculating priorities
   refreshQueue: protectedProcedure
-    .mutation(async ({ ctx }) => {
-      // Delegate to module service
-      return await queueService.refreshQueue();
+    .input(z.object({ queueType: QueueTypeSchema }))
+    .mutation(async ({ input, ctx }) => {
+      // Delegate to module service with queueType
+      return await queueService.refreshQueue(input.queueType);
     }),
 
   // Assign a queue entry to the current agent
   assignCall: protectedProcedure
-    .input(AssignCallSchema)
+    .input(z.object({ queueType: QueueTypeSchema.optional() }))
     .mutation(async ({ input, ctx }) => {
-      // Delegate to module service with agent context
-      return await queueService.assignCall(input.queueId, ctx.agent.id);
+      // Delegate to module service with agent context - new signature
+      return await queueService.assignCall(ctx.agent.id, input.queueType);
     }),
 
   // Get next valid user for calling with real-time validation
@@ -71,7 +74,7 @@ export const queueRouter = createTRPCRouter({
     .input(z.object({ queueType: QueueTypeSchema }))
     .mutation(async ({ input, ctx }) => {
       logger.info(`Agent ${ctx.agent.id} requesting next user for ${input.queueType} queue`);
-      return await queueService.getNextUserForCall(input.queueType);
+      return await queueService.getNextUserForCall({ queueType: input.queueType });
     }),
 
   // Validate a specific user for calling
@@ -84,17 +87,15 @@ export const queueRouter = createTRPCRouter({
 
   // Run health check on a queue
   runQueueHealthCheck: protectedProcedure
-    .input(HealthCheckSchema)
     .mutation(async ({ input, ctx }) => {
-      logger.info(`Agent ${ctx.agent.id} running health check for ${input.queueType} queue`);
-      return await queueService.runQueueHealthCheck(input.queueType, input.limit);
+      logger.info(`Agent ${ctx.agent.id} running health check`);
+      return await queueService.runQueueHealthCheck();
     }),
 
   // Get queue statistics with validation status
   getQueueStatistics: protectedProcedure
-    .input(z.object({ queueType: QueueTypeSchema.optional() }))
     .query(async ({ input, ctx }) => {
-      return await queueService.getQueueStatistics(input.queueType);
+      return await queueService.getQueueStatistics();
     }),
 
   // Get queue statistics (existing endpoint - keeping for backwards compatibility)

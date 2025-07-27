@@ -12,6 +12,10 @@ interface QueueGenerationResult {
 /**
  * Automatic Queue Generation Service
  * 
+ * @deprecated This service will be removed in Phase 3 of queue migration.
+ * New queues read directly from user_call_scores table.
+ * Only use during legacy queue support period.
+ * 
  * This service automatically populates call_queue from user_call_scores
  * - Pulls top scoring users (lowest scores = highest priority)
  * - Maintains ~100 users per queue type

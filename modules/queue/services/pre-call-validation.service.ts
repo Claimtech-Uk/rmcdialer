@@ -2,6 +2,7 @@ import { replicaDb } from '@/lib/mysql';
 import { prisma } from '@/lib/db';
 import { UserService } from '@/modules/users/services/user.service';
 import type { QueueType } from '../types/queue.types';
+import type { QueueAdapterService } from './queue-adapter.service';
 
 export interface PreCallValidationResult {
   isValid: boolean;
@@ -24,11 +25,26 @@ export interface NextUserForCallResult {
   validationResult: PreCallValidationResult;
 }
 
+/**
+ * @deprecated This service is redundant with queue-specific validation.
+ * Each queue service now handles its own validation internally via:
+ * - UnsignedUsersQueueService.validateUserForUnsignedQueue()
+ * - OutstandingRequestsQueueService.validateUserForOutstandingQueue()
+ * Remove after updating health checks and queue adapter.
+ */
 export class PreCallValidationService {
   private userService: UserService;
+  private queueAdapter: QueueAdapterService | null = null;
 
   constructor() {
     this.userService = new UserService();
+  }
+
+  /**
+   * Set queue adapter for integration with new queue system
+   */
+  setQueueAdapter(queueAdapter: QueueAdapterService): void {
+    this.queueAdapter = queueAdapter;
   }
 
   /**
@@ -83,21 +99,14 @@ export class PreCallValidationService {
         };
       }
 
-      // 4. Check for scheduled callbacks (with error handling for PostgreSQL)
-      let scheduledCallback = null;
-      try {
-        scheduledCallback = await prisma.callback.findFirst({
-          where: {
-            userId: BigInt(userId),
-            status: 'pending',
-            scheduledFor: { lte: new Date() }
-          }
-        });
-      } catch (error: any) {
-        console.log(`⚠️ Could not check callbacks for user ${userId}: ${error.message}`);
-        // Continue without callback check - PostgreSQL might not be running
-        // This is acceptable for direct replica mode
-      }
+      // 2. Check for scheduled callbacks that take priority
+      const scheduledCallback = await prisma.callback.findFirst({
+        where: {
+          userId: BigInt(userId),
+          status: 'pending',
+          scheduledFor: { lte: new Date() }
+        }
+      });
 
       // 3. Determine current eligibility
       const hasSignature = userData.current_signature_file_id !== null;
@@ -167,63 +176,134 @@ export class PreCallValidationService {
 
   /**
    * Get the next valid user from queue for calling
-   * Automatically skips invalid users until finding a valid one
+   * Uses QueueAdapterService when available, falls back to legacy CallQueue
    */
   async getNextValidUserForCall(queueType: QueueType): Promise<NextUserForCallResult | null> {
     try {
       console.log(`🔍 Finding next valid user for ${queueType} queue...`);
       
-      const queueEntries = await prisma.callQueue.findMany({
-        where: {
-          queueType,
-          status: 'pending'
-        },
-        orderBy: [
-          { priorityScore: 'asc' },
-          { queuePosition: 'asc' }
-        ],
-        take: 10 // Check up to 10 users to find a valid one
-      });
-
-      console.log(`Found ${queueEntries.length} queue entries to validate`);
-
-      for (const entry of queueEntries) {
-        const userId = Number(entry.userId);
-        console.log(`🔍 Validating queue entry ${entry.id} for user ${userId}...`);
-        
-        const validation = await this.validateUserForCall(userId, queueType);
-        
-        if (validation.isValid) {
-          // Get complete user context for the call
-          const userContext = await this.userService.getUserCallContext(userId);
-          
-          if (userContext) {
-            console.log(`✅ Found valid user ${userId} for ${queueType} queue`);
-            return {
-              userId,
-              userContext,
-              queuePosition: entry.queuePosition ?? 0,
-              queueEntryId: entry.id,
-              validationResult: validation
-            };
-          } else {
-            console.log(`❌ Could not get user context for ${userId}`);
-            // Mark entry as invalid if we can't get user context
-            await this.markQueueEntryInvalid(entry.id, 'Could not load user context');
-          }
-        } else {
-          // Mark this queue entry as invalid and remove it
-          console.log(`❌ Marking user ${userId} as invalid: ${validation.reason}`);
-          await this.markQueueEntryInvalid(entry.id, validation.reason || 'No longer eligible');
-        }
+      // Use new queue adapter if available
+      if (this.queueAdapter) {
+        return await this.getNextValidUserFromAdapter(queueType);
       }
+      
+      // Fallback to legacy CallQueue method
+      return await this.getNextValidUserFromLegacy(queueType);
 
-      console.log(`❌ No valid users found in ${queueType} queue`);
-      return null; // No valid users found in queue
     } catch (error) {
-      console.error(`❌ Error finding next valid user for ${queueType}:`, error);
+      console.error(`❌ Error getting next valid user for ${queueType}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Get next valid user using QueueAdapterService (preferred method)
+   */
+  private async getNextValidUserFromAdapter(queueType: QueueType): Promise<NextUserForCallResult | null> {
+    console.log(`🔄 Using QueueAdapterService for ${queueType} queue`);
+    
+    const maxAttempts = 5; // Prevent infinite loops
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.log(`🔍 Attempt ${attempt}/${maxAttempts} to find valid user...`);
+      
+      // 1. Get next user from queue adapter
+      const user = await this.queueAdapter!.getNextUserForCall({ queueType });
+      if (!user) {
+        console.log(`📭 No more users in ${queueType} queue`);
+        return null;
+      }
+      
+      console.log(`🔍 Validating user ${user.userId} from queue adapter...`);
+      
+      // 2. Validate user against MySQL replica
+      const validation = await this.validateUserForCall(user.userId, queueType);
+      
+      if (validation.isValid) {
+        // Get complete user context for the call
+        const userContext = await this.userService.getUserCallContext(user.userId);
+        
+        if (userContext) {
+          console.log(`✅ Found valid user ${user.userId} for ${queueType} queue`);
+          return {
+            userId: user.userId,
+            userContext,
+            queuePosition: user.queuePosition,
+            queueEntryId: user.queueEntryId,
+            validationResult: validation
+          };
+        } else {
+          console.log(`⚠️ User ${user.userId} context not available, skipping...`);
+        }
+      } else {
+        console.log(`❌ User ${user.userId} no longer valid for ${queueType}: ${validation.reason}`);
+        // Note: In a complete implementation, we might remove the user from queue here
+        // For now, we'll just skip to the next user
+      }
+    }
+    
+    console.log(`⚠️ Exhausted ${maxAttempts} attempts to find valid user in ${queueType} queue`);
+    return null;
+  }
+
+  /**
+   * Legacy method: Get next valid user from CallQueue table directly
+   */
+  private async getNextValidUserFromLegacy(queueType: QueueType): Promise<NextUserForCallResult | null> {
+    console.log(`🔄 Using legacy CallQueue for ${queueType} queue`);
+    
+    const queueEntries = await prisma.callQueue.findMany({
+      where: {
+        queueType,
+        status: 'pending'
+      },
+      orderBy: [
+        { priorityScore: 'asc' },
+        { queuePosition: 'asc' }
+      ],
+      take: 10 // Check up to 10 users to find a valid one
+    });
+
+    console.log(`Found ${queueEntries.length} queue entries to validate`);
+
+    for (const entry of queueEntries) {
+      const userId = Number(entry.userId);
+      console.log(`🔍 Validating queue entry ${entry.id} for user ${userId}...`);
+      
+      const validation = await this.validateUserForCall(userId, queueType);
+      
+      if (validation.isValid) {
+        // Get complete user context for the call
+        const userContext = await this.userService.getUserCallContext(userId);
+        
+        if (userContext) {
+          console.log(`✅ Found valid user ${userId} for ${queueType} queue`);
+          return {
+            userId,
+            userContext,
+            queuePosition: entry.queuePosition || 0,
+            queueEntryId: entry.id,
+            validationResult: validation
+          };
+        } else {
+          console.log(`⚠️ User ${userId} context not available, skipping...`);
+        }
+      } else {
+        console.log(`❌ User ${userId} no longer valid for ${queueType}: ${validation.reason}`);
+        
+        // Remove invalid user from queue
+        await prisma.callQueue.deleteMany({
+          where: { 
+            userId: entry.userId,
+            queueType 
+          }
+        });
+        console.log(`🗑️ Removed invalid user ${userId} from ${queueType} queue`);
+      }
+    }
+
+    console.log(`📭 No valid users found in ${queueType} queue`);
+    return null;
   }
 
   /**

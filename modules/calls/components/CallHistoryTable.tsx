@@ -34,6 +34,7 @@ const OUTCOME_COLORS: Record<string, string> = {
   'might_complete': 'bg-yellow-100 text-yellow-800',
   'call_back': 'bg-purple-100 text-purple-800',
   'no_answer': 'bg-gray-100 text-gray-800',
+  'missed_call': 'bg-yellow-200 text-yellow-900', // ✅ ADDED: Yellow for missed calls
   'hung_up': 'bg-orange-100 text-orange-800',
   'bad_number': 'bg-red-100 text-red-800',
   'no_claim': 'bg-gray-200 text-gray-800',
@@ -430,6 +431,7 @@ export function CallHistoryTable({
       'might_complete': 'Might Complete',
       'call_back': 'Callback Requested',
       'no_answer': 'No Answer',
+      'missed_call': 'Missed Call', // ✅ ADDED
       'hung_up': 'Hung Up',
       'bad_number': 'Bad Number',
       'no_claim': 'No Claim',

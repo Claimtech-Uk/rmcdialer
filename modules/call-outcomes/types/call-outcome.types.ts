@@ -79,6 +79,7 @@ export interface OutcomeProcessingOptions {
   skipNextActions?: boolean;
   suppressNotifications?: boolean;
   bypassBusinessRules?: boolean;
+  updateCallSession?: boolean; // ✅ ADDED: Whether to update the call session with outcome data
 }
 
 export interface CallOutcomeHandler {

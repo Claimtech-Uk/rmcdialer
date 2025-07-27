@@ -78,6 +78,35 @@ export class CallOutcomeManager {
     if (!result.success) {
       throw new Error(`Outcome processing failed for type: ${outcomeType}`);
     }
+
+    // ✅ UPDATE CALL SESSION WITH OUTCOME DATA
+    if (context.sessionId && options?.updateCallSession !== false) {
+      try {
+        const { PrismaClient } = await import('@prisma/client');
+        const prisma = new PrismaClient();
+        
+        await prisma.callSession.update({
+          where: { id: context.sessionId },
+          data: {
+            lastOutcomeType: outcomeType,
+            lastOutcomeNotes: result.outcomeNotes || data?.notes || `Processed ${outcomeType} outcome`,
+            lastOutcomeAt: new Date(),
+            lastOutcomeAgentId: context.agentId,
+            // Update status for missed calls specifically
+            ...(outcomeType === 'missed_call' && {
+              status: 'missed_call',
+              endedAt: new Date()
+            })
+          }
+        });
+        
+        await prisma.$disconnect();
+        console.log(`✅ Updated call session ${context.sessionId} with outcome: ${outcomeType}`);
+      } catch (updateError) {
+        console.error(`⚠️ Failed to update call session ${context.sessionId} with outcome:`, updateError);
+        // Don't throw - the outcome processing succeeded, this is just a data consistency issue
+      }
+    }
     
     return result;
   }
