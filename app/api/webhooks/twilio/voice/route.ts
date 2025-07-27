@@ -889,10 +889,16 @@ async function createMissedCallSession(
   reason: 'out_of_hours' | 'no_agents_available'
 ): Promise<string> {
   try {
-    const userId = nameInfo?.userId || 999999; // Special ID for unknown callers
+    let userId = nameInfo?.userId || null;
     const callerName = nameInfo ? `${nameInfo.firstName} ${nameInfo.lastName}` : 'Unknown Caller';
     
     console.log(`📝 Creating missed call session for ${callerName} (${from}) - Reason: ${reason}`);
+    
+    // If no known user, use special ID for unknown callers
+    if (!userId) {
+      userId = 999999; // Special ID for unknown callers - user may or may not exist in replica
+      console.log(`📱 Using special unknown caller ID: ${userId} for ${from}`);
+    }
     
     // Create call queue entry for missed call
     const missedCallQueue = await prisma.callQueue.create({
@@ -962,8 +968,27 @@ async function createMissedCallSession(
 
       console.log(`✅ Applied missed call outcome to session ${callSession.id}:`, {
         scoreAdjustment: outcomeResult.scoreAdjustment,
-        nextCallDelayHours: outcomeResult.nextCallDelayHours
+        nextCallDelayHours: outcomeResult.nextCallDelayHours,
+        callbackDateTime: outcomeResult.callbackDateTime
       });
+
+      // Create callback if the outcome result includes callback information
+      if (outcomeResult.callbackDateTime) {
+        try {
+          const callback = await prisma.callback.create({
+            data: {
+              userId: BigInt(userId),
+              scheduledFor: outcomeResult.callbackDateTime,
+              callbackReason: outcomeResult.callbackReason || `Return missed call from ${reason === 'out_of_hours' ? 'out of hours' : 'when agents unavailable'}`,
+              originalCallSessionId: callSession.id,
+              status: 'pending',
+            },
+          });
+          console.log(`📞 Created callback for ${outcomeResult.callbackDateTime.toISOString()} for missed call session ${callSession.id}`);
+        } catch (callbackError) {
+          console.error(`⚠️ Failed to create callback for missed call session ${callSession.id}:`, callbackError);
+        }
+      }
     } catch (outcomeError) {
       console.error(`⚠️ Failed to apply missed call outcome to session ${callSession.id}:`, outcomeError);
       // Continue anyway - the session is still created
