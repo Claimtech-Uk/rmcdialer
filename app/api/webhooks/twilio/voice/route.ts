@@ -186,26 +186,41 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       }
     }
     
-    // 3. BUSINESS HOURS FULL PATH - Complete processing for agent routing
-    console.log(`⏰ BUSINESS HOURS FULL PATH: Complete caller lookup and agent routing`);
+    // 3. BUSINESS HOURS OPTIMIZED PATH - Lightweight lookup + background processing
+    console.log(`⏰ BUSINESS HOURS OPTIMIZED PATH: Fast name lookup + background full data`);
     
-    // Enhanced caller lookup with smart phone number matching
-    let callerInfo: any = null;
-    let userId: number | null = null;
-    
+    // Lightweight name lookup for greeting personalization only
+    let nameInfo: { firstName?: string; lastName?: string; userId?: number } | null = null;
     try {
-      callerInfo = await performEnhancedCallerLookup(from);
-      userId = callerInfo?.user?.id ? Number(callerInfo.user.id) : null;
-      
-      if (callerInfo?.user) {
-        console.log(`👤 Caller identified: ${callerInfo.user.first_name} ${callerInfo.user.last_name} (ID: ${userId})`);
-        console.log(`📊 Claims: ${callerInfo.claims.length}, Requirements: ${callerInfo.requirements.length}`);
-      } else {
-        console.log(`👤 Unknown caller: ${from}`);
-      }
+      nameInfo = await performLightweightNameLookup(from);
     } catch (error) {
-      console.warn(`⚠️ Could not lookup caller ${from}:`, error);
+      console.warn(`⚠️ Lightweight name lookup failed:`, error);
     }
+    
+    const firstName = nameInfo?.firstName || '';
+    const callerName = nameInfo ? `${nameInfo.firstName} ${nameInfo.lastName}` : '';
+    const userId = nameInfo?.userId || null;
+    
+    if (nameInfo) {
+      console.log(`👤 Caller name found: ${callerName} (ID: ${userId}) - lightweight lookup`);
+    } else {
+      console.log(`👤 Unknown caller: ${from} - will use generic greeting`);
+    }
+    
+    // Create minimal callerInfo for compatibility with existing code
+    const callerInfo = nameInfo ? {
+      user: {
+        id: nameInfo.userId!,
+        first_name: nameInfo.firstName,
+        last_name: nameInfo.lastName
+      },
+      claims: [], // Will be populated by background lookup
+      requirements: [], // Will be populated by background lookup
+      callHistory: [], // Will be populated by background lookup
+      priorityScore: 0, // Will be calculated by background lookup
+      claimsCount: 0, // Will be updated by background lookup
+      lookupSuccess: true
+    } : null;
 
     // 4. Check if we should use AI voice agent (New Architecture: Twilio → Whisper → Hume)
     const useAI = shouldUseAIAgent(callerInfo, from, to);
@@ -387,7 +402,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           }
         });
 
-        // Use validated agent ID or create without agent assignment for missed calls
+        // Use minimal data for fast call session creation
         const sessionData: any = {
           userId: BigInt(userId),
           callQueueId: inboundQueue.id,
@@ -397,28 +412,9 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           startedAt: new Date(),
           callSource: 'inbound',
           userClaimsContext: JSON.stringify({
-            knownCaller: true,
-            callerName: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
+            callerName: callerName || 'Unknown Caller',
             phoneNumber: from,
-            claims: callerInfo.claims.map((claim: any) => ({
-              ...claim,
-              id: Number(claim.id),
-              user_id: Number(claim.user_id),
-              created_at: claim.created_at?.toISOString(),
-              updated_at: claim.updated_at?.toISOString()
-            })),
-            requirements: callerInfo.requirements.map((req: any) => ({
-              ...req,
-              id: Number(req.id),
-              claim_id: req.claim_id ? Number(req.claim_id) : null,
-              created_at: req.created_at?.toISOString()
-            })),
-            callHistory: callerInfo.callHistory.map((call: any) => ({
-              ...call,
-              id: call.id,
-              userId: Number(call.userId),
-              startedAt: call.startedAt?.toISOString()
-            }))
+            lookupStatus: 'pending' // Flag that background lookup is in progress
           })
         };
 
@@ -443,7 +439,13 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           data: sessionData
         });
         
-        console.log(`📝 Created ${validatedAgent ? 'ringing' : 'missed'} call session ${callSession.id} for caller ${callerInfo.user.first_name} ${callerInfo.user.last_name}`);
+        console.log(`📝 Created ${validatedAgent ? 'ringing' : 'missed'} call session ${callSession.id} for caller ${callerName || from}`);
+        
+        // Trigger background lookup for business hours calls (non-blocking)
+        if (validatedAgent && callSession) {
+          console.log(`🔍 Triggering background caller lookup for session ${callSession.id}`);
+          triggerBackgroundCallerLookup(from, callSession.id);
+        }
       } else {
         // Unknown caller - create basic session with proper validation
         console.log(`👤 Unknown caller ${from} - creating basic missed call record`);
@@ -486,11 +488,9 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
               startedAt: new Date(),
               callSource: 'inbound',
               userClaimsContext: JSON.stringify({
-                unknownCaller: true,
+                callerName: 'Unknown Caller',
                 phoneNumber: from,
-                searchAttempted: true,
-                matchFound: false,
-                missedCall: !validatedAgent
+                lookupStatus: 'pending' // Flag that background lookup will be attempted
               })
             }
           });
@@ -564,17 +564,13 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       });
 
       // SCENARIO 3: During hours with agents available - use Hume TTS connecting greeting
-      const connectingFirstName = callerInfo?.user?.first_name || '';
-      const connectingCallerName = callerInfo?.user ? 
-        `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 
-        '';
-      
-      console.log(`🎵 Generating Hume TTS connecting greeting for ${connectingCallerName || from} before transfer`);
+      console.log(`🎵 Generating Hume TTS connecting greeting for ${callerName || from} before transfer`);
       
       // Try to use Hume TTS for natural connecting greeting
       try {
         const humeTTSService = new SimpleHumeTTSService();
-        const audioBase64 = await humeTTSService.generateConnectingGreeting(connectingFirstName);
+        // Pass firstName for personalization, or undefined for "Hi there" fallback
+        const audioBase64 = await humeTTSService.generateConnectingGreeting(firstName || undefined);
         
         console.log('✅ Using Hume TTS for connecting greeting');
         
@@ -627,7 +623,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         // Fallback to Alice voice connecting greeting
         return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Hello${connectingFirstName ? ' ' + connectingFirstName : ''}! Welcome to R M C Dialler. Please hold while we connect you to an available agent.</Say>
+    <Say voice="alice">Hello${firstName ? ' ' + firstName : ' there'}! Welcome to Resolve My Claim. Please hold while we connect you to an available agent.</Say>
     <Dial timeout="30" 
           record="record-from-answer" 
           recordingStatusCallback="${recordingCallbackUrl}"
@@ -831,6 +827,61 @@ async function performEnhancedCallerLookup(phoneNumber: string): Promise<any> {
     console.error('❌ [Voice Webhook] Enhanced caller lookup failed:', error);
     return null;
   }
+}
+
+// Background caller lookup for business hours calls (non-blocking)
+async function triggerBackgroundCallerLookup(phoneNumber: string, callSessionId: string): Promise<void> {
+  // Run in background - don't block the main call flow
+  Promise.resolve().then(async () => {
+    try {
+      console.log(`🔍 Starting background caller lookup for session ${callSessionId}`);
+      
+      const fullCallerInfo = await performEnhancedCallerLookup(phoneNumber);
+      
+      if (fullCallerInfo) {
+        // Update call session with full context
+        await prisma.callSession.update({
+          where: { id: callSessionId },
+          data: {
+            userClaimsContext: JSON.stringify({
+              knownCaller: true,
+              callerName: `${fullCallerInfo.user.first_name} ${fullCallerInfo.user.last_name}`,
+              phoneNumber,
+              claims: fullCallerInfo.claims.map((claim: any) => ({
+                ...claim,
+                id: Number(claim.id),
+                user_id: Number(claim.user_id),
+                created_at: claim.created_at?.toISOString(),
+                updated_at: claim.updated_at?.toISOString()
+              })),
+              requirements: fullCallerInfo.requirements.map((req: any) => ({
+                ...req,
+                id: Number(req.id),
+                claim_id: req.claim_id ? Number(req.claim_id) : null,
+                created_at: req.created_at?.toISOString()
+              })),
+              callHistory: fullCallerInfo.callHistory.map((call: any) => ({
+                ...call,
+                id: call.id,
+                userId: Number(call.userId),
+                startedAt: call.startedAt?.toISOString()
+              })),
+              priorityScore: fullCallerInfo.priorityScore,
+              lookupStatus: 'complete'
+            })
+          }
+        });
+        
+        console.log(`✅ Background caller lookup complete for session ${callSessionId}`);
+      } else {
+        console.log(`⚠️ Background caller lookup found no additional data for session ${callSessionId}`);
+      }
+    } catch (error) {
+      console.error(`❌ Background caller lookup failed for session ${callSessionId}:`, error);
+    }
+  }).catch(error => {
+    console.error(`❌ Background caller lookup promise failed for session ${callSessionId}:`, error);
+  });
 }
 
 // NEW: Lightweight caller name lookup for out-of-hours greetings
