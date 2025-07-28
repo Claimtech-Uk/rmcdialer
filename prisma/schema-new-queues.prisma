@@ -15,28 +15,29 @@ datasource db {
 // ============================================================================
 
 model Agent {
-  id                  Int                 @id @default(autoincrement())
-  email               String              @unique
-  passwordHash        String              @map("password_hash")
-  firstName           String              @map("first_name")
-  lastName            String              @map("last_name")
-  role                String              @default("agent")
-  team                String              @default("general")
-  allowedQueues       Json                @default("[\"unsigned_users\", \"outstanding_requests\"]") @map("allowed_queues")
-  isActive            Boolean             @default(true) @map("is_active")
-  isAiAgent           Boolean             @default(false) @map("is_ai_agent")
-  twilioWorkerSid     String?             @map("twilio_worker_sid")
-  createdAt           DateTime            @default(now()) @map("created_at")
-  updatedAt           DateTime            @updatedAt @map("updated_at")
+  id                  Int                    @id @default(autoincrement())
+  email               String                 @unique
+  passwordHash        String                 @map("password_hash")
+  firstName           String                 @map("first_name")
+  lastName            String                 @map("last_name")
+  role                String                 @default("agent")
+  team                String                 @default("general")
+  allowedQueues       Json                   @default("[\"unsigned_users\", \"outstanding_requests\"]") @map("allowed_queues")
+  isActive            Boolean                @default(true) @map("is_active")
+  isAiAgent           Boolean                @default(false) @map("is_ai_agent")
+  twilioWorkerSid     String?                @map("twilio_worker_sid")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
   
   // Existing relations (preserved during migration)
   sessions            AgentSession[]
   callOutcomes        CallOutcome[]
-  assignedCalls       CallQueue[]         @relation("AssignedAgent")
+  assignedCalls       CallQueue[]            @relation("AssignedAgent")
   callSessions        CallSession[]
-  callSessionOutcomes CallSession[]       @relation("CallSessionLastOutcome")
+  callSessionOutcomes CallSession[]          @relation("CallSessionLastOutcome")
   callbacks           Callback[]
-  primaryConversions  Conversion[]        @relation("PrimaryConversions")
+  callbackNotifications CallbackNotification[]
+  primaryConversions  Conversion[]           @relation("PrimaryConversions")
   magicLinkActivities MagicLinkActivity[]
   shortUrls           ShortUrl[]
   smsConversations    SmsConversation[]
@@ -215,19 +216,20 @@ model CallOutcome {
 }
 
 model Callback {
-  id                     String      @id @default(uuid()) @db.Uuid
-  userId                 BigInt      @map("user_id")
-  scheduledFor           DateTime    @map("scheduled_for")
-  callbackReason         String?     @map("callback_reason")
-  preferredAgentId       Int?        @map("preferred_agent_id")
-  originalCallSessionId  String      @map("original_call_session_id") @db.Uuid
-  status                 String      @default("pending")
-  completedCallSessionId String?     @map("completed_call_session_id") @db.Uuid
-  createdAt              DateTime    @default(now()) @map("created_at")
+  id                     String                 @id @default(uuid()) @db.Uuid
+  userId                 BigInt                 @map("user_id")
+  scheduledFor           DateTime               @map("scheduled_for")
+  callbackReason         String?                @map("callback_reason")
+  preferredAgentId       Int?                   @map("preferred_agent_id")
+  originalCallSessionId  String                 @map("original_call_session_id") @db.Uuid
+  status                 String                 @default("pending")
+  completedCallSessionId String?                @map("completed_call_session_id") @db.Uuid
+  createdAt              DateTime               @default(now()) @map("created_at")
   
   // Existing relations (preserved during migration)
   callQueue              CallQueue[]
-  preferredAgent         Agent?      @relation(fields: [preferredAgentId], references: [id])
+  preferredAgent         Agent?                 @relation(fields: [preferredAgentId], references: [id])
+  notifications          CallbackNotification[]
   
   // New relations to separated queues
   unsignedQueueEntries      UnsignedUsersQueue[]     @relation("UnsignedQueueCallback")
@@ -236,6 +238,24 @@ model Callback {
   @@index([scheduledFor])
   @@index([status])
   @@map("callbacks")
+}
+
+model CallbackNotification {
+  id               String   @id @default(uuid()) @db.Uuid
+  callbackId       String   @map("callback_id") @db.Uuid
+  agentId          Int?     @map("agent_id")
+  notificationType String   @map("notification_type") // 'five_minute_reminder', 'immediate_queue', etc.
+  status           String   @default("pending") // 'pending', 'sent', 'failed'
+  sentAt           DateTime? @map("sent_at")
+  errorMessage     String?  @map("error_message")
+  createdAt        DateTime @default(now()) @map("created_at")
+  callback         Callback @relation(fields: [callbackId], references: [id], onDelete: Cascade)
+  agent            Agent?   @relation(fields: [agentId], references: [id])
+
+  @@index([callbackId])
+  @@index([agentId])
+  @@index([notificationType])
+  @@map("callback_notifications")
 }
 
 // ============================================================================

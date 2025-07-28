@@ -30,6 +30,7 @@ import type {
  * - cfa
  * - solicitor_letter_of_authority
  * - letter_of_authority
+ * - id_document (ONLY when claim_requirement_reason = 'base requirement for claim.')
  */
 export class NewRequirementsDiscoveryService {
   private readonly BATCH_SIZE = 50
@@ -131,6 +132,7 @@ export class NewRequirementsDiscoveryService {
         cr.claim_id,
         cr.type,
         cr.status,
+        cr.claim_requirement_reason,
         cr.created_at,
         c.user_id
       FROM claim_requirements cr
@@ -138,6 +140,7 @@ export class NewRequirementsDiscoveryService {
       WHERE cr.created_at >= ?
         AND cr.status = 'pending'
         AND cr.type NOT IN (${this.EXCLUDED_TYPES.map(() => '?').join(', ')})
+        AND NOT (cr.type = 'id_document' AND cr.claim_requirement_reason = 'base requirement for claim.')
       ORDER BY cr.created_at DESC
     `
 
@@ -151,6 +154,7 @@ export class NewRequirementsDiscoveryService {
         claim_id: number
         type: string
         status: string
+        claim_requirement_reason: string | null
         created_at: Date
         user_id: bigint
       }>

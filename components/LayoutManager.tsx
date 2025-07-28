@@ -2,6 +2,7 @@
 
 import { useContext, useEffect, useState } from 'react';
 import { CallSidebar } from './CallSidebar';
+import { CallbackNotificationHandler } from './CallbackNotificationHandler';
 import { GlobalTwilioContext } from '@/lib/providers/GlobalTwilioProvider';
 
 interface LayoutManagerProps {
@@ -219,6 +220,9 @@ export function LayoutManager({ children }: LayoutManagerProps) {
         isMuted={false}
         isOnHold={false}
       />
+      
+      {/* Callback Notification Handler - persistent popups for due callbacks */}
+      <CallbackNotificationHandler />
     </>
   );
 } 

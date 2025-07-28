@@ -110,9 +110,31 @@ export class PreCallValidationService {
 
       // 3. Determine current eligibility
       const hasSignature = userData.current_signature_file_id !== null;
-      const pendingRequirements = userData.claims.reduce((acc, claim) => 
-        acc + claim.requirements.length, 0
-      );
+      
+      // Define excluded requirement types (same as discovery services)
+      const EXCLUDED_TYPES = [
+        'signature',
+        'vehicle_registration',
+        'cfa',
+        'solicitor_letter_of_authority',
+        'letter_of_authority'
+      ];
+      
+      // Count pending requirements excluding filtered types
+      const pendingRequirements = userData.claims.reduce((acc, claim) => {
+        const validRequirements = claim.requirements.filter(req => {
+          // Exclude standard excluded types
+          if (EXCLUDED_TYPES.includes(req.type || '')) {
+            return false;
+          }
+          // Exclude id_document with specific reason
+          if (req.type === 'id_document' && req.claim_requirement_reason === 'base requirement for claim.') {
+            return false;
+          }
+          return true;
+        });
+        return acc + validRequirements.length;
+      }, 0);
 
       const userStatus = {
         hasSignature,
@@ -342,6 +364,8 @@ export class PreCallValidationService {
         });
       } else if (queueType === 'outstanding_requests') {
         // Get users with pending requirements but have signatures
+        // NOTE: This query gets candidates - detailed filtering (excluding id_document with 
+        // 'base requirement for claim.' reason and other excluded types) happens in validateUserForCall()
         users = await replicaDb.user.findMany({
           where: {
             is_enabled: true,

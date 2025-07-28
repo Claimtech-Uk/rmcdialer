@@ -483,9 +483,28 @@ export class UserService {
         return 'unsigned_users';
       }
 
-      // User has signature, check for pending requirements
+      // User has signature, check for pending requirements (excluding filtered types)
+      const EXCLUDED_TYPES = [
+        'signature',
+        'vehicle_registration',
+        'cfa',
+        'solicitor_letter_of_authority',
+        'letter_of_authority'
+      ];
+      
       const hasPendingRequirements = userData.claims.some(claim =>
-        claim.requirements.some(req => req.status === 'PENDING')
+        claim.requirements.some(req => {
+          // Already filtered to PENDING status in query
+          // Exclude standard excluded types
+          if (EXCLUDED_TYPES.includes(req.type || '')) {
+            return false;
+          }
+          // Exclude id_document with specific reason
+          if (req.type === 'id_document' && req.claim_requirement_reason === 'base requirement for claim.') {
+            return false;
+          }
+          return true;
+        })
       );
 
       if (hasPendingRequirements) {

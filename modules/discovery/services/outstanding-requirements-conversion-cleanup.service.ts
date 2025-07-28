@@ -31,6 +31,7 @@ import type {
  * - cfa
  * - solicitor_letter_of_authority
  * - letter_of_authority
+ * - id_document (ONLY when claim_requirement_reason = 'base requirement for claim.')
  * 
  * 🎯 PERFORMANCE:
  * - Process up to ~4,000 users in 28 seconds
@@ -246,6 +247,7 @@ export class OutstandingRequirementsConversionCleanupService {
         COUNT(CASE 
           WHEN cr.status = 'PENDING' 
             AND cr.type NOT IN (${this.EXCLUDED_REQUIREMENT_TYPES.map(() => '?').join(', ')})
+            AND NOT (cr.type = 'id_document' AND cr.claim_requirement_reason = 'base requirement for claim.')
           THEN 1 
         END) as pending_requirements_count
       FROM users u

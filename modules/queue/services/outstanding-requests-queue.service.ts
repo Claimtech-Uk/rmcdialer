@@ -84,7 +84,11 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
             include: {
               requirements: { 
                 where: { status: 'PENDING' },
-                select: { id: true }
+                select: { 
+                  id: true,
+                  type: true,
+                  claim_requirement_reason: true
+                }
               }
             }
           }
@@ -102,9 +106,31 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
       }
       
       const hasSignature = !!userData.current_signature_file_id;
-      const pendingRequirements = userData.claims.reduce(
-        (acc, claim) => acc + claim.requirements.length, 0
-      );
+      
+      // Define excluded requirement types (same as discovery services)
+      const EXCLUDED_TYPES = [
+        'signature',
+        'vehicle_registration',
+        'cfa',
+        'solicitor_letter_of_authority',
+        'letter_of_authority'
+      ];
+      
+      // Count pending requirements excluding filtered types
+      const pendingRequirements = userData.claims.reduce((acc, claim) => {
+        const validRequirements = claim.requirements.filter(req => {
+          // Exclude standard excluded types
+          if (EXCLUDED_TYPES.includes(req.type || '')) {
+            return false;
+          }
+          // Exclude id_document with specific reason
+          if (req.type === 'id_document' && req.claim_requirement_reason === 'base requirement for claim.') {
+            return false;
+          }
+          return true;
+        });
+        return acc + validRequirements.length;
+      }, 0);
       
       const isValid = hasSignature && pendingRequirements > 0;
       

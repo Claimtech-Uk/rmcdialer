@@ -70,6 +70,7 @@ export class NullQueueBackfillMigrationService {
   private readonly DEFAULT_TIMEOUT = 300  // 5 minutes
   
   // Same excluded types as requirements discovery
+  // ALSO excludes: id_document (ONLY when claim_requirement_reason = 'base requirement for claim.')
   private readonly EXCLUDED_REQUIREMENT_TYPES = [
     'signature',
     'vehicle_registration',
@@ -320,6 +321,7 @@ export class NullQueueBackfillMigrationService {
         WHERE c.user_id IN (${userIds.map(() => '?').join(', ')})
           AND cr.status = 'pending'
           AND cr.type NOT IN (${excludedTypesPlaceholders})
+          AND NOT (cr.type = 'id_document' AND cr.claim_requirement_reason = 'base requirement for claim.')
         ORDER BY c.user_id
       `
       
