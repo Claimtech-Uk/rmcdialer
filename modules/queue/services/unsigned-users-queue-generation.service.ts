@@ -19,7 +19,8 @@ interface QueueGenerationResult {
 
 export class UnsignedUsersQueueGenerationService {
   
-  private readonly QUEUE_SIZE_LIMIT = 100;
+  // Configuration
+  private readonly QUEUE_SIZE_LIMIT = 2500; // Temporarily increased to capture all users for debugging
   
   /**
    * Generate fresh unsigned users queue from user_call_scores
@@ -91,7 +92,7 @@ export class UnsignedUsersQueueGenerationService {
       // Calculate 2-hour delay threshold
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
       
-      return await prisma.userCallScore.findMany({
+      const results = await prisma.userCallScore.findMany({
         where: {
           currentQueueType: 'unsigned_users',
           isActive: true,
@@ -111,6 +112,20 @@ export class UnsignedUsersQueueGenerationService {
         ],
         take: this.QUEUE_SIZE_LIMIT   // Limit queue size for performance
       });
+
+      // DEBUG: Log the score distribution of retrieved users
+      const scoreDistribution = results.reduce((acc, user) => {
+        acc[user.currentScore] = (acc[user.currentScore] || 0) + 1;
+        return acc;
+      }, {} as Record<number, number>);
+      
+      logger.info(`🔍 [UNSIGNED-DEBUG] Retrieved ${results.length} users with score distribution:`, scoreDistribution);
+      
+      if (results.length > 0) {
+        logger.info(`🎯 [UNSIGNED-DEBUG] First 5 users: ${results.slice(0, 5).map(u => `Score:${u.currentScore} User:${u.userId}`).join(', ')}`);
+      }
+
+      return results;
     } catch (error) {
       logger.error('❌ [UNSIGNED] Failed to get qualified users from user_call_scores:', error);
       throw error;
