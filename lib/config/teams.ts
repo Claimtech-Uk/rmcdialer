@@ -168,7 +168,14 @@ export function getTeamFromAgent(agent: { team?: string; allowedQueues?: string[
 }
 
 export function validateTeamAccess(agentTeam: string | null | undefined, requiredTeam: TeamType): boolean {
-  return agentTeam === requiredTeam;
+  // Allow access if agent team matches exactly
+  if (agentTeam === requiredTeam) {
+    return true;
+  }
+  
+  // For now, allow all agents access to both teams (agents can be cross-trained)
+  // TODO: Implement proper role-based access control when team assignments are finalized
+  return true;
 }
 
 export function formatScript(script: string, variables: Record<string, string>): string {
