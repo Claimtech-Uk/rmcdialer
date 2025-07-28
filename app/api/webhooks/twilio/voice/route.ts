@@ -5,6 +5,7 @@ import { replicaDb } from '@/lib/mysql';
 import { SimpleHumeTTSService } from '@/modules/ai-voice-agent/services/simple-hume-tts.service';
 import { isWithinBusinessHours, businessHoursService } from '@/lib/utils/business-hours';
 import { CallOutcomeManager } from '@/modules/call-outcomes/services/call-outcome-manager.service';
+import { createAiAgentService } from '@/modules/auth/services/ai-agent.service';
 // AI Voice Agent imports removed - now using new streaming architecture
 
 // Twilio Voice Webhook Schema
@@ -432,16 +433,25 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         if (validatedAgent?.agent?.id) {
           sessionData.agentId = validatedAgent.agent.id;
         } else {
-          // For missed calls, find ANY valid agent ID as a safe fallback
-          const fallbackAgent = await prisma.agent.findFirst({
-            where: { isActive: true },
-            select: { id: true }
-          });
-          if (fallbackAgent) {
-            sessionData.agentId = fallbackAgent.id;
-            console.log(`📍 Using fallback agent ID ${fallbackAgent.id} for missed call tracking`);
+          // For missed calls, use AI agent for tracking
+          const aiAgentService = createAiAgentService(prisma);
+          const aiAgentId = await aiAgentService.getAiAgentId();
+          
+          if (aiAgentId) {
+            sessionData.agentId = aiAgentId;
+            console.log(`🤖 Using AI agent ID ${aiAgentId} for missed call tracking (Hume handled)`);
           } else {
-            throw new Error('No valid agents found in database - cannot create call session');
+            // Fallback if AI agent not found
+            const fallbackAgent = await prisma.agent.findFirst({
+              where: { isActive: true },
+              select: { id: true }
+            });
+            if (fallbackAgent) {
+              sessionData.agentId = fallbackAgent.id;
+              console.log(`📍 Using fallback agent ID ${fallbackAgent.id} for missed call tracking`);
+            } else {
+              throw new Error('No valid agents found in database - cannot create call session');
+            }
           }
         }
 
@@ -474,18 +484,35 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             }
           });
 
-          // Find a valid agent ID for call session tracking
-          const sessionAgent = validatedAgent || await prisma.agent.findFirst({
-            where: { isActive: true },
-            select: { id: true, firstName: true, lastName: true }
-          });
-
-          if (!sessionAgent) {
-            throw new Error('No valid agents found in database for call session creation');
+          // Find agent ID for call session tracking - prioritize AI agent for unknown/missed calls
+          let agentIdToUse;
+          
+          if (validatedAgent?.agentId) {
+            agentIdToUse = validatedAgent.agentId;
+            console.log(`👤 Using validated agent ID ${agentIdToUse} for unknown caller session`);
+          } else {
+            // Use AI agent for unknown/missed calls
+            const aiAgentService = createAiAgentService(prisma);
+            const aiAgentId = await aiAgentService.getAiAgentId();
+            
+            if (aiAgentId) {
+              agentIdToUse = aiAgentId;
+              console.log(`🤖 Using AI agent ID ${aiAgentId} for unknown caller session (Hume handled)`);
+            } else {
+              // Fallback to any active agent
+              const sessionAgent = await prisma.agent.findFirst({
+                where: { isActive: true },
+                select: { id: true, firstName: true, lastName: true }
+              });
+              
+              if (!sessionAgent) {
+                throw new Error('No valid agents found in database for call session creation');
+              }
+              
+              agentIdToUse = sessionAgent.id;
+              console.log(`📍 Using fallback agent ID ${agentIdToUse} for unknown caller session`);
+            }
           }
-
-          const agentIdToUse = validatedAgent?.agentId || sessionAgent.id;
-          console.log(`📍 Using agent ID ${agentIdToUse} for unknown caller session`);
 
           callSession = await prisma.callSession.create({
             data: {

@@ -14,6 +14,10 @@
   },
   "crons": [
     {
+      "path": "/api/cron/callback-notifications",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/signature-conversion-cleanup",
       "schedule": "0 * * * *"
     },
@@ -28,6 +32,10 @@
     {
       "path": "/api/cron/discover-new-requirements",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/populate-separated-queues",
+      "schedule": "30 * * * *"
     }
   ],
   "git": {

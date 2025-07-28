@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/modules/core/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/modules/core/components/ui/card'
@@ -29,7 +29,6 @@ export function LoginForm({ onSuccess, redirectTo = '/dashboard' }: LoginFormPro
   })
   const [showPassword, setShowPassword] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Partial<LoginFormData>>({})
-  const [showDevButtons, setShowDevButtons] = useState(false)
   
   const router = useRouter()
   const { login } = useAuth()
@@ -98,29 +97,6 @@ export function LoginForm({ onSuccess, redirectTo = '/dashboard' }: LoginFormPro
       }))
     }
   }
-
-  // Development quick login options
-  const devAccounts = [
-    { email: 'agent@test.com', password: 'password123', role: 'Agent', description: 'Standard agent account' },
-    { email: 'supervisor@test.com', password: 'password123', role: 'Supervisor', description: 'Team supervisor with analytics' },
-    { email: 'admin@test.com', password: 'password123', role: 'Admin', description: 'Full system administrator' },
-  ]
-
-  const handleQuickLogin = (email: string, password: string) => {
-    setFormData({ email, password })
-    setValidationErrors({})
-    
-    // Auto-submit after a short delay
-    setTimeout(() => {
-      loginMutation.mutate({ email, password })
-    }, 100)
-  }
-
-  // Show dev buttons for testing - can be controlled via environment
-  useEffect(() => {
-    // Always show on Vercel deployments and localhost for now
-    setShowDevButtons(true)
-  }, [])
 
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -208,56 +184,7 @@ export function LoginForm({ onSuccess, redirectTo = '/dashboard' }: LoginFormPro
             )}
             {loginMutation.isPending ? 'Signing in...' : 'Sign in'}
           </Button>
-
-          {/* Development Note */}
-          {showDevButtons && (
-            <div className="text-center text-sm text-gray-500">
-              <p>Development Mode</p>
-              <p className="text-xs mt-1">
-                Use any valid email and password (min 8 chars)
-              </p>
-            </div>
-          )}
         </form>
-
-        {/* Development Quick Login Section */}
-        {showDevButtons && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <div className="text-center mb-4">
-              <h3 className="text-sm font-medium text-gray-700">Quick Login (Development)</h3>
-              <p className="text-xs text-gray-500 mt-1">Click to instantly sign in as different roles</p>
-            </div>
-            
-            <div className="space-y-2">
-              {devAccounts.map((account, index) => (
-                <Button
-                  key={index}
-                  type="button"
-                  variant="outline"
-                  size="default"
-                  responsive="wrap"
-                  className="w-full justify-start text-left border-slate-300 hover:bg-slate-100 shadow-sm hover:shadow-md transition-all duration-200"
-                  onClick={() => handleQuickLogin(account.email, account.password)}
-                  disabled={loginMutation.isPending}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <div>
-                      <div className="font-medium text-sm">{account.role}</div>
-                      <div className="text-xs text-gray-500">{account.description}</div>
-                    </div>
-                    <div className="text-xs text-gray-400">{account.email}</div>
-                  </div>
-                </Button>
-              ))}
-            </div>
-            
-            <div className="mt-3 text-center">
-              <p className="text-xs text-gray-400">
-                All accounts use password: <code className="bg-gray-100 px-1 rounded">password123</code>
-              </p>
-            </div>
-          </div>
-        )}
       </CardContent>
     </Card>
   )
