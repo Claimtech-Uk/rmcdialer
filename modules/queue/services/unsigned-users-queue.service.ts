@@ -151,10 +151,11 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
         where: {
           currentQueueType: this.queueType,
           isActive: true,
-          // Only get users that haven't been called recently
-          nextCallAfter: {
-            lte: new Date()
-          }
+          // Include users ready to be called (NULL means immediately available)
+          OR: [
+            { nextCallAfter: null },
+            { nextCallAfter: { lte: new Date() } }
+          ]
         },
         orderBy: [
           { currentScore: 'asc' }, // Lower score = higher priority

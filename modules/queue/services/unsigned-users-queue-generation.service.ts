@@ -95,10 +95,11 @@ export class UnsignedUsersQueueGenerationService {
         where: {
           currentQueueType: 'unsigned_users',
           isActive: true,
-          // Only include users ready to be called
-          nextCallAfter: {
-            lte: new Date()
-          },
+          // Include users ready to be called (NULL means immediately available)
+          OR: [
+            { nextCallAfter: null },
+            { nextCallAfter: { lte: new Date() } }
+          ],
           // NEW: 2-hour cooling period for new user_call_scores
           createdAt: {
             lte: twoHoursAgo

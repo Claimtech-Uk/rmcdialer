@@ -291,7 +291,7 @@ export const DevFeatures = {
 // Type-safe feature flag checking (preserved)
 export function withFeature<T>(flag: keyof OriginalFeatureFlags, component: T, fallback: T | null = null): T | null {
   return isFeatureEnabled(flag) ? component : fallback;
-}
+} 
 
 // ============================================================================
 // TYPE EXPORTS
