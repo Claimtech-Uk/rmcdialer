@@ -20,7 +20,7 @@ interface QueueGenerationResult {
 export class UnsignedUsersQueueGenerationService {
   
   // Configuration
-  private readonly QUEUE_SIZE_LIMIT = 500; // Increased from 100 to get more priority 0 users
+  private readonly QUEUE_SIZE_LIMIT = 200; // Reduced to prevent Vercel timeouts
   
   /**
    * Generate fresh unsigned users queue from user_call_scores
