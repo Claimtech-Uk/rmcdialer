@@ -83,8 +83,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
         return { text: 'Call Active', color: 'bg-emerald-100 text-emerald-800', icon: <Phone className="w-4 h-4" /> };
       case 'disposing':
         return { text: 'Call Ending', color: 'bg-orange-100 text-orange-800', icon: <CheckCircle2 className="w-4 h-4" /> };
-      case 'countdown':
-        return { text: 'Countdown', color: 'bg-purple-100 text-purple-800', icon: <Clock className="w-4 h-4" /> };
+
       case 'paused':
         return { text: 'Paused', color: 'bg-gray-100 text-gray-800', icon: <Pause className="w-4 h-4" /> };
       case 'stopped':
@@ -400,19 +399,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
           </div>
         )}
 
-        {isActive && state === 'countdown' && (
-          <div className="max-w-md mx-auto">
-            <CountdownTimer
-              seconds={30} // This should come from settings
-              teamConfig={teamConfig}
-              onComplete={() => console.log('Countdown complete')}
-              onSkip={() => loadNextUser()}
-              showPauseButton={true}
-              onPause={pauseSession}
-              onResume={resumeSession}
-            />
-          </div>
-        )}
+        {/* Countdown removed - agent controls pacing with manual "Start Call" button */}
       </div>
     </div>
   );

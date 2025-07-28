@@ -12,10 +12,10 @@ export class GoingToCompleteOutcome implements CallOutcomeHandler {
   readonly description = 'Customer committed to completing their form soon';
   readonly category = 'positive' as const;
   
-  // Scoring: Very good outcome, high priority boost
+  // Scoring: Reset score to baseline - callback time set by agent
   readonly scoringRules = {
-    scoreAdjustment: -25,
-    description: 'Customer committed to completing form - high priority',
+    scoreAdjustment: 0,
+    description: 'Customer committed to completing form - callback time set by agent',
     shouldTriggerConversion: false
   };
   

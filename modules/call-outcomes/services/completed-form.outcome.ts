@@ -12,10 +12,10 @@ export class CompletedFormOutcome implements CallOutcomeHandler {
   readonly description = 'User has completed their form submission';
   readonly category = 'positive' as const;
   
-  // Scoring: Excellent outcome, should trigger conversion
+  // Scoring: No score change - user will be removed from queue after signature check
   readonly scoringRules = {
-    scoreAdjustment: -50,
-    description: 'Form completed - should be converted/removed from queue',
+    scoreAdjustment: 0,
+    description: 'Form completed - user will be removed from queue if signature validates',
     shouldTriggerConversion: true
   };
   

@@ -44,14 +44,15 @@ export class AutoDiallerService {
 
   /**
    * Determine if a call outcome counts as successful contact
+   * Based on customer engagement regardless of score changes
    */
   isSuccessfulContact(outcomeType: string): boolean {
     const successfulOutcomes = [
-      'completed_form',
-      'going_to_complete', 
-      'call_back',
-      'interested',
-      'partial_completion'
+      'completed_form',      // 0: Form completed - user will be removed if signature validates
+      'going_to_complete',   // 0: User will complete - callback time set by agent
+      'call_back',          // -15: User requested callback (unchanged)
+      'might_complete',     // 0: Might complete - 5-day delay prevents over-calling
+      'missed_call'         // 0: Customer called us - immediate callback scheduled
     ];
     return successfulOutcomes.includes(outcomeType);
   }
@@ -69,19 +70,31 @@ export class AutoDiallerService {
     if (lastOutcome) {
       switch (lastOutcome.outcomeType) {
         case 'completed_form':
+          // Longest break after form completion (major success)
+          baseTime = Math.max(baseTime, 90);
+          break;
         case 'going_to_complete':
-          // Longer break after successful outcomes
+          // Long break for committed users
           baseTime = Math.max(baseTime, 60);
           break;
         case 'call_back':
           // Medium break for callbacks
           baseTime = Math.max(baseTime, 45);
           break;
-        case 'no_answer':
         case 'missed_call':
+          // Quick turnaround - customer tried to reach us!
+          baseTime = Math.min(baseTime, 15);
+          break;
+        case 'no_answer':
         case 'hung_up':
-          // Shorter break for quick outcomes
-          baseTime = Math.min(baseTime, 30);
+          // Quick retry for non-answers
+          baseTime = Math.min(baseTime, 25);
+          break;
+        case 'not_interested':
+        case 'no_claim':
+        case 'do_not_contact':
+          // Longer break before moving to next (major negatives)
+          baseTime = Math.max(baseTime, 45);
           break;
         default:
           // Use default time
@@ -140,8 +153,7 @@ export class AutoDiallerService {
       loading: ['user_loaded', 'paused', 'stopped', 'ready'],
       user_loaded: ['calling', 'loading', 'paused', 'stopped'],
       calling: ['disposing', 'paused', 'stopped'],
-      disposing: ['countdown', 'loading', 'paused', 'stopped'],
-      countdown: ['loading', 'paused', 'stopped'],
+      disposing: ['loading', 'paused', 'stopped'], // Direct to loading - no countdown needed
       paused: ['ready', 'loading', 'user_loaded', 'stopped'],
       stopped: ['ready'], // Can restart
     };

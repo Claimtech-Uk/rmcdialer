@@ -42,7 +42,6 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
   });
   const [isActive, setIsActive] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [countdown, setCountdown] = useState(0);
 
   // Refs for stable callbacks
   const stateRef = useRef(state);
@@ -236,11 +235,11 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
       return;
     }
 
-    // Calculate countdown time
-    const countdownTime = autoDiallerService.calculateCountdownTime(settings!, outcome);
-    setCountdown(countdownTime);
+    // No countdown needed - agent controls pacing with manual "Start Call" button
+    transitionTo('loading', 'Loading next user immediately');
     
-    transitionTo('countdown', `Waiting ${countdownTime}s before next call`);
+    // Load next user immediately
+    await loadNextUser();
 
     toast({
       title: "Call Completed",
@@ -248,18 +247,7 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
     });
   }, [currentUser, session, teamType, settings, updateStats, updateSessionStatsMutation, onCallComplete, onSessionEnd, transitionTo, toast]);
 
-  // Countdown effect
-  useEffect(() => {
-    if (state === 'countdown' && countdown > 0) {
-      const timer = setTimeout(() => {
-        setCountdown(countdown - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else if (state === 'countdown' && countdown === 0) {
-      // Countdown finished, load next user
-      loadNextUser();
-    }
-  }, [state, countdown, loadNextUser]);
+  // Countdown logic removed - agent controls pacing manually
 
   // Start autodialler session
   const startSession = useCallback(async () => {
@@ -313,7 +301,6 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
       setIsActive(false);
       setCurrentUser(null);
       setQueueContext(null);
-      setCountdown(0);
       
       transitionTo('stopped', 'Session ended by user');
       
@@ -341,7 +328,6 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
 
   // Pause session
   const pauseSession = useCallback(() => {
-    setCountdown(0);
     transitionTo('paused', 'Session paused by user');
     
     autoDiallerService.logActivity('Session paused', session?.agent?.id || 0, teamType);

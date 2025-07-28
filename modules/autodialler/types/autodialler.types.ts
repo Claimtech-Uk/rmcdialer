@@ -7,7 +7,7 @@ export type AutoDiallerState =
   | 'user_loaded'  // User loaded, waiting for agent to start call
   | 'calling'      // Call in progress
   | 'disposing'    // Call ended, waiting for disposition
-  | 'countdown'    // Countdown between calls
+
   | 'paused'       // Autodialler paused
   | 'stopped';     // Autodialler stopped/ended
 

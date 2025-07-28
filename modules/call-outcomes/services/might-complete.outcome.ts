@@ -10,12 +10,12 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
   readonly type = 'might_complete' as const;
   readonly displayName = 'Might Complete';
   readonly description = 'Customer showed interest but made no firm commitment';
-  readonly category = 'neutral' as const;
+  readonly category = 'positive' as const;  // Changed to positive - this is engagement
   
-  // Scoring: Cautiously optimistic, small priority boost
+  // Scoring: Reset score to baseline - 5 day delay prevents over-calling
   readonly scoringRules = {
-    scoreAdjustment: -5,
-    description: 'Customer showed interest - slight priority boost',
+    scoreAdjustment: 0,
+    description: 'Customer showed interest - reset score, 5-day callback delay',
     shouldTriggerConversion: false
   };
   
@@ -103,7 +103,7 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
   }
 
   getDelayHours(context: CallOutcomeContext, data?: any): number {
-    // Use callback time if provided, otherwise default to 24 hours
+    // Use callback time if provided, otherwise default to 5 days (120 hours)
     if (data?.callbackDateTime) {
       const callbackTime = new Date(data.callbackDateTime);
       const now = new Date();
@@ -111,7 +111,7 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
       return Math.round(hoursUntilCallback);
     }
     
-    // Default follow-up if no callback scheduled
-    return 24;
+    // Default: 5 days to prevent over-calling users who "might" complete
+    return 120; // 5 days = 120 hours
   }
 } 

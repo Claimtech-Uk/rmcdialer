@@ -12,10 +12,10 @@ export class MissedCallOutcome implements CallOutcomeHandler {
   readonly description = 'Customer called us but we missed it - reset to high priority';
   readonly category = 'positive' as const;
   
-  // Scoring: Reset to 0 to jump the queue (customer tried to reach us!)
+  // Scoring: Reset score to baseline - immediate callback scheduled instead
   readonly scoringRules = {
-    scoreAdjustment: -999, // Large negative to ensure score hits 0 (bounded by system)
-    description: 'Customer called us - reset to highest priority',
+    scoreAdjustment: 0,
+    description: 'Customer called us - reset score, immediate callback scheduled',
     shouldTriggerConversion: false
   };
   
