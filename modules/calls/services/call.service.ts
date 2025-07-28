@@ -410,6 +410,9 @@ export class CallService {
           outcomeResult.scoreAdjustment
         );
 
+        // 6. Check for pending callbacks for this user and mark them as completed
+        await this.completeCallbacksForUser(tx, Number(callSession.userId), sessionId);
+
         console.log(`✅ Call outcome recorded successfully for session ${sessionId}`);
       });
 
@@ -905,6 +908,56 @@ export class CallService {
     } catch (error) {
       this.deps.logger.error(`Failed to update user score for ${userId}:`, error);
       // Don't throw - we don't want call outcome recording to fail due to scoring issues
+    }
+  }
+
+  /**
+   * Complete any pending callbacks for this user
+   * Called after any call outcome is recorded to ensure callbacks are marked as complete
+   */
+  private async completeCallbacksForUser(
+    tx: Prisma.TransactionClient,
+    userId: number,
+    completedCallSessionId: string
+  ): Promise<void> {
+    try {
+      // Find all pending callbacks for this user
+      const pendingCallbacks = await tx.callback.findMany({
+        where: {
+          userId: BigInt(userId),
+          status: { in: ['pending', 'accepted'] }
+        }
+      });
+
+      if (pendingCallbacks.length === 0) {
+        return; // No callbacks to complete
+      }
+
+      // Mark all pending callbacks as completed
+      const updatedCallbacks = await tx.callback.updateMany({
+        where: {
+          userId: BigInt(userId),
+          status: { in: ['pending', 'accepted'] }
+        },
+        data: {
+          status: 'completed',
+          completedCallSessionId: completedCallSessionId
+        }
+      });
+
+      // Remove any queue entries for these callbacks since they're now completed
+      await tx.callQueue.deleteMany({
+        where: {
+          userId: BigInt(userId),
+          callbackId: { in: pendingCallbacks.map(cb => cb.id) }
+        }
+      });
+
+      console.log(`✅ Completed ${updatedCallbacks.count} callbacks for user ${userId} after call ${completedCallSessionId}`);
+
+    } catch (error) {
+      console.error(`⚠️ Failed to complete callbacks for user ${userId}:`, error);
+      // Don't throw - we don't want call outcome recording to fail due to callback completion issues
     }
   }
 
