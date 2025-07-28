@@ -170,3 +170,4 @@ dist/
 # Application logs
 logs/
 *.log
+db-backups/
