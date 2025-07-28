@@ -20,7 +20,7 @@ interface QueueGenerationResult {
 export class UnsignedUsersQueueGenerationService {
   
   // Configuration
-  private readonly QUEUE_SIZE_LIMIT = 2500; // Temporarily increased to capture all users for debugging
+  private readonly QUEUE_SIZE_LIMIT = 500; // Increased from 100 to get more priority 0 users
   
   /**
    * Generate fresh unsigned users queue from user_call_scores
@@ -113,17 +113,11 @@ export class UnsignedUsersQueueGenerationService {
         take: this.QUEUE_SIZE_LIMIT   // Limit queue size for performance
       });
 
-      // DEBUG: Log the score distribution of retrieved users
-      const scoreDistribution = results.reduce((acc, user) => {
-        acc[user.currentScore] = (acc[user.currentScore] || 0) + 1;
-        return acc;
-      }, {} as Record<number, number>);
+      // DEBUG: Log the score distribution of retrieved users  
+      const scoreCount = results.length;
+      const scoreRange = scoreCount > 0 ? `${results[0].currentScore}-${results[results.length-1].currentScore}` : 'none';
       
-      logger.info(`🔍 [UNSIGNED-DEBUG] Retrieved ${results.length} users with score distribution:`, scoreDistribution);
-      
-      if (results.length > 0) {
-        logger.info(`🎯 [UNSIGNED-DEBUG] First 5 users: ${results.slice(0, 5).map(u => `Score:${u.currentScore} User:${u.userId}`).join(', ')}`);
-      }
+      logger.info(`🔍 [UNSIGNED] Retrieved ${scoreCount} users, score range: ${scoreRange}`);
 
       return results;
     } catch (error) {
