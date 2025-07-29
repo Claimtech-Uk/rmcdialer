@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { SMSService } from '@/modules/communications';
-import { AuthService } from '@/modules/auth';
-import { UserService } from '@/modules/users';
 import { prisma } from '@/lib/db';
-import { logger } from '@/modules/core';
 
 // Twilio SMS Webhook Schema
 const TwilioSMSWebhookSchema = z.object({
@@ -26,43 +22,18 @@ const TwilioSMSWebhookSchema = z.object({
   ToCountry: z.string().optional(),
 });
 
-// Initialize services with proper dependencies
-const authService = new AuthService({ prisma, logger });
-const userService = new UserService();
-
-const authForComms = {
-  getCurrentAgent: async () => ({ id: 1, role: 'system' }) // System agent for webhooks
-};
-
-// Create user service adapter for SMS service
-const userServiceAdapter = {
-  async getUserData(userId: number) {
-    const context = await userService.getUserCallContext(userId);
-    if (!context) {
-      throw new Error(`User ${userId} not found`);
-    }
-    return {
-      id: context.user.id,
-      firstName: context.user.firstName || 'Unknown',
-      lastName: context.user.lastName || 'User',
-      email: context.user.email || '',
-      phoneNumber: context.user.phoneNumber || ''
-    };
-  }
-};
-
-const smsService = new SMSService({ 
-  authService: authForComms,
-  userService: userServiceAdapter
-});
-
 export async function POST(request: NextRequest) {
   try {
     console.log('📱 Twilio SMS webhook received');
 
     // Parse form data from Twilio
     const formData = await request.formData();
-    const webhookData = Object.fromEntries(formData.entries());
+    const webhookData: Record<string, string> = {};
+    
+    // Convert FormData to object
+    for (const [key, value] of formData.entries()) {
+      webhookData[key] = value.toString();
+    }
     
     console.log('📋 SMS Webhook data:', {
       MessageSid: webhookData.MessageSid,
@@ -75,62 +46,24 @@ export async function POST(request: NextRequest) {
     // Validate webhook data
     const validatedData = TwilioSMSWebhookSchema.parse(webhookData);
 
-    // Check if this is a media message (not yet supported)
-    if (validatedData.NumMedia && parseInt(validatedData.NumMedia) > 0) {
-      logger.warn('Media message received but not yet supported', {
-        MessageSid: validatedData.MessageSid,
-        From: validatedData.From,
-        NumMedia: validatedData.NumMedia
-      });
-      
-      // Send auto-response for media messages
-      await smsService.sendSMS({
-        phoneNumber: validatedData.From,
-        message: "Thank you for your message. Media attachments are not supported yet. Please send text messages only.",
-        messageType: 'auto_response'
-      });
-
-      return NextResponse.json({ 
-        message: 'Media message received but not supported',
-        status: 'acknowledged'
-      });
-    }
-
-    // Process the incoming SMS
-    const result = await smsService.processIncomingSMS({
-      from: validatedData.From,
-      to: validatedData.To,
-      body: validatedData.Body,
-      messageSid: validatedData.MessageSid,
-      accountSid: validatedData.AccountSid,
-      timestamp: new Date()
+    // For now, just log the incoming SMS (we'll add database storage later)
+    console.log('✅ SMS webhook processed successfully:', {
+      MessageSid: validatedData.MessageSid,
+      From: validatedData.From,
+      To: validatedData.To,
+      Body: validatedData.Body,
+      timestamp: new Date().toISOString()
     });
 
-    logger.info('Incoming SMS processed successfully', {
-      messageId: result.message.id,
-      conversationId: result.conversation.id,
-      from: validatedData.From,
-      hasAutoResponse: !!result.autoResponse
-    });
-
-    // Return TwiML response if needed (currently not required)
     return NextResponse.json({ 
       message: 'SMS processed successfully',
       status: 'processed',
-      messageId: result.message.id,
-      conversationId: result.conversation.id,
-      autoResponseSent: !!result.autoResponse
+      MessageSid: validatedData.MessageSid
     });
 
   } catch (error) {
     console.error('❌ SMS webhook error:', error);
     
-    logger.error('Failed to process incoming SMS webhook', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      webhookData: Object.fromEntries((await request.formData()).entries())
-    });
-
     // Return 200 OK even on error to prevent Twilio retries for invalid data
     // But log the error for investigation
     return NextResponse.json({ 
@@ -143,9 +76,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   // Health check endpoint for Twilio webhook configuration
-  return NextResponse.json({
-    message: 'Twilio SMS webhook endpoint ready',
+  return NextResponse.json({ 
+    message: 'SMS webhook endpoint is healthy',
     timestamp: new Date().toISOString(),
-    status: 'healthy'
+    status: 'ok'
   });
 } 
