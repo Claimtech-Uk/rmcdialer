@@ -27,7 +27,6 @@ export const tokenUtils = {
         isHttps ? 'secure' : ''
       ].filter(Boolean).join('; ')
       
-      console.log('Setting auth cookie:', { isHttps, domain: window.location.hostname, cookieOptions })
       document.cookie = cookieOptions
     }
   },
@@ -43,7 +42,6 @@ export const tokenUtils = {
     
     // Clear from cookies by setting expired date
     if (typeof document !== 'undefined') {
-      console.log('Clearing auth cookie from domain:', window.location.hostname)
       // Clear with multiple variations to ensure removal
       const clearCookies = [
         'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT',
