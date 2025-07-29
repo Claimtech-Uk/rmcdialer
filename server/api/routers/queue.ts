@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '@/lib/trpc/server';
-import { QueueService, type QueueFilters } from '@/modules/queue';
+import { QueueService, PreCallValidationService, type QueueFilters } from '@/modules/queue';
 import { PriorityScoringService } from '@/modules/scoring';
 import { prisma } from '@/lib/db';
 
@@ -14,10 +14,14 @@ const logger = {
 // Initialize scoring service (for legacy compatibility)
 const scoringService = new PriorityScoringService({ logger });
 
-// Initialize queue service with simplified dependencies
+// Initialize queue services
 // QueueService is now QueueAdapterService (aliased in index.ts)
-// The adapter will handle legacy service initialization internally
 const queueService = new QueueService({ prisma, logger });
+
+// Initialize PreCallValidationService for user data with proper transformation
+const preCallValidationService = new PreCallValidationService();
+// Connect it to the queue adapter for integration
+preCallValidationService.setQueueAdapter(queueService);
 
 // Input validation schemas
 const GetQueueInput = z.object({
@@ -74,7 +78,8 @@ export const queueRouter = createTRPCRouter({
     .input(z.object({ queueType: QueueTypeSchema }))
     .mutation(async ({ input, ctx }) => {
       logger.info(`Agent ${ctx.agent.id} requesting next user for ${input.queueType} queue`);
-      return await queueService.getNextUserForCall({ queueType: input.queueType });
+      // Use PreCallValidationService to get user with proper data transformation
+      return await preCallValidationService.getNextValidUserForCall(input.queueType);
     }),
 
   // Validate a specific user for calling
