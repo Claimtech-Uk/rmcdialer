@@ -16,7 +16,9 @@ import {
   Clock,
   User,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  FileText,
+  RefreshCw
 } from 'lucide-react';
 import { CallInterface } from '@/modules/calls/components/CallInterface';
 import { CountdownTimer } from '../../../app/queue/components/CountdownTimer';
@@ -253,80 +255,188 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
           />
         )}
 
-                 {isActive && state === 'user_loaded' && currentUser && !isCallInterfaceActive && (
-           <div className="max-w-4xl mx-auto">
-             <Card>
-               <CardHeader className={`${teamConfig.color.gradient} text-white`}>
-                 <div className="flex items-center justify-between">
-                   <div>
-                     <CardTitle className="text-2xl">
-                       {currentUser.firstName} {currentUser.lastName}
-                     </CardTitle>
-                     <p className="text-white/80">{currentUser.phoneNumber}</p>
-                   </div>
-                   <div className="text-right">
-                     <div className="text-sm text-white/80">Claims</div>
-                     <div className="text-xl font-semibold">{currentUser.claims.length}</div>
-                   </div>
-                 </div>
-               </CardHeader>
-               <CardContent className="p-6">
-                 {/* User Details */}
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                   {/* Contact Info */}
-                   <div>
-                     <h3 className="text-lg font-semibold text-slate-800 mb-3">Contact Information</h3>
-                     <div className="space-y-2 text-sm">
-                       <p><strong>Phone:</strong> {currentUser.phoneNumber}</p>
-                       <p><strong>Email:</strong> {currentUser.email || 'Not provided'}</p>
-                       {currentUser.address && (
-                         <p><strong>Address:</strong> {currentUser.address.fullAddress}</p>
-                       )}
-                     </div>
-                   </div>
+        {isActive && state === 'user_loaded' && currentUser && !isCallInterfaceActive && (
+          <div className="max-w-5xl mx-auto space-y-6">
+            {/* User Header Card */}
+            <Card className="border-0 shadow-lg">
+              <CardHeader className={`${teamConfig.color.gradient} text-white py-8`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+                      <Phone className="w-8 h-8 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-3xl font-bold mb-1">
+                        {currentUser.firstName} {currentUser.lastName}
+                      </CardTitle>
+                      <p className="text-xl text-white/90 font-medium">{currentUser.phoneNumber}</p>
+                      {currentUser.email && (
+                        <p className="text-white/70 text-lg">{currentUser.email}</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Quick Stats */}
+                  <div className="text-right">
+                    <div className="bg-white/20 rounded-lg p-4">
+                      <div className="text-sm text-white/80 uppercase tracking-wide font-semibold">Active Claims</div>
+                      <div className="text-4xl font-bold text-white">{currentUser.claims.length}</div>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
 
-                   {/* Claims Info */}
-                   <div>
-                     <h3 className="text-lg font-semibold text-slate-800 mb-3">Claims Summary</h3>
-                     {currentUser.claims.slice(0, 2).map((claim, index) => (
-                       <div key={index} className="mb-3 p-3 bg-slate-50 rounded-lg">
-                         <p className="text-sm"><strong>Lender:</strong> {claim.lender}</p>
-                         <p className="text-sm"><strong>Status:</strong> {claim.status}</p>
-                         {claim.requirements && (
-                           <p className="text-sm"><strong>Requirements:</strong> {claim.requirements.length} pending</p>
-                         )}
-                       </div>
-                     ))}
-                   </div>
-                 </div>
+            {/* Main Content Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Contact Information */}
+              <Card className="border-0 shadow-md">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xl font-bold text-slate-800 flex items-center">
+                    <Phone className="w-5 h-5 mr-2 text-blue-600" />
+                    Contact Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center p-3 bg-blue-50 rounded-lg">
+                      <div className="w-2 h-2 bg-blue-600 rounded-full mr-3"></div>
+                      <div>
+                        <div className="text-sm font-medium text-slate-600">Phone Number</div>
+                        <div className="text-lg font-semibold text-slate-900">{currentUser.phoneNumber}</div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center p-3 bg-green-50 rounded-lg">
+                      <div className="w-2 h-2 bg-green-600 rounded-full mr-3"></div>
+                      <div>
+                        <div className="text-sm font-medium text-slate-600">Email Address</div>
+                        <div className="text-lg font-semibold text-slate-900">{currentUser.email || 'Not provided'}</div>
+                      </div>
+                    </div>
+                    
+                    {currentUser.address && (
+                      <div className="flex items-start p-3 bg-purple-50 rounded-lg">
+                        <div className="w-2 h-2 bg-purple-600 rounded-full mr-3 mt-2"></div>
+                        <div>
+                          <div className="text-sm font-medium text-slate-600">Address</div>
+                          <div className="text-lg font-semibold text-slate-900 leading-relaxed">{currentUser.address.fullAddress}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-                 {/* Call Controls */}
-                 <div className="flex items-center justify-center gap-4">
-                   <Button
-                     onClick={() => {
-                       console.log('Activating call interface for:', currentUser.firstName, currentUser.lastName);
-                       setIsCallInterfaceActive(true);
-                     }}
-                     className={`px-8 py-4 ${teamConfig.color.gradient} text-white`}
-                     size="lg"
-                   >
-                     <Phone className="w-5 h-5 mr-2" />
-                     Start Call Interface
-                   </Button>
-                   <Button
-                     onClick={skipUser}
-                     variant="outline"
-                     size="lg"
-                     className="px-8 py-4"
-                   >
-                     <SkipForward className="w-5 h-5 mr-2" />
-                     Skip User
-                   </Button>
-                 </div>
-               </CardContent>
-             </Card>
-           </div>
-         )}
+              {/* Claims Summary */}
+              <Card className="border-0 shadow-md lg:col-span-2">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xl font-bold text-slate-800 flex items-center">
+                    <FileText className="w-5 h-5 mr-2 text-orange-600" />
+                    Claims Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {currentUser.claims.length > 0 ? (
+                    <div className="space-y-4">
+                      {currentUser.claims.slice(0, 3).map((claim, index) => (
+                        <div key={index} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <div className="text-sm font-medium text-slate-600 mb-1">Lender</div>
+                              <div className="text-lg font-semibold text-slate-900">{claim.lender}</div>
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-slate-600 mb-1">Status</div>
+                              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
+                                claim.status === 'active' ? 'bg-green-100 text-green-800' :
+                                claim.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {claim.status}
+                              </span>
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-slate-600 mb-1">Requirements</div>
+                              <div className="text-lg font-semibold text-slate-900">
+                                {claim.requirements ? claim.requirements.length : 0} pending
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {currentUser.claims.length > 3 && (
+                        <div className="text-center py-2">
+                          <span className="text-sm text-slate-500">
+                            +{currentUser.claims.length - 3} more claims available
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                      <p className="text-lg">No claims found for this user</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Action Buttons - Prominent and Accessible */}
+            <Card className="border-0 shadow-lg">
+              <CardContent className="py-8">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                  <Button
+                    onClick={() => {
+                      console.log('Activating call interface for:', currentUser.firstName, currentUser.lastName);
+                      setIsCallInterfaceActive(true);
+                    }}
+                    className={`px-12 py-6 text-xl font-semibold ${teamConfig.color.gradient} text-white hover:shadow-lg transform hover:scale-105 transition-all duration-200`}
+                    size="lg"
+                  >
+                    <Phone className="w-6 h-6 mr-3" />
+                    Start Call Interface
+                  </Button>
+                  
+                  <Button
+                    onClick={skipUser}
+                    variant="outline"
+                    size="lg"
+                    className="px-12 py-6 text-xl font-semibold border-2 hover:bg-slate-50 hover:shadow-lg transform hover:scale-105 transition-all duration-200"
+                  >
+                    <SkipForward className="w-6 h-6 mr-3" />
+                    Skip User
+                  </Button>
+                </div>
+                
+                {/* Quick Actions */}
+                <div className="flex justify-center gap-3 mt-6 pt-6 border-t border-slate-200">
+                  <Button
+                    onClick={loadNextUser}
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-600 hover:text-slate-900"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Load Next User
+                  </Button>
+                  <Button
+                    onClick={pauseSession}
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-600 hover:text-slate-900"
+                  >
+                    <Pause className="w-4 h-4 mr-2" />
+                    Pause Session
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
          {isActive && state === 'user_loaded' && currentUser && isCallInterfaceActive && (
            <div className="max-w-4xl mx-auto space-y-4">
