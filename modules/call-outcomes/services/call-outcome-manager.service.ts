@@ -22,6 +22,7 @@ import { DoNotContactOutcome } from './do-not-contact.outcome';
 // Main service to coordinate all call outcome processing
 export class CallOutcomeManager {
   private handlers: Map<CallOutcomeType, CallOutcomeHandler> = new Map();
+  private prisma: any = null; // Cached Prisma instance
   
   constructor() {
     this.registerAllHandlers();
@@ -82,10 +83,13 @@ export class CallOutcomeManager {
     // ✅ UPDATE CALL SESSION WITH OUTCOME DATA
     if (context.sessionId && options?.updateCallSession !== false) {
       try {
-        const { PrismaClient } = await import('@prisma/client');
-        const prisma = new PrismaClient();
+        // Create and cache Prisma client instance to avoid connection pool issues
+        if (!this.prisma) {
+          const { PrismaClient } = await import('@prisma/client');
+          this.prisma = new PrismaClient();
+        }
         
-        await prisma.callSession.update({
+        await this.prisma.callSession.update({
           where: { id: context.sessionId },
           data: {
             lastOutcomeType: outcomeType,
@@ -100,7 +104,6 @@ export class CallOutcomeManager {
           }
         });
         
-        await prisma.$disconnect();
         console.log(`✅ Updated call session ${context.sessionId} with outcome: ${outcomeType}`);
       } catch (updateError) {
         console.error(`⚠️ Failed to update call session ${context.sessionId} with outcome:`, updateError);

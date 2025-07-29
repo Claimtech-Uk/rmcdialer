@@ -327,7 +327,7 @@ export function CallInterface({
       console.log('✅ Call outcome recorded in database:', result);
       toast({
         title: "Call Completed Successfully",
-        description: `Outcome: ${result.outcomeType.replace('_', ' ').toUpperCase()}`,
+        description: "Call outcome saved successfully",
       });
       // Only refetch call history, not everything
       refetchCallHistory();
