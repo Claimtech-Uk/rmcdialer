@@ -146,28 +146,23 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
         return this.formatCallbackAsQueueEntry(callback);
       }
 
-      // 2. Get from user_call_scores where currentQueueType = 'unsigned_users'
-      const userScore = await this.prisma.userCallScore.findFirst({
+      // 2. Get from call_queue table ordered by queue_position (proper queue ordering)
+      const queueEntry = await this.prisma.callQueue.findFirst({
         where: {
-          currentQueueType: this.queueType,
-          isActive: true,
-          // Include users ready to be called (NULL means immediately available)
-          OR: [
-            { nextCallAfter: null },
-            { nextCallAfter: { lte: new Date() } }
-          ]
+          queueType: this.queueType,
+          status: 'pending',
+          assignedToAgentId: null  // Not yet assigned to any agent
         },
-        orderBy: [
-          { currentScore: 'asc' }, // Lower score = higher priority
-          { createdAt: 'asc' }     // FIFO for same score
-        ]
+        orderBy: {
+          queuePosition: 'asc'  // ✅ Use proper queue ordering (lowest position = highest priority)
+        }
       });
 
-      if (!userScore) {
+      if (!queueEntry) {
         return null;
       }
 
-      return this.formatUserScoreAsQueueEntry(userScore);
+      return this.formatQueueEntryAsUnsignedEntry(queueEntry);
 
     } catch (error) {
       this.logger.error('❌ Failed to get next user from unsigned queue:', error);
@@ -350,7 +345,7 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
       claimId: null,
       priorityScore: -1000, // Callbacks get highest priority
       queuePosition: 0,
-      status: 'pending' as const,
+      status: 'pending',
       queueReason: `Callback: ${callback.callbackReason || 'Scheduled callback'}`,
       assignedToAgentId: callback.preferredAgentId,
       assignedAt: null,
@@ -359,7 +354,7 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
       createdAt: callback.scheduledFor,
       updatedAt: new Date(),
       signatureMissingSince: null,
-      signatureType: 'initial' as const
+      signatureType: 'initial'
     };
   }
 
@@ -373,7 +368,7 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
       claimId: userScore.claimId,
       priorityScore: userScore.currentScore,
       queuePosition: 0,
-      status: 'pending' as const,
+      status: 'pending',
       queueReason: 'Missing signature',
       assignedToAgentId: null,
       assignedAt: null,
@@ -382,7 +377,30 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
       createdAt: userScore.createdAt,
       updatedAt: userScore.updatedAt,
       signatureMissingSince: userScore.createdAt, // Approximate
-      signatureType: 'initial' as const
+      signatureType: 'initial'
+    };
+  }
+
+  /**
+   * Format call_queue entry as UnsignedUsersQueueEntry
+   */
+  private formatQueueEntryAsUnsignedEntry(queueEntry: any): UnsignedUsersQueueEntry {
+    return {
+      id: `queue-${queueEntry.id}`, // Use actual ID from call_queue
+      userId: queueEntry.userId,
+      claimId: queueEntry.claimId,
+      priorityScore: 0, // Call_queue entries don't have a direct priorityScore
+      queuePosition: queueEntry.queuePosition,
+      status: queueEntry.status,
+      queueReason: queueEntry.queueReason,
+      assignedToAgentId: queueEntry.assignedToAgent,
+      assignedAt: queueEntry.assignedAt,
+      callbackId: null, // Call_queue entries don't have a direct callbackId
+      availableFrom: queueEntry.availableFrom,
+      createdAt: queueEntry.createdAt,
+      updatedAt: queueEntry.updatedAt,
+      signatureMissingSince: null, // No direct signatureMissingSince in call_queue
+      signatureType: 'initial'
     };
   }
 } 
