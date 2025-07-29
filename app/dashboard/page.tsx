@@ -298,6 +298,11 @@ export default function DashboardPage() {
   const { data: callAnalytics, isLoading: callsLoading, error: callsError } = api.calls.getAnalytics.useQuery({
     startDate: new Date(new Date().setHours(0, 0, 0, 0)),
     endDate: new Date()
+  }, {
+    retry: false, // Don't retry on errors
+    onError: (error) => {
+      console.warn('Calls analytics failed:', error.message);
+    }
   });
 
   const { data: queueStats, isLoading: queueLoading, error: queueError } = api.queue.getStats.useQuery();
@@ -317,6 +322,11 @@ export default function DashboardPage() {
   const { data: communicationStats, isLoading: commLoading, error: commError } = api.communications.getDashboardStats.useQuery({
     startDate: new Date(new Date().setHours(0, 0, 0, 0)),
     endDate: new Date()
+  }, {
+    retry: false, // Don't retry on errors  
+    onError: (error) => {
+      console.warn('Communications analytics failed:', error.message);
+    }
   });
 
   // Check authentication status
@@ -328,8 +338,13 @@ export default function DashboardPage() {
   if (agentsError) console.error('Agents Status Error:', agentsError);
   if (commError) console.error('Communications Error:', commError);
 
-  // Show loading state
-  if (callsLoading || queueLoading || agentsLoading || commLoading) {
+  // Show loading state (but not if queries have errored out)
+  const shouldShowLoading = (callsLoading && !callsError) || 
+                           (queueLoading && !queueError) || 
+                           (agentsLoading && !agentsError) || 
+                           (commLoading && !commError);
+  
+  if (shouldShowLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
         <div className="max-w-7xl mx-auto py-12 px-6">
