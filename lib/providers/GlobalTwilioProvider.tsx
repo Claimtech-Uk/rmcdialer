@@ -69,6 +69,11 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
     hasAudio: false,
   });
   const [showAudioPermissionModal, setShowAudioPermissionModal] = useState(false);
+  
+  // Debug logging for modal state changes
+  useEffect(() => {
+    console.log('🎤 showAudioPermissionModal changed to:', showAudioPermissionModal);
+  }, [showAudioPermissionModal]);
   const [needsPermissionCheck, setNeedsPermissionCheck] = useState(true);
   
   // Refs for cleanup and mount tracking
@@ -96,6 +101,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
       initializeTwilio();
     } else if (session?.agent && !audioPermissionStatus.hasAudio && audioPermissionStatus.status !== 'unknown') {
       console.log('🎤 Audio permission required before Twilio initialization');
+      console.log('🎤 Setting showAudioPermissionModal to true');
       setShowAudioPermissionModal(true);
     }
   }, [session?.agent, isEnabled, twilioService, audioPermissionStatus]);

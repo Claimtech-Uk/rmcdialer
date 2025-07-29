@@ -25,6 +25,8 @@ export function AudioPermissionModal({
   onPermissionDenied,
   onClose,
 }: AudioPermissionModalProps) {
+  console.log('🎤 AudioPermissionModal render - isOpen:', isOpen);
+  
   const [permissionStatus, setPermissionStatus] = useState<AudioPermissionStatus>({
     status: 'unknown',
     hasAudio: false,
