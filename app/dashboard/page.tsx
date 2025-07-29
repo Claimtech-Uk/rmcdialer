@@ -294,20 +294,39 @@ function AgentStatusTable({ agents }: AgentStatusTableProps) {
 }
 
 export default function DashboardPage() {
-  // Get real data using tRPC queries
-  const { data: callAnalytics, isLoading: callsLoading } = api.calls.getAnalytics.useQuery({
+  // Get real data using tRPC queries with error handling
+  const { data: callAnalytics, isLoading: callsLoading, error: callsError } = api.calls.getAnalytics.useQuery({
     startDate: new Date(new Date().setHours(0, 0, 0, 0)),
     endDate: new Date()
   });
 
-  const { data: queueStats, isLoading: queueLoading } = api.queue.getStats.useQuery();
+  const { data: queueStats, isLoading: queueLoading, error: queueError } = api.queue.getStats.useQuery();
   
-  const { data: agentsStatus, isLoading: agentsLoading } = api.auth.getAllAgentsStatus.useQuery();
+  const { data: agentsStatus, isLoading: agentsLoading, error: agentsError } = api.auth.getAllAgentsStatus.useQuery(
+    undefined,
+    {
+      retry: false, // Don't retry on permission errors
+      onError: (error) => {
+        if (error.message.includes('permissions')) {
+          console.warn('User does not have supervisor permissions for agent status data');
+        }
+      }
+    }
+  );
   
-  const { data: communicationStats, isLoading: commLoading } = api.communications.getDashboardStats.useQuery({
+  const { data: communicationStats, isLoading: commLoading, error: commError } = api.communications.getDashboardStats.useQuery({
     startDate: new Date(new Date().setHours(0, 0, 0, 0)),
     endDate: new Date()
   });
+
+  // Check authentication status
+  const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null;
+
+  // Debug logging for errors
+  if (callsError) console.error('Calls Analytics Error:', callsError);
+  if (queueError) console.error('Queue Stats Error:', queueError);
+  if (agentsError) console.error('Agents Status Error:', agentsError);
+  if (commError) console.error('Communications Error:', commError);
 
   // Show loading state
   if (callsLoading || queueLoading || agentsLoading || commLoading) {
@@ -317,13 +336,55 @@ export default function DashboardPage() {
           <div className="text-center">
             <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
             <p className="text-slate-600 text-lg">Loading dashboard data...</p>
+            {!authToken && (
+              <p className="text-red-600 text-sm mt-2">⚠️ No authentication token found</p>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
-  // Construct metrics from real data
+  // Show error state if any critical queries failed (ignore permission errors for agents)
+  const hasCriticalError = (callsError && !callsError.message.includes('permissions')) || 
+                          (queueError && !queueError.message.includes('permissions'));
+  
+  if (hasCriticalError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+        <div className="max-w-7xl mx-auto py-12 px-6">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="h-8 w-8 text-red-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-4">Dashboard Error</h2>
+            <div className="space-y-2 text-left max-w-md mx-auto">
+              {callsError && (
+                <p className="text-red-600 text-sm">❌ Calls Analytics: {callsError.message}</p>
+              )}
+              {queueError && (
+                <p className="text-red-600 text-sm">❌ Queue Stats: {queueError.message}</p>
+              )}
+              {agentsError && (
+                <p className="text-yellow-600 text-sm">⚠️ Agents Status: {agentsError.message}</p>
+              )}
+              {commError && (
+                <p className="text-yellow-600 text-sm">⚠️ Communications: {commError.message}</p>
+              )}
+            </div>
+            <Button 
+              onClick={() => window.location.reload()} 
+              className="mt-6"
+            >
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Construct metrics from real data with fallbacks
   const metrics: DashboardMetrics = {
     callMetrics: {
       totalCalls: callAnalytics?.totalCalls || 0,
@@ -347,7 +408,7 @@ export default function DashboardPage() {
     hourlyData: [] // Will need to implement hourly analytics endpoint
   };
 
-  // Transform agent status data
+  // Transform agent status data (with fallback for permission errors)
   const agents: AgentStatus[] = (agentsStatus || []).filter(session => session.agent).map(agentSession => ({
     id: agentSession.agentId,
     name: `${agentSession.agent?.firstName || ''} ${agentSession.agent?.lastName || ''}`,
@@ -497,6 +558,9 @@ export default function DashboardPage() {
               <h3 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
                 <Users className="w-6 h-6 text-emerald-600" />
                 Agent Status
+                {agentsError && (
+                  <span className="text-xs text-yellow-600 ml-2">(Limited Access)</span>
+                )}
               </h3>
               <Button 
                 variant="outline" 
@@ -509,7 +573,15 @@ export default function DashboardPage() {
               </Button>
             </div>
             
-            {agents.length > 0 ? (
+            {agentsError && agentsError.message.includes('permissions') ? (
+              <div className="text-center text-slate-500 py-12">
+                <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center">
+                  <Users className="h-8 w-8 text-blue-500" />
+                </div>
+                <p className="font-medium text-lg">Supervisor Access Required</p>
+                <p className="text-sm mt-1">You need supervisor or admin permissions to view agent status data</p>
+              </div>
+            ) : agents.length > 0 ? (
               <AgentStatusTable agents={agents} />
             ) : (
               <div className="text-center text-slate-500 py-12">

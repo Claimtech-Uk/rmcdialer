@@ -127,30 +127,6 @@ export default function Sidebar({ children }: SidebarProps) {
       icon: Users,
       description: 'Manage system agents'
     },
-    { 
-      name: 'System Analytics', 
-      href: '/admin/analytics', 
-      icon: BarChart3,
-      description: 'System-wide analytics'
-    },
-    { 
-      name: 'Database Tools', 
-      href: '/admin/database', 
-      icon: Database,
-      description: 'Database management'
-    },
-    { 
-      name: 'System Health', 
-      href: '/admin/health', 
-      icon: Activity,
-      description: 'System monitoring'
-    },
-    { 
-      name: 'Settings', 
-      href: '/admin/settings', 
-      icon: Settings,
-      description: 'System configuration'
-    },
   ] : [];
 
   const NavContent = () => (
