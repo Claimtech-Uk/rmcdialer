@@ -63,21 +63,21 @@
 ## 🎮 **PRODUCTION ENDPOINTS LIVE**
 
 ### **🔧 Management URLs:**
-- **Queue Generation**: `https://rmcdialer.vercel.app/api/cron/populate-separated-queues`
-- **Queue Monitoring**: `https://rmcdialer.vercel.app/api/cron/queue-level-check`  
-- **Health Status**: `https://rmcdialer.vercel.app/api/health/queues`
-- **Admin Panel**: `https://rmcdialer.vercel.app/admin`
+- **Queue Generation**: `https://dialer.solvosolutions.co.uk/api/cron/populate-separated-queues`
+- **Queue Monitoring**: `https://dialer.solvosolutions.co.uk/api/cron/queue-level-check`  
+- **Health Status**: `https://dialer.solvosolutions.co.uk/api/health/queues`
+- **Admin Panel**: `https://dialer.solvosolutions.co.uk/admin`
 
 ### **📊 Monitoring Commands:**
 ```bash
 # Check queue levels
-curl -s https://rmcdialer.vercel.app/api/cron/queue-level-check | jq '.summary'
+curl -s https://dialer.solvosolutions.co.uk/api/cron/queue-level-check | jq '.summary'
 
 # Trigger queue generation  
-curl -X GET https://rmcdialer.vercel.app/api/cron/populate-separated-queues
+curl -X GET https://dialer.solvosolutions.co.uk/api/cron/populate-separated-queues
 
 # Health check
-curl -X POST https://rmcdialer.vercel.app/api/cron/queue-level-check -d '{"action": "healthCheck"}'
+curl -X POST https://dialer.solvosolutions.co.uk/api/cron/queue-level-check -d '{"action": "healthCheck"}'
 ```
 
 ---
@@ -88,8 +88,8 @@ curl -X POST https://rmcdialer.vercel.app/api/cron/queue-level-check -d '{"actio
 Run this on your production server to set up automated monitoring:
 ```bash
 # Add to your production server crontab:
-*/5 * * * * curl -s -X GET https://rmcdialer.vercel.app/api/cron/queue-level-check >> /var/log/queue-monitor.log 2>&1
-0 * * * * curl -s -X GET https://rmcdialer.vercel.app/api/cron/populate-separated-queues >> /var/log/queue-generation.log 2>&1
+*/5 * * * * curl -s -X GET https://dialer.solvosolutions.co.uk/api/cron/queue-level-check >> /var/log/queue-monitor.log 2>&1
+0 * * * * curl -s -X GET https://dialer.solvosolutions.co.uk/api/cron/populate-separated-queues >> /var/log/queue-generation.log 2>&1
 ```
 
 ### **Weekly Cleanup (After 1 Week):**

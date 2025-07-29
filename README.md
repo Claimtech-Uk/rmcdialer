@@ -1,6 +1,6 @@
-# 📞 RMC Dialler - Next.js 14 Call Center Management System
+# 🚀 RMC Dialler System - Next.js 14 + tRPC
 
-**Live Application**: [dialler.resolvemyclaim.co.uk](https://dialler.resolvemyclaim.co.uk)  
+**Live Application**: [dialer.solvosolutions.co.uk](https://dialer.solvosolutions.co.uk)
 **Status**: ✅ **PRODUCTION READY** - All phases completed successfully!
 
 A standalone dialler system built as a unified **Next.js 14** application with **tRPC** that enables agents to efficiently contact users about their financial claims. The system reads user data from the main claims platform but operates completely independently with no write-backs.
@@ -169,7 +169,7 @@ npm run deploy
 npm run check-deployments
 
 # Monitor production health
-curl -s https://dialler.resolvemyclaim.co.uk/api/health/queues
+curl -s https://dialer.solvosolutions.co.uk/api/health/queues
 ```
 
 ---
@@ -361,19 +361,28 @@ const discovery = {
 - **Agent productivity** tracking and reporting
 - **Auto-regeneration** monitoring and alerting
 
-### **Production Commands**
+### **🎯 Production Monitoring**
 ```bash
-# Monitor queue levels
-curl -s https://dialler.resolvemyclaim.co.uk/api/cron/queue-level-check | jq '.summary'
+# Check queue levels
+curl -s https://dialer.solvosolutions.co.uk/api/health/queues
+
+# Test system health
+curl -s https://dialer.solvosolutions.co.uk/api/cron/health
+```
+
+### **Production Health Monitoring**
+```bash
+# Check queue levels and auto-regeneration
+curl -s https://dialer.solvosolutions.co.uk/api/cron/queue-level-check | jq '.summary'
 
 # Check system health
-curl -s https://dialler.resolvemyclaim.co.uk/api/health/queues
+curl -s https://dialer.solvosolutions.co.uk/api/health/queues
 
 # Trigger queue regeneration
-curl -X GET https://dialler.resolvemyclaim.co.uk/api/cron/populate-separated-queues
+curl -X GET https://dialer.solvosolutions.co.uk/api/cron/populate-separated-queues
 
 # Monitor cron job health
-curl -s https://dialler.resolvemyclaim.co.uk/api/cron/health
+curl -s https://dialer.solvosolutions.co.uk/api/cron/health
 ```
 
 ---
@@ -397,7 +406,7 @@ DATABASE_URL=postgresql://production-db-url
 REPLICA_DATABASE_URL=mysql://replica-url
 REDIS_URL=redis://production-redis-url (optional)
 NEXTAUTH_SECRET=production-secret
-NEXTAUTH_URL=https://dialler.resolvemyclaim.co.uk
+NEXTAUTH_URL=https://dialer.solvosolutions.co.uk
 
 # AI & Voice Services
 HUME_API_KEY=production-hume-key
@@ -491,7 +500,7 @@ Production cron jobs via Vercel Cron:
 - AI-powered agent assistance
 
 #### **Phase 7: Production Deployment Complete** ✅
-- Live application at [dialler.resolvemyclaim.co.uk](https://dialler.resolvemyclaim.co.uk)
+- Live application at [dialer.solvosolutions.co.uk](https://dialer.solvosolutions.co.uk)
 - All background jobs automated
 - Comprehensive monitoring and alerts
 - Zero-downtime operation with auto-healing
