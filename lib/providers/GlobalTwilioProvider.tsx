@@ -91,6 +91,15 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
 
   // Initialize Twilio when agent is available, feature is enabled, and audio is granted
   useEffect(() => {
+    console.log('🔍 Main useEffect triggered:', {
+      isEnabled,
+      hasAgent: !!session?.agent,
+      hasTwilioService: !!twilioService,
+      isInitializing: isInitializingRef.current,
+      audioStatus: audioPermissionStatus.status,
+      hasAudio: audioPermissionStatus.hasAudio
+    });
+    
     if (!isEnabled) {
       console.log('🎧 Global Twilio disabled via feature flag');
       return;
@@ -103,6 +112,8 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
       console.log('🎤 Audio permission required before Twilio initialization');
       console.log('🎤 Setting showAudioPermissionModal to true');
       setShowAudioPermissionModal(true);
+    } else {
+      console.log('🔍 No action taken in main useEffect');
     }
   }, [session?.agent, isEnabled, twilioService, audioPermissionStatus]);
 
@@ -140,6 +151,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
               const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
               stream.getTracks().forEach(track => track.stop());
               
+              console.log('🔍 checkAudioPermissions: Setting audio status to granted');
               setAudioPermissionStatus({
                 status: 'granted',
                 hasAudio: true,
@@ -192,6 +204,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
 
   const handleAudioPermissionGranted = () => {
     console.log('✅ Audio permission granted!');
+    console.log('🔍 handleAudioPermissionGranted called - closing modal');
     setAudioPermissionStatus({
       status: 'granted',
       hasAudio: true,
