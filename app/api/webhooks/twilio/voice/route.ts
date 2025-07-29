@@ -241,7 +241,9 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         console.log(`🤖 Using new AI voice agent for call ${callSid} from ${from}`);
         
         // Set up WebSocket streaming URL for the new AI voice agent
-        const baseUrl = 'https://rmcdialer.vercel.app';
+        const baseUrl = process.env.API_BASE_URL || (process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}` 
+        : 'https://dialer.solvosolutions.co.uk');
         const streamUrl = `${baseUrl}/api/voice-agent/realtime?callSid=${callSid}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
         
         // Generate caller greeting based on their information
@@ -585,8 +587,10 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       console.log(`🔍 Agent lookup chain: Phone ${from} → User ${callerInfo?.user?.first_name} → Agent Session ${validatedAgent.id} → Agent Record ${validatedAgent.agent.id} → Twilio Client "${agentClientName}"`);
       console.log(`⚠️ If this fails, check: 1) Is agent device registered? 2) Is device online? 3) Is identity format correct?`);
       
-      // FIXED: Use consistent production URL for webhooks (deployment-specific URLs don't receive webhooks properly)
-      const baseUrl = 'https://rmcdialer.vercel.app';
+      // Use environment-specific URL for webhooks
+      const baseUrl = process.env.API_BASE_URL || process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}` 
+        : 'https://dialer.solvosolutions.co.uk';
       const recordingCallbackUrl = `${baseUrl}/api/webhooks/twilio/recording`;
       const statusCallbackUrl = `${baseUrl}/api/webhooks/twilio/call-status`;
       
@@ -1205,6 +1209,11 @@ function calculateCallerPriority(claims: any[], requirements: any[], callHistory
 
 // Generate appropriate TwiML response for outbound calls
 function generateTwiMLResponse(direction: string | undefined, data: any, isVoiceSDKCall: boolean, targetPhoneNumber: string | null): string {
+  // Use environment-specific URL for webhooks
+  const baseUrl = process.env.API_BASE_URL || (process.env.VERCEL_URL 
+    ? `https://${process.env.VERCEL_URL}` 
+    : 'https://dialer.solvosolutions.co.uk');
+    
   const userId = data.userId;
   const userName = data.userName;
   const callSid = data.CallSid;
@@ -1229,8 +1238,8 @@ function generateTwiMLResponse(direction: string | undefined, data: any, isVoice
     <Dial callerId="+447488879172" 
           timeout="30" 
           record="record-from-answer" 
-          recordingStatusCallback="https://rmcdialer.vercel.app/api/webhooks/twilio/recording"
-          statusCallback="https://rmcdialer.vercel.app/api/webhooks/twilio/call-status"
+          recordingStatusCallback="${baseUrl}/api/webhooks/twilio/recording"
+          statusCallback="${baseUrl}/api/webhooks/twilio/call-status"
           statusCallbackEvent="initiated ringing answered completed"
           statusCallbackMethod="POST">
         <Number>${phoneNumber}</Number>
