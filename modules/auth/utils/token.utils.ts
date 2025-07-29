@@ -15,11 +15,20 @@ export const tokenUtils = {
     
     // Store in cookies (for middleware access)
     if (typeof document !== 'undefined') {
-      // Use less restrictive settings for Vercel deployment
-      const isProduction = window.location.protocol === 'https:'
-      const secureFlag = isProduction ? 'secure; ' : ''
-      const sameSite = isProduction ? 'samesite=lax' : 'samesite=lax'
-      document.cookie = `auth-token=${token}; path=/; max-age=${8 * 60 * 60}; ${secureFlag}${sameSite}`
+      // Always use secure settings for both dev and prod (both use HTTPS)
+      const isHttps = window.location.protocol === 'https:'
+      
+      // More explicit cookie settings
+      const cookieOptions = [
+        `auth-token=${token}`,
+        'path=/',
+        `max-age=${8 * 60 * 60}`, // 8 hours
+        'samesite=lax',
+        isHttps ? 'secure' : ''
+      ].filter(Boolean).join('; ')
+      
+      console.log('Setting auth cookie:', { isHttps, domain: window.location.hostname, cookieOptions })
+      document.cookie = cookieOptions
     }
   },
 
@@ -34,7 +43,16 @@ export const tokenUtils = {
     
     // Clear from cookies by setting expired date
     if (typeof document !== 'undefined') {
-      document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT'
+      console.log('Clearing auth cookie from domain:', window.location.hostname)
+      // Clear with multiple variations to ensure removal
+      const clearCookies = [
+        'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT',
+        'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT; secure',
+        'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT; samesite=lax'
+      ]
+      clearCookies.forEach(cookie => {
+        document.cookie = cookie
+      })
     }
   },
 

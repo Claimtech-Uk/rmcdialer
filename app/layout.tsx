@@ -6,6 +6,7 @@ import { GlobalTwilioProvider } from '@/lib/providers/GlobalTwilioProvider'
 import { GlobalErrorBoundary } from '@/components/GlobalErrorBoundary'
 import { LayoutManager } from '@/components/LayoutManager'
 import { DebugOverlayFinder } from '@/components/DebugOverlayFinder'
+import { AuthDiagnostic } from '@/components/AuthDiagnostic'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -40,6 +41,7 @@ export default function RootLayout({
               {/* FloatingCallStatus disabled - using new CallSidebar in LayoutManager */}
               {/* AudioUnlockHelper removed - now handled by AudioPermissionModal */}
               <DebugOverlayFinder />
+              <AuthDiagnostic />
               <Toaster />
             </GlobalTwilioProvider>
           </GlobalErrorBoundary>
