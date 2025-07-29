@@ -1059,6 +1059,20 @@ export function CallInterface({
                 )}
               </div>
 
+              {/* Portal Link Button - Always Visible */}
+              <div className="flex justify-center">
+                <Button 
+                  onClick={handleSendMagicLink}
+                  disabled={sendMagicLinkMutation.isPending || !userContext.phoneNumber}
+                  size="lg"
+                  responsive="nowrap"
+                  className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+                >
+                  <Send className="w-5 h-5 mr-2 flex-shrink-0" />
+                  {sendMagicLinkMutation.isPending ? 'Sending...' : 'Send Portal Link'}
+                </Button>
+              </div>
+
               {/* In-Call Controls */}
               {isInCall && (
                 <div className="flex justify-center gap-4">
@@ -1117,16 +1131,6 @@ export function CallInterface({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 p-6">
-              <Button 
-                onClick={handleSendMagicLink}
-                disabled={sendMagicLinkMutation.isPending}
-                size="default"
-                responsive="nowrap"
-                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white shadow-md hover:shadow-lg transition-all duration-200"
-              >
-                <Send className="w-4 h-4 mr-2 flex-shrink-0" />
-                {sendMagicLinkMutation.isPending ? 'Sending...' : 'Send Claim Portal Link'}
-              </Button>
               <Button 
                 variant="outline" 
                 size="default"
