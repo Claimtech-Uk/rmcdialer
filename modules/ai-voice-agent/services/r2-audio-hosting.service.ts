@@ -74,9 +74,12 @@ export class R2AudioHostingService {
 
       await this.s3Client.send(uploadCommand);
 
-      // Generate public URL using Vercel API proxy
+      // Generate public URL using Vercel API proxy with dynamic domain
       const filenameOnly = filename.split('/').pop(); // Extract just the filename
-      const publicUrl = `https://rmcdialer.vercel.app/api/audio/hume-tts/${filenameOnly}`;
+      const baseUrl = process.env.API_BASE_URL || (process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}` 
+        : 'https://dialer.solvosolutions.co.uk');
+      const publicUrl = `${baseUrl}/api/audio/hume-tts/${filenameOnly}`;
 
       console.log('✅ Successfully uploaded Hume TTS audio to R2:', {
         url: publicUrl,
