@@ -18,7 +18,9 @@ import {
   AlertCircle,
   CheckCircle2,
   FileText,
-  RefreshCw
+  RefreshCw,
+  Mail,
+  MapPin
 } from 'lucide-react';
 import { CallInterface } from '@/modules/calls/components/CallInterface';
 import { CountdownTimer } from '../../../app/queue/components/CountdownTimer';
@@ -258,29 +260,30 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
         {isActive && state === 'user_loaded' && currentUser && !isCallInterfaceActive && (
           <div className="max-w-5xl mx-auto space-y-6">
             {/* User Header Card */}
-            <Card className="border-0 shadow-lg">
-              <CardHeader className={`${teamConfig.color.gradient} text-white py-8`}>
+            <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm">
+              <CardHeader className={`${teamConfig.color.gradient} text-white py-10 border-b-2 border-white/20`}>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
-                      <Phone className="w-8 h-8 text-white" />
+                  <div className="flex items-center space-x-6">
+                    <div className="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center shadow-xl backdrop-blur-sm">
+                      <Phone className="w-10 h-10 text-white" />
                     </div>
                     <div>
-                      <CardTitle className="text-3xl font-bold mb-1">
+                      <CardTitle className="text-4xl font-bold mb-2">
                         {currentUser.firstName} {currentUser.lastName}
                       </CardTitle>
-                      <p className="text-xl text-white/90 font-medium">{currentUser.phoneNumber}</p>
+                      <p className="text-2xl text-white/90 font-semibold mb-1">{currentUser.phoneNumber}</p>
                       {currentUser.email && (
-                        <p className="text-white/70 text-lg">{currentUser.email}</p>
+                        <p className="text-white/70 text-lg font-medium">{currentUser.email}</p>
                       )}
                     </div>
                   </div>
                   
                   {/* Quick Stats */}
                   <div className="text-right">
-                    <div className="bg-white/20 rounded-lg p-4">
-                      <div className="text-sm text-white/80 uppercase tracking-wide font-semibold">Active Claims</div>
-                      <div className="text-4xl font-bold text-white">{currentUser.claims.length}</div>
+                    <div className="bg-white/20 rounded-2xl p-6 backdrop-blur-sm shadow-xl border border-white/30">
+                      <div className="text-sm text-white/80 uppercase tracking-wide font-bold mb-2">Active Claims</div>
+                      <div className="text-5xl font-bold text-white">{currentUser.claims.length}</div>
+                      <div className="text-white/70 text-sm font-semibold mt-1">pending review</div>
                     </div>
                   </div>
                 </div>
@@ -291,37 +294,45 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
               {/* Contact Information */}
-              <Card className="border-0 shadow-md">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-xl font-bold text-slate-800 flex items-center">
-                    <Phone className="w-5 h-5 mr-2 text-blue-600" />
+              <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm hover:shadow-3xl transition-all duration-300">
+                <CardHeader className="bg-gradient-to-r from-blue-50 via-slate-50 to-blue-50 border-b-2 border-slate-200 pb-4">
+                  <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <Phone className="w-6 h-6 text-white" />
+                    </div>
                     Contact Information
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center p-3 bg-blue-50 rounded-lg">
-                      <div className="w-2 h-2 bg-blue-600 rounded-full mr-3"></div>
-                      <div>
-                        <div className="text-sm font-medium text-slate-600">Phone Number</div>
-                        <div className="text-lg font-semibold text-slate-900">{currentUser.phoneNumber}</div>
+                <CardContent className="p-8 space-y-6">
+                  <div className="space-y-5">
+                    <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow-md">
+                      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                        <Phone className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm text-blue-700 font-semibold uppercase tracking-wider">Phone Number</div>
+                        <div className="font-bold text-lg text-slate-900 mt-1">{currentUser.phoneNumber}</div>
                       </div>
                     </div>
                     
-                    <div className="flex items-center p-3 bg-green-50 rounded-lg">
-                      <div className="w-2 h-2 bg-green-600 rounded-full mr-3"></div>
-                      <div>
-                        <div className="text-sm font-medium text-slate-600">Email Address</div>
-                        <div className="text-lg font-semibold text-slate-900">{currentUser.email || 'Not provided'}</div>
+                    <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-200 hover:border-emerald-300 transition-all duration-200 shadow-sm hover:shadow-md">
+                      <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                        <Mail className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm text-emerald-700 font-semibold uppercase tracking-wider">Email Address</div>
+                        <div className="font-bold text-lg text-slate-900 mt-1">{currentUser.email || 'Not provided'}</div>
                       </div>
                     </div>
                     
                     {currentUser.address && (
-                      <div className="flex items-start p-3 bg-purple-50 rounded-lg">
-                        <div className="w-2 h-2 bg-purple-600 rounded-full mr-3 mt-2"></div>
-                        <div>
-                          <div className="text-sm font-medium text-slate-600">Address</div>
-                          <div className="text-lg font-semibold text-slate-900 leading-relaxed">{currentUser.address.fullAddress}</div>
+                      <div className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md">
+                        <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                          <MapPin className="w-6 h-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm text-purple-700 font-semibold uppercase tracking-wider">Address</div>
+                          <div className="font-bold text-lg text-slate-900 mt-1 leading-relaxed">{currentUser.address.fullAddress}</div>
                         </div>
                       </div>
                     )}
@@ -330,36 +341,49 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
               </Card>
 
               {/* Claims Summary */}
-              <Card className="border-0 shadow-md lg:col-span-2">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-xl font-bold text-slate-800 flex items-center">
-                    <FileText className="w-5 h-5 mr-2 text-orange-600" />
-                    Claims Summary
+              <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm hover:shadow-3xl transition-all duration-300 lg:col-span-2">
+                <CardHeader className="bg-gradient-to-r from-orange-50 via-slate-50 to-orange-50 border-b-2 border-slate-200 pb-4">
+                  <CardTitle className="text-xl font-bold text-slate-900 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
+                        <FileText className="w-6 h-6 text-white" />
+                      </div>
+                      Claims Summary
+                    </div>
+                    <Badge className="bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border-2 border-orange-300 font-bold text-sm px-3 py-1">
+                      {currentUser.claims.length} pending
+                    </Badge>
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-8">
                   {currentUser.claims.length > 0 ? (
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                       {currentUser.claims.slice(0, 3).map((claim, index) => (
-                        <div key={index} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                        <div key={index} className="border-2 border-slate-200 rounded-xl p-6 bg-gradient-to-r from-slate-50 to-blue-50 hover:border-blue-300 transition-all duration-300 shadow-lg hover:shadow-xl">
+                          <div className="flex items-center gap-4 mb-4">
+                            <div className="w-10 h-10 bg-gradient-to-r from-slate-700 to-slate-800 rounded-xl flex items-center justify-center shadow-lg text-white font-bold text-lg">
+                              {index + 1}
+                            </div>
+                            <span className={`inline-flex px-4 py-2 rounded-xl text-sm font-bold border-2 ${
+                              claim.status === 'active' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                              claim.status === 'pending' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                              'bg-slate-100 text-slate-800 border-slate-300'
+                            }`}>
+                              {claim.status}
+                            </span>
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                              <div className="text-sm font-medium text-slate-600 mb-1">Lender</div>
-                              <div className="text-lg font-semibold text-slate-900">{claim.lender}</div>
+                            <div className="p-4 rounded-xl bg-white border-2 border-slate-200 shadow-sm">
+                              <div className="text-sm text-slate-600 font-semibold uppercase tracking-wider mb-1">Lender</div>
+                              <div className="font-bold text-lg text-slate-900">{claim.lender}</div>
                             </div>
-                            <div>
-                              <div className="text-sm font-medium text-slate-600 mb-1">Status</div>
-                              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
-                                claim.status === 'active' ? 'bg-green-100 text-green-800' :
-                                claim.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {claim.status}
-                              </span>
+                            <div className="p-4 rounded-xl bg-white border-2 border-slate-200 shadow-sm">
+                              <div className="text-sm text-slate-600 font-semibold uppercase tracking-wider mb-1">Status</div>
+                              <div className="font-bold text-lg text-slate-900 capitalize">{claim.status}</div>
                             </div>
-                            <div>
-                              <div className="text-sm font-medium text-slate-600 mb-1">Requirements</div>
-                              <div className="text-lg font-semibold text-slate-900">
+                            <div className="p-4 rounded-xl bg-white border-2 border-slate-200 shadow-sm">
+                              <div className="text-sm text-slate-600 font-semibold uppercase tracking-wider mb-1">Requirements</div>
+                              <div className="font-bold text-lg text-slate-900">
                                 {claim.requirements ? claim.requirements.length : 0} pending
                               </div>
                             </div>
@@ -368,17 +392,23 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                       ))}
                       
                       {currentUser.claims.length > 3 && (
-                        <div className="text-center py-2">
-                          <span className="text-sm text-slate-500">
-                            +{currentUser.claims.length - 3} more claims available
-                          </span>
+                        <div className="text-center py-4">
+                          <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-xl border-2 border-slate-200">
+                            <FileText className="w-4 h-4 text-slate-600" />
+                            <span className="text-sm font-semibold text-slate-700">
+                              +{currentUser.claims.length - 3} more claims available
+                            </span>
+                          </div>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-slate-500">
-                      <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                      <p className="text-lg">No claims found for this user</p>
+                    <div className="text-center py-16">
+                      <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-slate-200 to-slate-300 rounded-2xl flex items-center justify-center shadow-lg">
+                        <FileText className="w-10 h-10 text-slate-500" />
+                      </div>
+                      <p className="font-semibold text-xl text-slate-700 mb-2">No claims found</p>
+                      <p className="text-slate-500">This user hasn't submitted any claims yet.</p>
                     </div>
                   )}
                 </CardContent>
@@ -386,18 +416,18 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
             </div>
 
             {/* Action Buttons - Prominent and Accessible */}
-            <Card className="border-0 shadow-lg">
-              <CardContent className="py-8">
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm hover:shadow-3xl transition-all duration-300">
+              <CardContent className="py-10 px-8">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
                   <Button
                     onClick={() => {
                       console.log('Activating call interface for:', currentUser.firstName, currentUser.lastName);
                       setIsCallInterfaceActive(true);
                     }}
-                    className={`px-12 py-6 text-xl font-semibold ${teamConfig.color.gradient} text-white hover:shadow-lg transform hover:scale-105 transition-all duration-200`}
+                    className={`px-16 py-8 text-xl font-bold ${teamConfig.color.gradient} text-white hover:shadow-2xl transform hover:scale-105 transition-all duration-300 border-0 rounded-2xl`}
                     size="lg"
                   >
-                    <Phone className="w-6 h-6 mr-3" />
+                    <Phone className="w-7 h-7 mr-4" />
                     Start Call Interface
                   </Button>
                   
@@ -405,31 +435,31 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                     onClick={skipUser}
                     variant="outline"
                     size="lg"
-                    className="px-12 py-6 text-xl font-semibold border-2 hover:bg-slate-50 hover:shadow-lg transform hover:scale-105 transition-all duration-200"
+                    className="px-16 py-8 text-xl font-bold border-3 border-slate-300 hover:bg-slate-100 hover:border-slate-400 hover:shadow-2xl transform hover:scale-105 transition-all duration-300 rounded-2xl text-slate-700"
                   >
-                    <SkipForward className="w-6 h-6 mr-3" />
+                    <SkipForward className="w-7 h-7 mr-4" />
                     Skip User
                   </Button>
                 </div>
                 
                 {/* Quick Actions */}
-                <div className="flex justify-center gap-3 mt-6 pt-6 border-t border-slate-200">
+                <div className="flex justify-center gap-6 mt-8 pt-8 border-t-2 border-slate-200">
                   <Button
                     onClick={loadNextUser}
                     variant="ghost"
-                    size="sm"
-                    className="text-slate-600 hover:text-slate-900"
+                    size="default"
+                    className="px-8 py-4 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl font-semibold transition-all duration-200"
                   >
-                    <RefreshCw className="w-4 h-4 mr-2" />
+                    <RefreshCw className="w-5 h-5 mr-3" />
                     Load Next User
                   </Button>
                   <Button
                     onClick={pauseSession}
                     variant="ghost"
-                    size="sm"
-                    className="text-slate-600 hover:text-slate-900"
+                    size="default"
+                    className="px-8 py-4 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl font-semibold transition-all duration-200"
                   >
-                    <Pause className="w-4 h-4 mr-2" />
+                    <Pause className="w-5 h-5 mr-3" />
                     Pause Session
                   </Button>
                 </div>

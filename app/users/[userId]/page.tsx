@@ -520,28 +520,34 @@ export default function UserDetailPage() {
           {/* Left Column - Personal Info */}
           <div className="space-y-6">
             {/* Contact Information */}
-            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
-                <CardTitle className="flex items-center gap-2 text-slate-800">
-                  <User className="w-6 h-6 text-blue-600" />
+            <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm hover:shadow-3xl transition-all duration-300">
+              <CardHeader className="bg-gradient-to-r from-blue-50 via-slate-50 to-blue-50 border-b-2 border-slate-200 rounded-t-lg">
+                <CardTitle className="flex items-center gap-3 text-slate-900 text-xl font-bold">
+                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <User className="w-6 h-6 text-white" />
+                  </div>
                   Contact Information
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
-                    <Mail className="w-5 h-5 text-slate-500" />
-                    <div>
-                      <div className="text-sm text-slate-500 font-medium">Email</div>
-                      <div className="font-semibold text-slate-800">{user.email || 'Not provided'}</div>
+              <CardContent className="p-8 space-y-6">
+                <div className="space-y-5">
+                  <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow-md">
+                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <Mail className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm text-blue-700 font-semibold uppercase tracking-wider">Email Address</div>
+                      <div className="font-bold text-lg text-slate-900 mt-1">{user.email || 'Not provided'}</div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
-                    <Phone className="w-5 h-5 text-slate-500" />
-                    <div>
-                      <div className="text-sm text-slate-500 font-medium">Phone</div>
-                      <div className="font-semibold text-slate-800">{user.phoneNumber || 'Not provided'}</div>
+                  <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-200 hover:border-emerald-300 transition-all duration-200 shadow-sm hover:shadow-md">
+                    <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <Phone className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm text-emerald-700 font-semibold uppercase tracking-wider">Phone Number</div>
+                      <div className="font-bold text-lg text-slate-900 mt-1">{user.phoneNumber || 'Not provided'}</div>
                     </div>
                   </div>
 
@@ -613,34 +619,36 @@ export default function UserDetailPage() {
             )}
 
             {/* Account Details */}
-            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
-                <CardTitle className="flex items-center gap-2 text-slate-800">
-                  <Building className="w-6 h-6 text-purple-600" />
+            <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm hover:shadow-3xl transition-all duration-300">
+              <CardHeader className="bg-gradient-to-r from-purple-50 via-slate-50 to-purple-50 border-b-2 border-slate-200 rounded-t-lg">
+                <CardTitle className="flex items-center gap-3 text-slate-900 text-xl font-bold">
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <Building className="w-6 h-6 text-white" />
+                  </div>
                   Account Details
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                <div className="space-y-4">
-                  <div className="p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
-                    <div className="text-sm text-slate-500 font-medium">Introducer</div>
-                    <div className="font-semibold text-slate-800">{user.introducer}</div>
+              <CardContent className="p-8 space-y-6">
+                <div className="space-y-5">
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md">
+                    <div className="text-sm text-purple-700 font-semibold uppercase tracking-wider">Introducer</div>
+                    <div className="font-bold text-lg text-slate-900 mt-1">{user.introducer}</div>
                   </div>
                   {user.solicitor && (
-                    <div className="p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
-                      <div className="text-sm text-slate-500 font-medium">Solicitor</div>
-                      <div className="font-semibold text-slate-800">{user.solicitor}</div>
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md">
+                      <div className="text-sm text-purple-700 font-semibold uppercase tracking-wider">Solicitor</div>
+                      <div className="font-bold text-lg text-slate-900 mt-1">{user.solicitor}</div>
                     </div>
                   )}
-                  <div className="p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
-                    <div className="text-sm text-slate-500 font-medium">Account Created</div>
-                    <div className="font-semibold text-slate-800">
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md">
+                    <div className="text-sm text-purple-700 font-semibold uppercase tracking-wider">Account Created</div>
+                    <div className="font-bold text-lg text-slate-900 mt-1">
                       {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}
                     </div>
                   </div>
-                  <div className="p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
-                    <div className="text-sm text-slate-500 font-medium">Last Login</div>
-                    <div className="font-semibold text-slate-800">
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 hover:border-purple-300 transition-all duration-200 shadow-sm hover:shadow-md">
+                    <div className="text-sm text-purple-700 font-semibold uppercase tracking-wider">Last Login</div>
+                    <div className="font-bold text-lg text-slate-900 mt-1">
                       {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
                     </div>
                   </div>
@@ -719,87 +727,106 @@ export default function UserDetailPage() {
             </Card>
 
             {/* Claims Overview */}
-            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
+            <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm hover:shadow-3xl transition-all duration-300">
+              <CardHeader className="bg-gradient-to-r from-orange-50 via-slate-50 to-orange-50 border-b-2 border-slate-200 rounded-t-lg">
                 <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-800">
-                    <FileText className="w-6 h-6 text-purple-600" />
-                    Claims ({userDetails.claims.length})
+                  <div className="flex items-center gap-3 text-slate-900 text-xl font-bold">
+                    <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <FileText className="w-6 h-6 text-white" />
+                    </div>
+                    Claims Summary
+                    <Badge className="bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border-2 border-orange-300 font-bold text-sm px-3 py-1">
+                      {userDetails.claims.length} pending
+                    </Badge>
                   </div>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-6">
+              <CardContent className="p-8">
                 {userDetails.claims.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center">
-                      <FileText className="w-8 h-8 text-slate-400" />
+                  <div className="text-center py-16">
+                    <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-slate-200 to-slate-300 rounded-2xl flex items-center justify-center shadow-lg">
+                      <FileText className="w-10 h-10 text-slate-500" />
                     </div>
-                    <p className="font-medium text-lg text-slate-500">No claims found</p>
+                    <p className="font-semibold text-xl text-slate-700 mb-2">No claims found</p>
+                    <p className="text-slate-500">This user hasn't submitted any claims yet.</p>
                   </div>
                 ) : (
-                  <div className="space-y-6">
-                    {userDetails.claims.map((claim: any) => (
-                      <div key={claim.id} className="border border-slate-200 rounded-xl p-6 bg-gradient-to-r from-slate-50 to-slate-100">
-                        <div className="flex items-start justify-between mb-4">
-                          <div>
-                            <div className="flex items-center gap-3 mb-3">
-                              <h3 className="text-xl font-semibold text-slate-800">
-                                {claim.type} Claim
-                              </h3>
-                              <Badge className={`border ${getStatusColor(claim.status)}`}>
-                                {claim.status}
-                              </Badge>
+                  <div className="space-y-8">
+                    {userDetails.claims.map((claim: any, index: number) => (
+                      <div key={claim.id} className="border-2 border-slate-200 rounded-2xl p-8 bg-gradient-to-r from-slate-50 to-blue-50 hover:border-blue-300 transition-all duration-300 shadow-lg hover:shadow-xl">
+                        <div className="flex items-start justify-between mb-6">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-4 mb-4">
+                              <div className="w-12 h-12 bg-gradient-to-r from-slate-700 to-slate-800 rounded-xl flex items-center justify-center shadow-lg text-white font-bold text-lg">
+                                {index + 1}
+                              </div>
+                              <div>
+                                <h3 className="text-2xl font-bold text-slate-900 mb-2">
+                                  {claim.type} Claim
+                                </h3>
+                                <Badge className={`border-2 font-bold px-4 py-2 text-sm ${getStatusColor(claim.status)}`}>
+                                  {claim.status}
+                                </Badge>
+                              </div>
                             </div>
-                            <div className="space-y-2">
-                              <div className="text-slate-700">
-                                <strong>Lender:</strong> {claim.lender}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                              <div className="p-4 rounded-xl bg-white border-2 border-slate-200 shadow-sm">
+                                <div className="text-sm text-slate-600 font-semibold uppercase tracking-wider mb-1">Lender</div>
+                                <div className="font-bold text-lg text-slate-900">{claim.lender}</div>
                               </div>
                               {claim.solicitor && (
-                                <div className="text-slate-700">
-                                  <strong>Solicitor:</strong> {claim.solicitor}
+                                <div className="p-4 rounded-xl bg-white border-2 border-slate-200 shadow-sm">
+                                  <div className="text-sm text-slate-600 font-semibold uppercase tracking-wider mb-1">Solicitor</div>
+                                  <div className="font-bold text-lg text-slate-900">{claim.solicitor}</div>
                                 </div>
                               )}
                             </div>
                           </div>
-                          <div className="text-right text-sm text-slate-500 bg-white px-3 py-2 rounded-lg border border-slate-200">
-                            <div>Created: {claim.createdAt ? new Date(claim.createdAt).toLocaleDateString() : 'Unknown'}</div>
+                          <div className="text-right text-sm bg-white px-4 py-3 rounded-xl border-2 border-slate-200 shadow-sm ml-6">
+                            <div className="text-slate-600 font-semibold mb-1">Created</div>
+                            <div className="font-bold text-slate-900">{claim.createdAt ? new Date(claim.createdAt).toLocaleDateString() : 'Unknown'}</div>
                             {claim.lastUpdated && (
-                              <div>Updated: {new Date(claim.lastUpdated).toLocaleDateString()}</div>
+                              <>
+                                <div className="text-slate-600 font-semibold mt-2 mb-1">Updated</div>
+                                <div className="font-bold text-slate-900">{new Date(claim.lastUpdated).toLocaleDateString()}</div>
+                              </>
                             )}
                           </div>
                         </div>
                         
                         {/* Requirements */}
                         {claim.requirements && claim.requirements.length > 0 && (
-                          <div className="mt-4 pt-4 border-t border-slate-200">
-                            <h4 className="font-semibold mb-3 flex items-center gap-2 text-slate-800">
-                              <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                          <div className="mt-6 pt-6 border-t-2 border-slate-200">
+                            <h4 className="font-bold text-lg mb-4 flex items-center gap-3 text-slate-900">
+                              <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-red-600 rounded-lg flex items-center justify-center shadow-md">
+                                <AlertTriangle className="w-5 h-5 text-white" />
+                              </div>
                               Requirements ({claim.requirements.length})
                             </h4>
-                            <div className="space-y-3">
+                            <div className="grid gap-4">
                               {claim.requirements.map((req: any) => (
-                                <div key={req.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
-                                  <div>
-                                    <div className="font-medium text-slate-800">{req.type}</div>
+                                <div key={req.id} className="flex items-center justify-between p-4 bg-white rounded-xl border-2 border-slate-200 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow-md">
+                                  <div className="flex-1">
+                                    <div className="font-bold text-lg text-slate-900 mb-1">{req.type}</div>
                                     {req.reason && (
-                                      <div className="text-sm text-slate-600 mt-1">{req.reason}</div>
+                                      <div className="text-sm text-slate-600 mb-1">{req.reason}</div>
                                     )}
                                     {req.rejectionReason && (
-                                      <div className="text-sm text-red-600 mt-1">
+                                      <div className="text-sm text-red-700 font-semibold mt-2 p-2 bg-red-50 rounded-lg border border-red-200">
                                         <strong>Rejected:</strong> {req.rejectionReason}
                                       </div>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-4 ml-4">
                                     <Badge 
-                                      className={`border ${req.status === 'PENDING' 
-                                        ? 'bg-red-100 text-red-800 border-red-200' 
-                                        : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                      className={`border-2 font-bold px-3 py-1 ${req.status === 'PENDING' 
+                                        ? 'bg-red-100 text-red-800 border-red-300' 
+                                        : 'bg-emerald-100 text-emerald-800 border-emerald-300'
                                       }`}
                                     >
                                       {req.status}
                                     </Badge>
-                                    <div className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                                    <div className="text-xs text-slate-600 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200 font-semibold">
                                       {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : 'Unknown'}
                                     </div>
                                   </div>
