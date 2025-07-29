@@ -69,6 +69,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
     hasAudio: false,
   });
   const [showAudioPermissionModal, setShowAudioPermissionModal] = useState(false);
+  const [isManualModalRequest, setIsManualModalRequest] = useState(false);
   
   // Debug logging for modal state changes
   useEffect(() => {
@@ -110,7 +111,8 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
       initializeTwilio();
     } else if (session?.agent && !audioPermissionStatus.hasAudio && audioPermissionStatus.status !== 'unknown') {
       console.log('🎤 Audio permission required before Twilio initialization');
-      console.log('🎤 Setting showAudioPermissionModal to true');
+      console.log('🎤 Setting showAudioPermissionModal to true (manual request)');
+      setIsManualModalRequest(true);
       setShowAudioPermissionModal(true);
     } else {
       console.log('🔍 No action taken in main useEffect');
@@ -198,18 +200,35 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
   };
 
   const requestAudioPermission = () => {
-    console.log('🎤 Showing audio permission modal');
+    console.log('🎤 Showing audio permission modal (manual request)');
+    setIsManualModalRequest(true);
     setShowAudioPermissionModal(true);
   };
 
   const handleAudioPermissionGranted = () => {
     console.log('✅ Audio permission granted!');
-    console.log('🔍 handleAudioPermissionGranted called - closing modal');
+    console.log('🔍 handleAudioPermissionGranted called');
     setAudioPermissionStatus({
       status: 'granted',
       hasAudio: true,
     });
-    setShowAudioPermissionModal(false);
+    
+    // Only auto-close modal if it wasn't manually requested
+    if (!isManualModalRequest) {
+      console.log('🔍 Auto-closing modal (automatic permission check)');
+      setShowAudioPermissionModal(false);
+    } else {
+      console.log('🔍 Keeping modal open (manual request - user needs to close)');
+    }
+    
+    // Clear manual flag and close modal after user sees the success
+    if (isManualModalRequest) {
+      setTimeout(() => {
+        console.log('🔍 Auto-closing modal after delay for manual request');
+        setIsManualModalRequest(false);
+        setShowAudioPermissionModal(false);
+      }, 2000); // Give user 2 seconds to see the success message
+    }
     
     // Initialize Twilio now that we have audio permission
     if (session?.agent && !twilioService && !isInitializingRef.current) {
@@ -539,7 +558,11 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
         isOpen={showAudioPermissionModal}
         onPermissionGranted={handleAudioPermissionGranted}
         onPermissionDenied={handleAudioPermissionDenied}
-        onClose={() => setShowAudioPermissionModal(false)}
+        onClose={() => {
+          console.log('🔍 Manual modal close triggered');
+          setIsManualModalRequest(false);
+          setShowAudioPermissionModal(false);
+        }}
       />
     </GlobalTwilioContext.Provider>
   );
