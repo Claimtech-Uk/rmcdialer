@@ -18,6 +18,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:studio:replica": "prisma studio --schema=prisma/replica.prisma",
+    "copy-agents": "tsx scripts/copy-agents-to-dev.ts",
     "mysql:test": "tsx -e \"import('./lib/mysql.js').then(m => m.testReplicaConnection())\"",
     "mysql:stats": "tsx -e \"import('./lib/mysql.js').then(m => m.getReplicaStats().then(console.log))\"",
     "cdc:start": "tsx services/sync/background-cdc-runner.ts",
