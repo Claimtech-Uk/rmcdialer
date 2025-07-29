@@ -210,18 +210,18 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
         {/* State-based Content */}
         {!isActive && (
           <div className="max-w-md mx-auto">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-center">Auto-Dialler Ready</CardTitle>
+            <Card className="border-2 border-slate-300 shadow-2xl bg-white backdrop-blur-sm">
+              <CardHeader className="bg-gradient-to-r from-slate-100 via-blue-50 to-slate-100 border-b-2 border-slate-300">
+                <CardTitle className="text-center text-2xl font-bold text-slate-900">Auto-Dialler Ready</CardTitle>
               </CardHeader>
-              <CardContent className="text-center space-y-4">
-                <p className="text-slate-600">
-                  Start your auto-dialler session to begin calling users from the {teamConfig.displayName} queue.
+              <CardContent className="text-center space-y-6 p-8">
+                <p className="text-slate-700 font-medium text-lg leading-relaxed">
+                  Start your auto-dialler session to begin calling users from the <strong className="text-slate-900">{teamConfig.displayName}</strong> queue.
                 </p>
                 <Button 
                   onClick={startSession} 
                   disabled={isLoading}
-                  className={`w-full ${teamConfig.color.gradient} text-white`}
+                  className={`w-full ${teamConfig.color.gradient} text-white font-bold text-lg py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105`}
                 >
                   {isLoading ? 'Starting...' : 'Start Auto-Dialler Session'}
                 </Button>
@@ -232,12 +232,12 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
 
         {isActive && state === 'loading' && (
           <div className="max-w-md mx-auto">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-center space-y-4">
+            <Card className="border-2 border-slate-300 shadow-2xl bg-white backdrop-blur-sm">
+              <CardContent className="pt-8 pb-8">
+                <div className="text-center space-y-6">
                   <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  <h3 className="text-lg font-semibold">Loading Next User</h3>
-                  <p className="text-slate-600">Finding the next user to call from the queue...</p>
+                  <h3 className="text-xl font-bold text-slate-900">Loading Next User</h3>
+                  <p className="text-slate-700 font-medium">Finding the next user to call from the queue...</p>
                 </div>
               </CardContent>
             </Card>
