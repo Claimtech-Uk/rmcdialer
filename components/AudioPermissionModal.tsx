@@ -16,12 +16,14 @@ interface AudioPermissionModalProps {
   isOpen: boolean;
   onPermissionGranted: () => void;
   onPermissionDenied: () => void;
+  onClose: () => void;
 }
 
 export function AudioPermissionModal({
   isOpen,
   onPermissionGranted,
   onPermissionDenied,
+  onClose,
 }: AudioPermissionModalProps) {
   const [permissionStatus, setPermissionStatus] = useState<AudioPermissionStatus>({
     status: 'unknown',
@@ -208,7 +210,7 @@ export function AudioPermissionModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-md" aria-describedby="audio-permission-description">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

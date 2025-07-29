@@ -520,6 +520,7 @@ export function GlobalTwilioProvider({ children }: { children: React.ReactNode }
         isOpen={showAudioPermissionModal}
         onPermissionGranted={handleAudioPermissionGranted}
         onPermissionDenied={handleAudioPermissionDenied}
+        onClose={() => setShowAudioPermissionModal(false)}
       />
     </GlobalTwilioContext.Provider>
   );
