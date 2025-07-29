@@ -1,16 +1,44 @@
+---
+alwaysApply: true
+---
 
-# Dialler System Cursor Rules & Project Guidelines
+## 💾 Database Configuration
+### Environment URLs
+- **PRODUCTION**: `postgres://neondb_owner:npg_G5Nva0ZuOWeR@ep-shy-silence-abdb9eor-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require`
+- **DEV**: `postgres://neondb_owner:npg_mN8i5yfsCHlc@ep-spring-bar-ab16367j-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require`
+
+**Note**: These are separate database instances for different environments.
+
+### Schema Changes Guidelines
+- Use `npx prisma db push` to apply schema changes (project avoids migrations to preserve data)
+- Always backup schema before major changes: `cp prisma/schema.prisma prisma/schema.prisma.backup.$(date +%Y%m%d_%H%M%S)`
+- **Test on DEV first**, then apply to PRODUCTION:
+  ```bash
+  # DEV
+  DATABASE_URL="postgres://neondb_owner:npg_mN8i5yfsCHlc@ep-spring-bar-ab16367j-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require" npx prisma db push
+  
+  # PRODUCTION (after testing)
+  DATABASE_URL="postgres://neondb_owner:npg_G5Nva0ZuOWeR@ep-shy-silence-abdb9eor-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require" npx prisma db push
+  ```
+
+### Agent Management Philosophy
+- **Keep it simple**: Focus on essential fields only (role, team, allowedQueues, isActive, isAiAgent)
+- **Avoid overengineering**: No departments, locations, complex hierarchies, or audit systems
+- **Production-ready basics**: Roles (agent/supervisor/admin), Teams (unsigned/requirements/general), Queue access control
+
+
+# Dialler System Development Rules
 
 ## 🎯 Project Overview
 
 ### What We're Building
-A standalone dialler system (dialler.resolvemyclaim.co.uk) built as a unified Next.js 14 application with tRPC that enables agents to efficiently contact users about their financial claims. The system reads user data from the main claims platform but operates completely independently with no write-backs.
+A production-ready standalone dialler system (dialler.resolvemyclaim.co.uk) built as a unified Next.js 14 application with tRPC. Enables agents to efficiently contact users about financial claims with 100% call accuracy.
 
-
+**Status**: ✅ **PRODUCTION READY** - All phases completed successfully!
 
 ### Core Business Goals
 - **Increase claim completion rates** by proactively contacting users with pending requirements
-- **Reduce friction** in the claims process by sending magic links for passwordless authentication to the other app
+- **Reduce friction** in the claims process by sending magic links for passwordless authentication
 - **Prioritize high-value claims** through intelligent scoring and queue management
 - **Track all interactions** for compliance and quality improvement
 - **Scale operations** with both human and AI agents
@@ -20,585 +48,124 @@ A standalone dialler system (dialler.resolvemyclaim.co.uk) built as a unified Ne
 2. **User Receives Call** → Agent Explains Requirements → Receives Magic Link → Completes Claim
 3. **Supervisor Views Dashboard** → Monitors Performance → Adjusts Strategies
 
-## 📊 Database Architecture & Schema
+## 🏗️ Current Architecture
 
-### CDC + Batch Hybrid Strategy (Real-time Data Sync)
+### Enhanced Pre-call Validation + Auto-Regeneration
+- **Direct MySQL Replica**: Real-time validation before every call (zero wrong calls)
+- **Auto-Regenerating Queues**: Maintains 20+ users automatically via separated queue tables
+- **Enhanced Ordering**: Newest prospects prioritized, 2-hour cooling period
+- **AI Voice Integration**: Hume EVI for conversational intelligence
+- **Comprehensive Automation**: 7 background cron jobs for maintenance
+
+### Production Capabilities
+- **9,800+ users** actively managed with **28,943+ claims**
+- **Zero wrong calls** through real-time validation
+- **Auto-healing queues** with 5-minute monitoring
+- **Sub-second response** times with optimized queries
+
+## 📁 Modulithic Architecture
+
+### Core Principle
+**Single Next.js application organized as domain modules** - NOT microservices.
+
 ```
-┌─────────────────────┐    ┌─────────────────┐    ┌──────────────────────┐
-│   Main Laravel App  │───▶│   AWS DMS       │───▶│   SQS Message Queue  │
-│  claim.resolvemy... │    │ (Change Stream) │    │  (Change Events)     │
-└─────────────────────┘    └─────────────────┘    └──────────────────────┘
-         │                                                    │
-         ▼                                                    ▼
-┌─────────────────────┐    ┌─────────────────┐    ┌──────────────────────┐
-│   MySQL Replica     │    │  Redis Cache    │    │   Next.js Dialler   │
-│  (Read-Only Data)   │◄──▶│   (Hot Data)    │◄──▶│ dialler.resolvemy... │
-└─────────────────────┘    └─────────────────┘    └──────────────────────┘
-                                    │                         │
-                                    └─────────────────────────┼─────────────┐
-                                                              ▼             │
-                                                   ┌──────────────────────┐ │
-                                                   │   PostgreSQL        │ │
-                                                   │ (Dialler Features)  │◄┘
-                                                   └──────────────────────┘
-```
-
-### Data Flow Overview
-1. **Real-time Changes (CDC)**: AWS DMS captures database changes instantly (<3 seconds)
-2. **Event Processing**: SQS delivers change notifications to dialler application
-3. **Cache Layer**: Redis stores frequently accessed data with intelligent TTLs
-4. **Batch Processing**: Periodic housekeeping and missed change recovery (every 15 minutes)
-5. **User Context**: Combined data from MySQL replica + PostgreSQL dialler state
-6. **Queue Building**: Real-time queue population with cached user contexts
-
-### Performance & Scale Benefits
-- **Real-time Updates**: Critical changes appear in 3 seconds (vs 15 minutes with polling)
-- **Cost Optimization**: 60% reduction in database query costs through intelligent caching
-- **Scale Ready**: Handles 50k+ users, 150k+ claims, 200k+ requirements efficiently
-- **Queue Performance**: Sub-5-second queue refresh with production data
-- **Agent Productivity**: Instant access to complete user contexts during calls
-
-### Read-Only Tables from Main System (MySQL Replica)
-
-#### USERS Table
-```sql
--- Core user information for contact
-users (
-  id BIGINT PRIMARY KEY,
-  first_name VARCHAR(255),
-  last_name VARCHAR(255),
-  email VARCHAR(255),
-  phone_number VARCHAR(255),        -- Primary contact number
-  status VARCHAR(255),              -- active, inactive, etc.
-  is_enabled BOOLEAN,               -- Can we contact them?
-  introducer VARCHAR(255),          -- Lead source
-  solicitor VARCHAR(255),           -- Assigned legal team
-  current_user_address_id VARCHAR(36), -- Links to addresses
-  last_login TIMESTAMP,
-  created_at TIMESTAMP
-)
+📦 RMC Dialler (Single App)
+├── 🏠 app/ (Next.js App Router - Presentation)
+├── 🔗 server/ (tRPC Routers - API Layer)  
+├── 🏢 modules/ (Business Domains - Modulithic)
+│   ├── auth/ (Authentication)
+│   ├── queue/ (Queue Management + Auto-regeneration)
+│   ├── calls/ (Call Sessions)
+│   ├── communications/ (SMS + Magic Links)
+│   ├── users/ (User Context)
+│   ├── scoring/ (Priority Algorithms)
+│   ├── analytics/ (Reporting)
+│   ├── ai-voice-agent/ (Hume Integration)
+│   └── core/ (Shared Infrastructure)
+├── 🗄️ lib/ (Infrastructure)
+└── 🗄️ prisma/ (Database)
 ```
 
-#### CLAIMS Table
-```sql
--- User's financial claims
-claims (
-  id BIGINT PRIMARY KEY,
-  user_id BIGINT,                   -- FK → users.id
-  type VARCHAR(255),                -- VEHICLE, BANK_FRAUD, etc.
-  status VARCHAR(255),              -- incomplete, documents_needed, complete
-  lender VARCHAR(255),              -- Which lender to discuss
-  solicitor VARCHAR(255),           -- Legal team handling
-  client_last_updated_at DATETIME,  -- Last user activity
-  created_at TIMESTAMP
-)
-```
-
-#### USER_ADDRESSES Table
-```sql
--- Contact addresses (current and historical)
-user_addresses (
-  id VARCHAR(36) PRIMARY KEY,
-  user_id INT,                      -- FK → users.id
-  type VARCHAR(255),                -- address_now, previous_address
-  full_address VARCHAR(255),
-  post_code VARCHAR(255),           -- For regional filtering
-  county VARCHAR(255),              -- Geographic grouping
-  created_at TIMESTAMP
-)
-```
-
-#### CLAIM_REQUIREMENTS Table
-```sql
--- Documents/info needed from users
-claim_requirements (
-  id VARCHAR(36) PRIMARY KEY,
-  claim_id BIGINT,                  -- FK → claims.id
-  type VARCHAR(255),                -- ID_DOCUMENT, BANK_STATEMENTS, etc.
-  status VARCHAR(255),              -- PENDING, UPLOADED, APPROVED, REJECTED
-  claim_requirement_reason TEXT,     -- Why we need this
-  claim_requirement_rejection_reason TEXT,
-  created_at TIMESTAMP
-)
-```
-
-#### CLAIM_VEHICLE_PACKAGES Table
-```sql
--- Finance agreements (for context during calls)
-claim_vehicle_packages (
-  id VARCHAR(36) PRIMARY KEY,
-  claim_id BIGINT,                  -- FK → claims.id
-  vehicle_registration VARCHAR(255),
-  vehicle_make VARCHAR(255),
-  vehicle_model VARCHAR(255),
-  dealership_name VARCHAR(255),     -- Where they bought
-  monthly_payment DECIMAL(10,2),
-  contract_start_date DATETIME,
-  status VARCHAR(255),              -- ACTIVE, SETTLED, etc.
-)
-```
-
-#### USER_LOGS Table
-```sql
--- User activity history (read-only for context)
-user_logs (
-  id VARCHAR(36) PRIMARY KEY,
-  user_id BIGINT,                   -- FK → users.id
-  action VARCHAR(255),              -- LOGIN, CLAIM_UPDATE, etc.
-  message TEXT,
-  created_at TIMESTAMP
-)
-```
-
-### Dialler-Specific Tables (PostgreSQL - Read/Write)
-
-#### AGENTS Table
-```sql
--- Dialler system users
-agents (
-  id SERIAL PRIMARY KEY,
-  email VARCHAR(255) UNIQUE,
-  password_hash VARCHAR(255),
-  first_name VARCHAR(100),
-  last_name VARCHAR(100),
-  role VARCHAR(50),                 -- agent, supervisor, admin
-  is_active BOOLEAN DEFAULT true,
-  is_ai_agent BOOLEAN DEFAULT false,
-  twilio_worker_sid VARCHAR(255),   -- For Twilio integration
-  created_at TIMESTAMP
-)
-```
-
-#### AGENT_SESSIONS Table
-```sql
--- Track who's online and available
-agent_sessions (
-  id UUID PRIMARY KEY,
-  agent_id INT,                     -- FK → agents.id
-  status VARCHAR(20),               -- available, on_call, break, offline
-  current_call_session_id UUID,
-  login_at TIMESTAMP,
-  logout_at TIMESTAMP,
-  calls_completed_today INT DEFAULT 0,
-  total_talk_time_seconds INT DEFAULT 0
-)
-```
-
-#### USER_CALL_SCORES Table
-```sql
--- Intelligent prioritization system
-user_call_scores (
-  id UUID PRIMARY KEY,
-  user_id BIGINT,                   -- FK → users.id (replica)
-  current_score INT DEFAULT 0,      -- Lower = higher priority
-  next_call_after TIMESTAMP,        -- Respect time delays
-  last_call_at TIMESTAMP,
-  total_attempts INT DEFAULT 0,
-  successful_calls INT DEFAULT 0,
-  last_outcome VARCHAR(50),         -- contacted, no_answer, etc.
-  -- Score breakdown for transparency
-  base_score INT DEFAULT 0,
-  outcome_penalty_score INT DEFAULT 0,
-  time_penalty_score INT DEFAULT 0
-)
-```
-
-#### CALL_QUEUE Table
-```sql
--- Active queue management with three specialized queue types
-call_queue (
-  id UUID PRIMARY KEY,
-  user_id BIGINT,                   -- FK → users.id (replica)
-  claim_id BIGINT,                  -- FK → claims.id (replica)
-  queue_type VARCHAR(50),           -- unsigned_users, outstanding_requests, callback
-  priority_score INT,               -- From user_call_scores
-  queue_position INT,
-  status VARCHAR(20),               -- pending, assigned, completed
-  queue_reason VARCHAR(255),        -- Why they're in queue
-  assigned_to_agent_id INT,         -- FK → agents.id
-  assigned_at TIMESTAMP,
-  callback_id UUID,                 -- FK → callbacks.id
-  available_from TIMESTAMP          -- For scheduled callbacks
-)
-```
-
-#### CALL_SESSIONS Table
-```sql
--- Individual call records
-call_sessions (
-  id UUID PRIMARY KEY,
-  user_id BIGINT,                   -- FK → users.id (replica)
-  agent_id INT,                     -- FK → agents.id
-  call_queue_id UUID,               -- FK → call_queue.id
-  twilio_call_sid VARCHAR(255),     -- Twilio's unique ID
-  status VARCHAR(20),               -- initiated, connected, completed, failed
-  direction VARCHAR(10),            -- outbound, inbound
-  started_at TIMESTAMP,
-  connected_at TIMESTAMP,
-  ended_at TIMESTAMP,
-  duration_seconds INT,
-  talk_time_seconds INT,
-  user_claims_context JSON          -- Snapshot of claims at call time
-)
-```
-
-#### CALL_OUTCOMES Table
-```sql
--- Call results and dispositions
-call_outcomes (
-  id UUID PRIMARY KEY,
-  call_session_id UUID,             -- FK → call_sessions.id
-  outcome_type VARCHAR(50),         -- contacted, no_answer, callback_requested, etc.
-  outcome_notes TEXT,               -- Agent's detailed notes
-  next_call_delay_hours INT,        -- How long to wait
-  score_adjustment INT,             -- Points to add/subtract
-  magic_link_sent BOOLEAN,
-  sms_sent BOOLEAN,
-  documents_requested JSON,         -- Which requirements discussed
-  recorded_by_agent_id INT          -- FK → agents.id
-)
-```
-
-#### CALLBACKS Table
-```sql
--- Scheduled callbacks
-callbacks (
-  id UUID PRIMARY KEY,
-  user_id BIGINT,                   -- FK → users.id (replica)
-  scheduled_for TIMESTAMP,
-  callback_reason TEXT,
-  preferred_agent_id INT,           -- FK → agents.id
-  original_call_session_id UUID,    -- FK → call_sessions.id
-  status VARCHAR(20),               -- pending, completed, cancelled
-  completed_call_session_id UUID    -- When callback was done
-)
-```
-
-#### MAGIC_LINK_ACTIVITIES Table
-```sql
--- Track magic links sent
-magic_link_activities (
-  id UUID PRIMARY KEY,
-  user_id BIGINT,                   -- FK → users.id (replica)
-  link_type VARCHAR(50),            -- portal_access, document_upload, etc.
-  link_token VARCHAR(255),          -- base64(user_id)
-  sent_via VARCHAR(20),             -- sms, whatsapp
-  sent_by_agent_id INT,             -- FK → agents.id
-  sent_at TIMESTAMP,
-  accessed_at TIMESTAMP,
-  call_session_id UUID              -- FK → call_sessions.id
-)
-```
-
-#### SMS_CONVERSATIONS Table
-```sql
--- Two-way SMS tracking
-sms_conversations (
-  id UUID PRIMARY KEY,
-  user_id BIGINT,                   -- FK → users.id (replica)
-  phone_number VARCHAR(50),
-  status VARCHAR(20),               -- active, closed
-  last_message_at TIMESTAMP,
-  assigned_agent_id INT             -- FK → agents.id
-)
-```
-
-### Critical Relationships & Query Patterns
-
-#### Get Complete User Context for Call
-```sql
-SELECT 
-  u.id, u.first_name, u.last_name, u.phone_number, u.email,
-  ua.full_address, ua.post_code,
-  c.id as claim_id, c.type as claim_type, c.status as claim_status, c.lender,
-  COUNT(DISTINCT cr.id) as pending_requirements,
-  COUNT(DISTINCT cvp.id) as active_agreements,
-  ucs.current_score, ucs.last_outcome, ucs.next_call_after
-FROM users u
-LEFT JOIN user_addresses ua ON u.current_user_address_id = ua.id
-LEFT JOIN claims c ON u.id = c.user_id
-LEFT JOIN claim_requirements cr ON c.id = cr.claim_id AND cr.status = 'PENDING'
-LEFT JOIN claim_vehicle_packages cvp ON c.id = cvp.claim_id
-LEFT JOIN user_call_scores ucs ON u.id = ucs.user_id
-WHERE u.id = ?
-GROUP BY u.id, c.id;
-```
-
-## 📁 Modulith Project Structure
-
-### Core Architecture Principle
-```
-📦 Single Next.js Application (Modulith)
-├── 🏠 Presentation Layer (Next.js App Router)
-├── 🔗 API Layer (tRPC Routers)
-├── 🏢 Business Modules (Domain-Driven)
-├── 🗄️ Data Layer (Prisma + Read Replica)
-└── 🛠️ Infrastructure (Shared Services)
-```
-
-### Directory Structure
-```
-dialler-system/
-├── app/                        # 🏠 Next.js 14 App Router (Presentation)
-│   ├── (dashboard)/           # Protected dashboard routes
-│   │   ├── calls/             # Call management pages
-│   │   ├── queue/             # Call queue interface
-│   │   ├── sms/               # SMS conversations
-│   │   ├── analytics/         # Supervisor dashboard
-│   │   └── layout.tsx         # Dashboard layout
-│   ├── api/                   # 🔗 API routes & tRPC endpoints
-│   │   ├── trpc/[trpc]/       # tRPC handler
-│   │   └── webhooks/          # External webhooks
-│   ├── login/                 # Authentication pages
-│   └── (root files)           # layout.tsx, page.tsx, globals.css
-│
-├── modules/                    # 🏢 Business Modules (Domain-Driven)
-│   ├── auth/                  # 🔐 Authentication Module
-│   │   ├── services/          # Auth business logic
-│   │   │   ├── auth.service.ts
-│   │   │   └── session.service.ts
-│   │   ├── types/             # Auth domain types
-│   │   │   └── auth.types.ts
-│   │   ├── components/        # Auth UI components
-│   │   │   ├── LoginForm.tsx
-│   │   │   └── SessionStatus.tsx
-│   │   ├── hooks/             # Auth React hooks
-│   │   │   └── useAuth.ts
-│   │   ├── utils/             # Auth utilities
-│   │   │   └── jwt.utils.ts
-│   │   └── index.ts           # Module exports
-│   │
-│   ├── queue/                 # 📋 Queue Management Module
-│   │   ├── services/          # Queue business logic
-│   │   │   ├── queue.service.ts
-│   │   │   └── assignment.service.ts
-│   │   ├── types/             # Queue domain types
-│   │   │   └── queue.types.ts
-│   │   ├── components/        # Queue UI components
-│   │   │   ├── QueueDashboard.tsx
-│   │   │   ├── QueueTable.tsx
-│   │   │   └── PriorityBadge.tsx
-│   │   ├── hooks/             # Queue React hooks
-│   │   │   ├── useQueue.ts
-│   │   │   └── useQueueStats.ts
-│   │   ├── utils/             # Queue utilities
-│   │   │   └── queue.utils.ts
-│   │   └── index.ts           # Module exports
-│   │
-│   ├── scoring/               # 🎯 Priority Scoring Module
-│   │   ├── services/          # Scoring business logic
-│   │   │   ├── priority-scoring.service.ts
-│   │   │   ├── scoring-rules.service.ts
-│   │   │   └── lender-rules.service.ts
-│   │   ├── types/             # Scoring domain types
-│   │   │   └── scoring.types.ts
-│   │   ├── components/        # Scoring UI components
-│   │   │   ├── ScoreDebugger.tsx
-│   │   │   ├── ScoringRulesConfig.tsx
-│   │   │   └── ScoreExplanation.tsx
-│   │   ├── hooks/             # Scoring React hooks
-│   │   │   ├── useScoring.ts
-│   │   │   └── useScoringRules.ts
-│   │   ├── utils/             # Scoring utilities
-│   │   │   ├── scoring-factors.utils.ts
-│   │   │   ├── lender-matrix.utils.ts
-│   │   │   └── demographics.utils.ts
-│   │   └── index.ts           # Module exports
-│   │
-│   ├── calls/                 # 📞 Call Management Module
-│   │   ├── services/          # Call business logic
-│   │   │   ├── call.service.ts
-│   │   │   ├── outcome.service.ts
-│   │   │   └── twilio.service.ts
-│   │   ├── types/             # Call domain types
-│   │   │   └── call.types.ts
-│   │   ├── components/        # Call UI components
-│   │   │   ├── CallInterface.tsx
-│   │   │   ├── CallControls.tsx
-│   │   │   ├── CallTimer.tsx
-│   │   │   └── OutcomeForm.tsx
-│   │   ├── hooks/             # Call React hooks
-│   │   │   ├── useCallSession.ts
-│   │   │   └── useTwilio.ts
-│   │   ├── utils/             # Call utilities
-│   │   │   └── call.utils.ts
-│   │   └── index.ts           # Module exports
-│   │
-│   ├── communications/        # 💬 Communications Module
-│   │   ├── services/          # Communication business logic
-│   │   │   ├── sms.service.ts
-│   │   │   ├── magic-link.service.ts
-│   │   │   └── notification.service.ts
-│   │   ├── types/             # Communication domain types
-│   │   │   └── communications.types.ts
-│   │   ├── components/        # Communication UI components
-│   │   │   ├── SMSConversations.tsx
-│   │   │   ├── MagicLinkPanel.tsx
-│   │   │   └── MessageThread.tsx
-│   │   ├── hooks/             # Communication React hooks
-│   │   │   ├── useSMS.ts
-│   │   │   └── useMagicLinks.ts
-│   │   ├── utils/             # Communication utilities
-│   │   │   └── message.utils.ts
-│   │   └── index.ts           # Module exports
-│   │
-│   ├── users/                 # 👥 User Data Module
-│   │   ├── services/          # User business logic
-│   │   │   ├── user.service.ts
-│   │   │   ├── claims.service.ts
-│   │   │   └── requirements.service.ts
-│   │   ├── types/             # User domain types
-│   │   │   └── user.types.ts
-│   │   ├── components/        # User UI components
-│   │   │   ├── UserContext.tsx
-│   │   │   ├── ClaimsSummary.tsx
-│   │   │   └── RequirementsList.tsx
-│   │   ├── hooks/             # User React hooks
-│   │   │   ├── useUserContext.ts
-│   │   │   └── useClaims.ts
-│   │   ├── utils/             # User utilities
-│   │   │   └── user.utils.ts
-│   │   └── index.ts           # Module exports
-│   │
-│   ├── analytics/             # 📊 Analytics Module
-│   │   ├── services/          # Analytics business logic
-│   │   │   ├── metrics.service.ts
-│   │   │   └── reporting.service.ts
-│   │   ├── types/             # Analytics domain types
-│   │   │   └── analytics.types.ts
-│   │   ├── components/        # Analytics UI components
-│   │   │   ├── Dashboard.tsx
-│   │   │   ├── MetricCards.tsx
-│   │   │   └── PerformanceCharts.tsx
-│   │   ├── hooks/             # Analytics React hooks
-│   │   │   ├── useAnalytics.ts
-│   │   │   └── useMetrics.ts
-│   │   ├── utils/             # Analytics utilities
-│   │   │   └── metrics.utils.ts
-│   │   └── index.ts           # Module exports
-│   │
-│   └── core/                  # ⚙️ Core Module (Shared Infrastructure)
-│       ├── services/          # Core business logic
-│       │   ├── database.service.ts
-│       │   ├── cache.service.ts
-│       │   └── logger.service.ts
-│       ├── types/             # Core shared types
-│       │   ├── common.types.ts
-│       │   └── api.types.ts
-│       ├── components/        # Core UI components
-│       │   └── ui/            # shadcn/ui components
-│       │       ├── button.tsx
-│       │       ├── card.tsx
-│       │       └── dialog.tsx
-│       ├── hooks/             # Core React hooks
-│       │   └── useLocalStorage.ts
-│       ├── utils/             # Core utilities
-│       │   ├── api.utils.ts
-│       │   ├── date.utils.ts
-│       │   └── validation.utils.ts
-│       └── index.ts           # Core exports
-│
-├── server/                    # 🔗 tRPC API Layer (Routes to Modules)
-│   ├── api/                   # tRPC routers (thin layer)
-│   │   ├── routers/           # Route to module services
-│   │   │   ├── auth.ts        # → modules/auth/services
-│   │   │   ├── queue.ts       # → modules/queue/services
-│   │   │   ├── calls.ts       # → modules/calls/services
-│   │   │   ├── communications.ts # → modules/communications/services
-│   │   │   ├── users.ts       # → modules/users/services
-│   │   │   └── analytics.ts   # → modules/analytics/services
-│   │   └── root.ts            # Main router composition
-│   └── middleware/            # Server middleware
-│
-├── lib/                       # 🛠️ Infrastructure Layer
-│   ├── trpc/                  # tRPC client/server setup
-│   │   ├── client.ts          # tRPC React client
-│   │   ├── server.ts          # tRPC server config
-│   │   └── provider.tsx       # tRPC provider component
-│   ├── db.ts                  # Prisma database client
-│   └── config/                # Configuration
-│       ├── env.ts             # Environment validation
-│       └── constants.ts       # App constants
-│
-├── prisma/                    # 🗄️ Data Layer
-│   ├── schema.prisma          # Database schema
-│   ├── migrations/            # Database migrations
-│   └── seed.ts                # Database seeding
-│
-└── infrastructure/            # 🏗️ DevOps & Deployment
-    ├── docker/                # Docker configs
-    └── scripts/               # Deployment scripts
-```
-
-## 🏗️ Modulith Architecture Principles
-
-### Core Modulith Guidelines
-
-#### 1. **Module Boundaries & Responsibilities**
+### Module Boundaries & Dependencies
 ```typescript
-// Each module has a single responsibility and clear boundaries
+// ✅ Allowed dependencies (top can depend on bottom):
+app/ → server/ → modules/ → core/ → lib/
 
-// ✅ Good: Clear module responsibility
-modules/
-├── auth/           # ONLY authentication & authorization
-├── queue/          # ONLY call queue management & assignment
-├── scoring/        # ONLY priority calculation & business rules
-├── calls/          # ONLY call session handling
-├── communications/ # ONLY messaging & notifications
-├── users/          # ONLY user data & claims
-└── analytics/      # ONLY metrics & reporting
+// ✅ Module dependency hierarchy:
+analytics → all other modules
+calls → core + auth + queue + users
+queue → core + auth + users + scoring
+communications → core + auth + users
+scoring → core + users
+auth → core
+users → core
+ai-voice-agent → core + calls
+
+// ❌ Forbidden: core cannot depend on business modules
+// ❌ Forbidden: Cross-module internal imports
 ```
 
-#### 2. **Dependency Rules**
+### Module Interface Pattern
 ```typescript
-// Module dependency hierarchy (top can depend on bottom, never reverse)
+// Every module exports clean interface via index.ts
+// modules/queue/index.ts
+export { QueueService } from './services/queue.service'
+export { useQueue } from './hooks/useQueue'
+export type { Queue, QueueEntry } from './types/queue.types'
 
-┌─────────────────────────────────────────────────┐
-│  Presentation Layer (app/ - Next.js App Router) │
-├─────────────────────────────────────────────────┤
-│     API Layer (server/ - tRPC Routers)          │
-├─────────────────────────────────────────────────┤
-│    Business Modules (modules/ - Domain Logic)   │
-│  auth → queue → scoring → calls → communications → users  │
-│              ↘    ↓      ↘ analytics ↗                   │
-├─────────────────────────────────────────────────┤
-│       Core Module (modules/core - Shared)       │
-├─────────────────────────────────────────────────┤
-│   Infrastructure (lib/, prisma/ - Foundation)   │
-└─────────────────────────────────────────────────┘
-
-// ✅ Allowed dependencies:
-// - auth can depend on core
-// - queue can depend on core + auth
-// - calls can depend on core + auth + queue
-// - communications can depend on core + auth + users
-// - analytics can depend on all other modules
-
-// ❌ Forbidden dependencies:
-// - core cannot depend on business modules
-// - auth cannot depend on queue/calls/etc
-// - users cannot depend on calls/queue/etc
+// Usage: import { QueueService } from '@/modules/queue'
+// ❌ Never: import from '@/modules/queue/services/queue.service'
 ```
 
-#### 3. **Module Interface Pattern**
+## 🔧 Technology Stack
+
+### Current Production Stack
+- **Framework**: Next.js 14 (App Router) + TypeScript
+- **API**: tRPC + TanStack Query for type-safe client/server
+- **Database**: PostgreSQL (separated queues) + MySQL Replica (user data)
+- **AI**: Hume EVI + OpenAI + TTS pipeline
+- **Communication**: Twilio Voice + SMS
+- **Deployment**: Vercel with automated cron jobs
+- **Monitoring**: Winston logging + health checks
+
+## 📝 Development Standards
+
+### tRPC Procedure Pattern
 ```typescript
-// Every module exports a clean interface via index.ts
+export const exampleRouter = createTRPCRouter({
+  getItems: protectedProcedure
+    .input(z.object({
+      page: z.number().default(1),
+      filters: z.object({
+        status: z.string().optional()
+      }).optional()
+    }))
+    .query(async ({ input, ctx }) => {
+      // Delegate to module service
+      return await moduleService.getItems(input, ctx.agent)
+    }),
 
-// modules/auth/index.ts
-export { AuthService } from './services/auth.service'
-export { useAuth } from './hooks/useAuth'
-export { LoginForm } from './components/LoginForm'
-export type { Agent, AuthSession } from './types/auth.types'
-
-// Usage in other modules:
-import { AuthService, useAuth, type Agent } from '@/modules/auth'
-// ❌ Don't import directly: from '@/modules/auth/services/auth.service'
+  createItem: protectedProcedure
+    .input(CreateItemSchema)
+    .mutation(async ({ input, ctx }) => {
+      return await moduleService.createItem(input, ctx.agent.id)
+    })
+});
 ```
 
-#### 4. **Service Layer Pattern**
+### Error Handling
 ```typescript
-// Each module has services as the main business logic entry point
+import { TRPCError } from '@trpc/server';
 
+// Always use TRPCError with appropriate codes
+throw new TRPCError({
+  code: 'UNAUTHORIZED', // 'BAD_REQUEST', 'NOT_FOUND', etc.
+  message: 'Clear error message'
+});
+```
+
+### Service Pattern
+```typescript
 // modules/queue/services/queue.service.ts
 export class QueueService {
   constructor(
@@ -608,554 +175,13 @@ export class QueueService {
 
   async getQueue(filters: QueueFilters): Promise<QueueResult> {
     // Business logic here
-    const agent = await this.authService.getCurrentAgent()
-    const eligibleUsers = await this.userService.getEligibleUsers(filters)
-    return this.buildQueue(eligibleUsers)
   }
 }
-```
-
-#### 5. **Data Access Pattern**
-```typescript
-// Data access is centralized in the core module
-
-// modules/core/services/database.service.ts
-export class DatabaseService {
-  // Shared database operations
-  async getUserData(userId: number): Promise<UserData> {
-    return await prisma.user.findUnique({ where: { id: userId } })
-  }
-}
-
-// modules/users/services/user.service.ts
-export class UserService {
-  constructor(private dbService: DatabaseService) {}
-
-  async getUserContext(userId: number): Promise<UserCallContext> {
-    const userData = await this.dbService.getUserData(userId)
-    // Transform to domain model
-    return this.transformToCallContext(userData)
-  }
-}
-```
-
-#### 6. **tRPC Router Pattern**
-```typescript
-// tRPC routers are thin layers that delegate to module services
-
-// server/api/routers/queue.ts
-import { QueueService } from '@/modules/queue'
-import { createTRPCRouter, protectedProcedure } from '@/lib/trpc/server'
-
-const queueService = new QueueService() // Or use DI container
-
-export const queueRouter = createTRPCRouter({
-  getQueue: protectedProcedure
-    .input(QueueFiltersSchema)
-    .query(async ({ input, ctx }) => {
-      // Thin layer - delegate to service
-      return await queueService.getQueue(input, ctx.agent)
-    }),
-
-  assignCall: protectedProcedure
-    .input(AssignCallSchema)
-    .mutation(async ({ input, ctx }) => {
-      return await queueService.assignCall(input.queueId, ctx.agent.id)
-    })
-})
-```
-
-#### 7. **Component Organization**
-```typescript
-// Components are organized by module, not by technical concern
-
-// ✅ Good: Domain-organized components
-modules/calls/components/
-├── CallInterface.tsx      # Main call UI
-├── CallControls.tsx       # Call action buttons
-└── OutcomeForm.tsx        # Call disposition form
-
-// ❌ Bad: Technical-organized components
-components/
-├── forms/                 # Mixed domains
-├── buttons/               # Mixed domains
-└── modals/                # Mixed domains
-
-// Shared UI components go in core module
-modules/core/components/ui/
-├── button.tsx             # Base button component
-├── card.tsx               # Base card component
-└── dialog.tsx             # Base dialog component
-```
-
-#### 8. **Module Export Strategy**
-```typescript
-// Each module exports everything needed by other modules
-
-// modules/queue/index.ts
-// Services (main interface)
-export { QueueService } from './services/queue.service'
-export { ScoringService } from './services/scoring.service'
-
-// Types (for other modules)
-export type { 
-  Queue, 
-  QueueEntry, 
-  QueueFilters,
-  PriorityScore 
-} from './types/queue.types'
-
-// Components (for app pages)
-export { QueueDashboard } from './components/QueueDashboard'
-export { QueueTable } from './components/QueueTable'
-
-// Hooks (for other components)
-export { useQueue } from './hooks/useQueue'
-export { useQueueStats } from './hooks/useQueueStats'
-
-// Utils (if needed by other modules)
-export { calculatePriority } from './utils/scoring.utils'
-```
-
-### Modulith Benefits
-
-#### ✅ **Advantages**
-- **Single Deployment**: One Next.js app, easier ops
-- **Shared Infrastructure**: Database, auth, utilities
-- **Type Safety**: End-to-end TypeScript across modules
-- **Performance**: No network overhead between modules
-- **Development Speed**: Easier refactoring and testing
-- **Future-Proof**: Can extract modules to microservices later
-
-#### ⚠️ **Guidelines to Prevent "Big Ball of Mud"**
-- **Respect Module Boundaries**: Never import across module internals
-- **Use Dependency Injection**: Services should receive dependencies
-- **Keep Interfaces Clean**: Export only what other modules need
-- **Monitor Dependencies**: Use tools to track module coupling
-- **Regular Reviews**: Check for boundary violations in PRs
-
-## 🔧 Technology Stack
-
-### Unified Application
-- **Framework**: Next.js 14 (App Router) + TypeScript
-- **API Layer**: tRPC (type-safe RPC) + TanStack Query
-- **Database**: PostgreSQL + Prisma ORM + MySQL replica (main data)
-- **Authentication**: JWT + Next.js middleware
-- **UI Components**: Tailwind CSS + shadcn/ui + Radix UI primitives
-- **State Management**: tRPC + TanStack Query (server state) + localStorage (client state)
-- **Real-time**: Server-Sent Events (SSE) + WebSockets
-- **External Services**: Twilio (voice/SMS), Redis (cache), Winston (logging)
-
-### Development Tools
-- **Runtime**: Node.js 20+ with TypeScript (strict mode)
-- **Build Tool**: Next.js built-in (Turbopack)
-- **Package Manager**: npm
-- **Forms**: React Hook Form + Zod validation
-- **Icons**: Lucide React
-- **Tables**: TanStack Table
-- **Charts**: Recharts (analytics)
-- **Validation**: Zod (runtime validation)
-- **Code Quality**: ESLint + TypeScript strict mode
-
-## 📝 Coding Conventions
-
-### tRPC Procedure Patterns
-```typescript
-// ALWAYS use this format for tRPC procedures
-export const exampleRouter = createTRPCRouter({
-  // Query procedure (GET-like)
-  getItems: protectedProcedure
-    .input(z.object({
-      page: z.number().default(1),
-      limit: z.number().default(20),
-      filters: z.object({
-        status: z.string().optional(),
-        search: z.string().optional()
-      }).optional()
-    }))
-    .query(async ({ input, ctx }) => {
-      const { page, limit, filters } = input;
-      
-      const [items, total] = await Promise.all([
-        ctx.prisma.item.findMany({
-          where: filters,
-          skip: (page - 1) * limit,
-          take: limit
-        }),
-        ctx.prisma.item.count({ where: filters })
-      ]);
-      
-      return {
-        items,
-        meta: { page, limit, total, totalPages: Math.ceil(total / limit) }
-      };
-    }),
-
-  // Mutation procedure (POST/PUT-like)
-  createItem: protectedProcedure
-    .input(z.object({
-      name: z.string().min(1),
-      description: z.string().optional()
-    }))
-    .mutation(async ({ input, ctx }) => {
-      const item = await ctx.prisma.item.create({
-        data: {
-          ...input,
-          createdBy: ctx.agent.id
-        }
-      });
-      
-      return item;
-    })
-});
-```
-
-### Error Handling Pattern
-```typescript
-// tRPC error handling with typed errors
-import { TRPCError } from '@trpc/server';
-
-// Usage in procedures
-export const loginProcedure = publicProcedure
-  .input(z.object({
-    email: z.string().email(),
-    password: z.string().min(8)
-  }))
-  .mutation(async ({ input, ctx }) => {
-    try {
-      const { email, password } = input;
-      
-      const agent = await ctx.prisma.agent.findUnique({
-        where: { email, isActive: true }
-      });
-      
-      if (!agent || !bcrypt.compareSync(password, agent.passwordHash)) {
-        throw new TRPCError({
-          code: 'UNAUTHORIZED',
-          message: 'Invalid credentials'
-        });
-      }
-      
-      return { agent, token: generateToken(agent) };
-    } catch (error) {
-      // Log error for monitoring
-      logger.error('Login failed:', { email: input.email, error });
-      
-      // Re-throw tRPC errors
-      if (error instanceof TRPCError) {
-        throw error;
-      }
-      
-      // Convert other errors to tRPC errors
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'An unexpected error occurred'
-      });
-    }
-  });
-```
-
-### Database Query Pattern
-```typescript
-// Always use typed queries with Prisma
-interface GetUsersOptions {
-  page?: number;
-  limit?: number;
-  filters?: {
-    status?: string;
-    search?: string;
-    hasRequirements?: boolean;
-  };
-  orderBy?: {
-    field: string;
-    direction: 'asc' | 'desc';
-  };
-}
-
-async function getUsersWithClaims(options: GetUsersOptions) {
-  const { page = 1, limit = 20, filters = {}, orderBy } = options;
-  
-  // Build complex queries step by step
-  const where = {
-    ...(filters.status && { status: filters.status }),
-    ...(filters.hasRequirements && {
-      claims: {
-        some: {
-          requirements: {
-            some: { status: 'PENDING' }
-          }
-        }
-      }
-    })
-  };
-
-  const [users, total] = await Promise.all([
-    prisma.user.findMany({
-      where,
-      include: {
-        claims: {
-          include: {
-            requirements: true,
-            vehiclePackages: true
-          }
-        }
-      },
-      skip: (page - 1) * limit,
-      take: limit,
-      orderBy: orderBy ? { [orderBy.field]: orderBy.direction } : undefined
-    }),
-    prisma.user.count({ where })
-  ]);
-
-  return {
-    users,
-    meta: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit)
-    }
-  };
-}
-```
-
-### File Naming Conventions (Modulith)
-```
-📁 Module Structure:
-- Module Folders: camelCase   (auth/, queue/, calls/, communications/)
-- Module Index: index.ts      (exports interface for module)
-
-📄 Within Modules:
-- Services: camelCase         (auth.service.ts, queue.service.ts)
-- Types: camelCase            (auth.types.ts, queue.types.ts)
-- Components: PascalCase      (LoginForm.tsx, QueueDashboard.tsx)
-- Hooks: camelCase            (useAuth.ts, useQueue.ts)
-- Utils: camelCase            (jwt.utils.ts, scoring.utils.ts)
-
-🏠 App Router:
-- Pages: page.tsx, layout.tsx, loading.tsx, error.tsx
-- API Routes: route.ts        (in app/api folders)
-
-🔗 tRPC Layer:
-- Routers: camelCase          (auth.ts, queue.ts, calls.ts)
-- Root Router: root.ts        (composes all routers)
-
-🗄️ Database:
-- Schema: snake_case          (call_sessions, user_scores)
-- Migrations: auto-generated  (001_initial.sql)
-
-⚙️ Core/Shared:
-- UI Components: kebab-case   (button.tsx, card.tsx, dialog.tsx)
-- Config: camelCase           (env.ts, constants.ts)
-- Utils: camelCase            (api.utils.ts, date.utils.ts)
-
-📦 Import Conventions:
-- Module imports: '@/modules/auth'          (via index.ts)
-- Internal imports: './services/auth.service' (relative paths)
-- Core imports: '@/modules/core'            (shared utilities)
-- App imports: '@/app/(dashboard)/calls'    (page components)
-```
-
-## 🛠 Development Workflow
-
-### 1. Module-First Development
-Start with module boundaries and interfaces before implementation:
-```typescript
-// 1. Define module interface first
-// modules/calls/index.ts
-export interface CallService {
-  initiateCall(queueId: string, agentId: number): Promise<CallSession>
-  updateStatus(sessionId: string, status: CallStatus): Promise<void>
-  recordOutcome(sessionId: string, outcome: CallOutcome): Promise<void>
-}
-
-export type { CallSession, CallStatus, CallOutcome } from './types/call.types'
-
-// 2. Implement the service
-// modules/calls/services/call.service.ts
-export class CallServiceImpl implements CallService {
-  constructor(
-    private authService: AuthService,     // From modules/auth
-    private userService: UserService,     // From modules/users
-    private twilioService: TwilioService  // From modules/core
-  ) {}
-
-  async initiateCall(queueId: string, agentId: number): Promise<CallSession> {
-    // Implementation with proper dependency usage
-  }
-}
-
-// 3. Export from module
-// modules/calls/index.ts
-export { CallServiceImpl as CallService } from './services/call.service'
-```
-
-### 2. Type-First Development
-Always define types before implementation:
-```typescript
-// 1. Define the complete type structure
-interface UserCallContext {
-  user: {
-    id: number;
-    firstName: string;
-    lastName: string;
-    phoneNumber: string;
-    email: string;
-    address?: {
-      fullAddress: string;
-      postCode: string;
-      county: string;
-    };
-  };
-  claims: Array<{
-    id: number;
-    type: string;
-    status: string;
-    lender: string;
-    requirements: Array<{
-      id: string;
-      type: string;
-      status: string;
-      reason: string;
-    }>;
-    vehiclePackages: Array<{
-      registration: string;
-      make: string;
-      model: string;
-      dealershipName: string;
-    }>;
-  }>;
-  callScore: {
-    currentScore: number;
-    lastOutcome?: string;
-    nextCallAfter?: Date;
-  };
-}
-
-// 2. Implement with type safety
-const getUserCallContext = async (userId: number): Promise<UserCallContext> => {
-  // Implementation
-};
-```
-
-### 3. tRPC-First with Module Services
-Define tRPC procedures that delegate to module services:
-```typescript
-// 1. Module services define business logic
-// modules/queue/services/queue.service.ts
-export class QueueService {
-  async getQueue(filters: QueueFilters, agent: Agent): Promise<QueueResult> {
-    // Business logic
-  }
-  
-  async assignCall(queueId: string, agentId: number): Promise<QueueEntry> {
-    // Business logic
-  }
-}
-
-// 2. tRPC routers are thin delegation layers
-// server/api/routers/queue.ts
-import { QueueService } from '@/modules/queue'
-
-const queueService = new QueueService()
-
-export const queueRouter = createTRPCRouter({
-  getQueue: protectedProcedure
-    .input(QueueFiltersSchema)
-    .query(async ({ input, ctx }) => {
-      // Delegate to module service
-      return await queueService.getQueue(input, ctx.agent)
-    }),
-
-  assignCall: protectedProcedure
-    .input(AssignCallSchema)
-    .mutation(async ({ input, ctx }) => {
-      // Delegate to module service
-      return await queueService.assignCall(input.queueId, ctx.agent.id)
-    })
-})
-
-// 3. Compose routers in root
-// server/api/root.ts
-export const appRouter = createTRPCRouter({
-  auth: authRouter,        // → modules/auth
-  queue: queueRouter,      // → modules/queue  
-  scoring: scoringRouter,  // → modules/scoring
-  calls: callsRouter,      // → modules/calls
-  communications: commsRouter, // → modules/communications
-  users: usersRouter,      // → modules/users
-  analytics: analyticsRouter   // → modules/analytics
-})
-
-// 4. Type-safe client usage (unchanged)
-const { data: queue } = api.queue.getQueue.useQuery({ status: 'pending' })
-const assignMutation = api.queue.assignCall.useMutation()
-```
-
-### 4. Module-Based Component Structure
-```typescript
-// Modulith organization - components live with their domain
-
-// 1. Next.js pages use module components
-app/(dashboard)/calls/page.tsx
-```tsx
-import { CallInterface } from '@/modules/calls'
-import { QueueDashboard } from '@/modules/queue'
-
-export default function CallsPage() {
-  return (
-    <div>
-      <QueueDashboard />
-      <CallInterface />
-    </div>
-  )
-}
-```
-
-// 2. Module components are domain-focused
-modules/calls/components/
-├── CallInterface.tsx      # Main call UI
-├── CallControls.tsx       # Call action buttons  
-├── CallTimer.tsx          # Duration display
-└── OutcomeForm.tsx        # Call disposition
-
-// 3. Shared UI in core module
-modules/core/components/ui/
-├── button.tsx             # Base button
-├── card.tsx               # Base card
-├── dialog.tsx             # Base dialog
-└── form.tsx               # Base form
-
-// 4. Module hooks for state
-modules/calls/hooks/
-├── useCallSession.ts      # Call state management
-├── useTwilio.ts           # Twilio integration
-└── useCallTimer.ts        # Timer logic
-
-// 5. Module services for business logic
-modules/calls/services/
-├── call.service.ts        # Core call logic
-├── outcome.service.ts     # Outcome handling
-└── twilio.service.ts      # Twilio integration
-
-// 6. tRPC routers delegate to services
-server/api/routers/calls.ts
-```typescript
-import { CallService } from '@/modules/calls'
-
-const callService = new CallService()
-
-export const callsRouter = createTRPCRouter({
-  initiate: protectedProcedure
-    .input(InitiateCallSchema)
-    .mutation(({ input, ctx }) => callService.initiate(input, ctx.agent))
-})
-```
 ```
 
 ## 🔐 Authentication & Security
 
-### JWT Token Structure & Next.js Middleware
+### JWT + Next.js Middleware
 ```typescript
 interface JwtPayload {
   id: number;
@@ -1165,48 +191,8 @@ interface JwtPayload {
   exp: number;
 }
 
-// Token generation in tRPC procedure
-const generateToken = (agent: Agent): string => {
-  return jwt.sign(
-    { 
-      id: agent.id, 
-      email: agent.email, 
-      role: agent.role 
-    },
-    process.env.NEXTAUTH_SECRET!,
-    { expiresIn: '8h' }
-  );
-};
-
-// Next.js middleware for route protection
-// middleware.ts
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-import jwt from 'jsonwebtoken'
-
-export function middleware(request: NextRequest) {
-  // Protect dashboard routes
-  if (request.nextUrl.pathname.startsWith('/dashboard')) {
-    const token = request.cookies.get('auth-token')?.value ||
-                  request.headers.get('authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-
-    try {
-      jwt.verify(token, process.env.NEXTAUTH_SECRET!)
-    } catch (error) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-  }
-
-  return NextResponse.next()
-}
-
-export const config = {
-  matcher: ['/dashboard/:path*']
-}
+// middleware.ts protects /dashboard routes
+// Uses JWT tokens with 8-hour expiration
 ```
 
 ### Magic Link Generation
@@ -1214,510 +200,165 @@ export const config = {
 // Maintain compatibility with main system
 const generateMagicLink = (userId: number, type: MagicLinkType): string => {
   const mlid = Buffer.from(userId.toString()).toString('base64');
-  const baseUrl = process.env.MAIN_APP_URL;
-  
-  const routes: Record<MagicLinkType, string> = {
-    firstLogin: `/first-login?base64_user_id=${mlid}`,
-    claimPortal: `/claims?mlid=${mlid}`,
-    documentUpload: `/claim/requirements?mlid=${mlid}`,
-    claimCompletion: `/claim/incomplete-redirect?mlid=${mlid}`
-  };
-  
-  return `${baseUrl}${routes[type]}`;
-};
-
-// Track magic link activity
-const sendMagicLink = async (
-  userId: number, 
-  type: MagicLinkType, 
-  method: 'sms' | 'whatsapp',
-  agentId: number,
-  sessionId: string
-) => {
-  const link = generateMagicLink(userId, type);
-  
-  // Send via Twilio
-  await twilioService.sendMessage(phoneNumber, {
-    body: `Hi ${firstName}, here's your secure link to access your claim: ${link}`,
-    method
-  });
-  
-  // Record activity
-  await prisma.magicLinkActivity.create({
-    data: {
-      userId,
-      linkType: type,
-      linkToken: Buffer.from(userId.toString()).toString('base64'),
-      sentVia: method,
-      sentByAgentId: agentId,
-      callSessionId: sessionId,
-      sentAt: new Date()
-    }
-  });
+  return `${process.env.MAIN_APP_URL}/claims?mlid=${mlid}`;
 };
 ```
 
-## 📊 Queue Management & Scoring
+## 📋 Current Queue System
 
-### Priority Scoring Algorithm
+### Three Specialized Queues
+1. **🖊️ Unsigned Users** (Highest Priority) - Missing signatures
+2. **📋 Outstanding Requests** (Medium Priority) - Pending documents  
+3. **📞 Callbacks** (User-Scheduled Priority) - Requested callbacks
+
+### Enhanced Features (Production)
+- **Auto-regeneration**: Maintains 20+ users automatically
+- **Enhanced ordering**: Newest-first for same scores
+- **2-hour cooling**: Prevents rushed calls on fresh leads
+- **Separated tables**: Optimized performance
+- **Real-time monitoring**: 5-minute health checks
+
+## 🤖 AI & Automation Features
+
+### Hume EVI Integration
 ```typescript
-const calculateUserScore = async (userId: number): Promise<number> => {
-  const factors = await gatherScoringFactors(userId);
-  let score = 0;
-  
-  // Base factors
-  score += Math.min(factors.daysSinceLastContact * 2, 60);  // Max 60 points
-  score -= factors.pendingRequirements * 15;                // Urgent = lower score
-  score -= factors.claimValue > 10000 ? 20 : 0;            // High value priority
-  
-  // Outcome penalties
-  const outcomeScores = {
-    'not_interested': 50,
-    'no_answer': 10,
-    'wrong_number': 100,
-    'callback_requested': -20,  // Negative = higher priority
-    'contacted': 5
-  };
-  score += outcomeScores[factors.lastOutcome] || 0;
-  
-  // Time restrictions
-  if (factors.lastOutcome === 'not_interested') {
-    // No calls for 48 hours
-    await setNextCallAfter(userId, 48);
-  }
-  
-  return score;
-};
+// AI voice conversations with emotional intelligence
+const aiService = new AIVoiceService(defaultHumeConfig);
+const conversation = await aiService.startConversation({
+  callSid, fromNumber, toNumber, userId
+});
 ```
 
-### Queue Population Strategy
-```sql
--- Automated queue refresh (runs every minute)
-INSERT INTO call_queue (user_id, claim_id, priority_score, queue_type)
-SELECT 
-  ucs.user_id,
-  c.id as claim_id,
-  ucs.current_score,
-  'priority_call'
-FROM user_call_scores ucs
-JOIN users u ON ucs.user_id = u.id
-JOIN claims c ON u.id = c.user_id
-WHERE 
-  ucs.next_call_after <= NOW()
-  AND u.is_enabled = true
-  AND c.status != 'complete'
-  AND NOT EXISTS (
-    SELECT 1 FROM call_queue cq 
-    WHERE cq.user_id = ucs.user_id 
-    AND cq.status IN ('pending', 'assigned')
-  )
-ORDER BY ucs.current_score ASC
-LIMIT 100;
-```
+### Background Automation (Production Cron Jobs)
+- **queue-level-check**: Auto-regeneration (every 5 minutes)
+- **populate-separated-queues**: Full refresh (hourly)
+- **discover-new-requirements**: New user discovery (hourly)
+- **daily-cleanup**: Database maintenance (daily 2 AM)
+- **callback-notifications**: Process callbacks (every minute)
+- **scoring-maintenance**: Ensure proper scoring (hourly)
 
-### Queue Management Strategy
+## 🚢 Deployment Workflow
 
-#### Three Specialized Queue Types
+### ⚠️ CRITICAL: Updated Deployment Process
 
-**🖊️ Unsigned Users Queue** (Priority 1 - Highest)
-- **Purpose**: Obtain missing signatures to unblock claim progress
-- **Criteria**: `current_signature_file_id IS NULL`
-- **Business Impact**: Blocks all claim progress until resolved
-- **Agent Focus**: Get users to provide digital signatures
-
-**📋 Outstanding Requests Queue** (Priority 2 - Medium)
-- **Purpose**: Follow up on pending document requirements  
-- **Criteria**: `requirements.status = 'PENDING' AND current_signature_file_id IS NOT NULL`
-- **Business Impact**: Claim can progress but needs supporting documents
-- **Agent Focus**: Chase specific documents (bank statements, ID, proof of address)
-
-**📞 Callbacks Queue** (Priority 1 - High)
-- **Purpose**: Honor callback requests from previous call attempts
-- **Criteria**: `scheduled_callback_date <= NOW()`
-- **Business Impact**: User expectation already set, high priority
-- **Agent Focus**: Complete previous conversation or address specific requests
-
-#### Agent Specialization Model
-- Each agent operates on ONE queue type for specialization
-- Queue-specific training and expertise development
-- Agents know exactly why they're calling before dialing
-- Better outcomes through targeted conversations
-
-#### Queue Population Logic
-```sql
--- Unsigned Users Detection
-SELECT users.* FROM users 
-WHERE current_signature_file_id IS NULL 
-  AND is_enabled = true 
-  AND EXISTS (SELECT 1 FROM claims WHERE user_id = users.id AND status != 'complete')
-
--- Outstanding Requests Detection  
-SELECT users.* FROM users 
-WHERE current_signature_file_id IS NOT NULL 
-  AND is_enabled = true
-  AND EXISTS (
-    SELECT 1 FROM claims c
-    JOIN claim_requirements cr ON c.id = cr.claim_id
-    WHERE c.user_id = users.id AND cr.status = 'PENDING'
-  )
-
--- Callback Queue Detection
-SELECT users.* FROM callbacks cb
-JOIN users ON cb.user_id = users.id
-WHERE cb.status = 'pending' 
-  AND cb.scheduled_for <= NOW()
-  AND users.is_enabled = true
-```
-
-## 🚀 Performance Guidelines
-
-### Caching Strategy
-```typescript
-// Redis key patterns
-const cacheKeys = {
-  user: (id: number) => `user:${id}`,
-  userClaims: (userId: number) => `user:${userId}:claims`,
-  userRequirements: (userId: number) => `user:${userId}:requirements`,
-  queue: (status: string, page: number) => `queue:${status}:${page}`,
-  agentStats: (agentId: number, date: string) => `agent:${agentId}:stats:${date}`
-};
-
-// Cache with appropriate TTL
-const cacheUser = async (userId: number, data: any) => {
-  await redis.setex(
-    cacheKeys.user(userId), 
-    900, // 15 minutes for user data
-    JSON.stringify(data)
-  );
-};
-
-// Invalidate related caches
-const invalidateUserCache = async (userId: number) => {
-  const keys = [
-    cacheKeys.user(userId),
-    cacheKeys.userClaims(userId),
-    cacheKeys.userRequirements(userId)
-  ];
-  await redis.del(...keys);
-};
-```
-
-### Database Optimization
-```sql
--- Critical indexes for performance
-CREATE INDEX idx_call_sessions_date ON call_sessions(created_at DESC);
-CREATE INDEX idx_call_outcomes_session ON call_outcomes(call_session_id);
-CREATE INDEX idx_user_scores_composite ON user_call_scores(next_call_after, current_score);
-CREATE INDEX idx_queue_composite ON call_queue(status, priority_score, created_at);
-CREATE INDEX idx_claims_user_status ON claims(user_id, status);
-CREATE INDEX idx_requirements_claim_status ON claim_requirements(claim_id, status);
-```
-
-## 🚀 Modulith Implementation Strategy
-
-### Phase 1: Module Foundation
+#### Development
 ```bash
-# 1. Create module structure
-mkdir -p modules/{auth,queue,calls,communications,users,analytics,scoring,core}
-mkdir -p modules/{auth,queue,calls,communications,users,analytics,scoring}/{{services,types,components,hooks,utils}}
-mkdir -p modules/core/{services,types,components,hooks,utils}
-
-# 2. Create module index files
-touch modules/{auth,queue,calls,communications,users,analytics,scoring,core}/index.ts
+# Push changes to DEV environment
+vercel --dev    # Deploy to development
+# Test in dev environment before production
 ```
 
-### Phase 2: Service Migration
+#### Production  
+```bash
+# Production deployments ONLY via merge request
+git checkout main
+git merge feature-branch
+git push origin main
+# Vercel auto-deploys main branch to production
+```
+
+**🚨 NEVER deploy directly to production via CLI**
+**✅ ALWAYS use merge requests for production changes**
+
+### Environment Configuration
+- **Development**: Via Vercel CLI to dev instance
+- **Production**: Auto-deployment from main branch
+- **Background Jobs**: Configured via vercel.json cron schedules
+
+## 📊 Performance Targets
+
+### Production Metrics
+- **Queue Load Time**: < 1 second (separated tables)
+- **Pre-call Validation**: < 500ms (real-time)
+- **Call Accuracy**: 100% (zero wrong calls)
+- **Auto-Regeneration**: < 10 seconds for full refresh
+
+## 🎯 Business Rules (Enforce in Code)
+
+### Call Restrictions
+- No calls before 9 AM or after 8 PM local time
+- Maximum 3 attempts per user per week  
+- 48-hour cooldown after "not interested"
+- Callbacks take priority over new queue entries
+
+### Data Integrity
+- **Never modify replica data** (read-only MySQL)
+- **Always validate** phone numbers before calling
+- **Maintain audit trail** of all actions
+- **Pre-call validation** ensures 100% accuracy
+
+## 🔄 File Naming Conventions
+
+```
+📁 Modules: camelCase (auth/, queue/, calls/)
+📄 Services: camelCase (auth.service.ts, queue.service.ts)
+📄 Components: PascalCase (LoginForm.tsx, QueueDashboard.tsx)
+📄 Hooks: camelCase (useAuth.ts, useQueue.ts)
+📄 Types: camelCase (auth.types.ts, queue.types.ts)
+📄 Utils: camelCase (jwt.utils.ts, scoring.utils.ts)
+
+🏠 App Router: page.tsx, layout.tsx, route.ts
+🔗 tRPC: camelCase (auth.ts, queue.ts)
+🗄️ Database: snake_case (call_sessions, user_scores)
+```
+
+## 🎮 Development Guidelines
+
+### Module-First Development
+1. **Define module interface** in index.ts first
+2. **Implement service** with dependency injection
+3. **Create tRPC router** that delegates to service
+4. **Add UI components** to module
+5. **Export everything** needed via module index
+
+### Type-First Development  
 ```typescript
-// 1. Move services to modules with dependency injection
-// Before: server/services/queue.service.ts
-// After: modules/queue/services/queue.service.ts
-
-export class QueueService {
-  constructor(
-    private authService: AuthService,  // Inject from auth module
-    private userService: UserService   // Inject from users module
-  ) {}
-}
-
-// 2. Update tRPC routers to use module services
-// server/api/routers/queue.ts
-import { QueueService, type QueueFilters } from '@/modules/queue'
-```
-
-### Phase 3: Component Organization
-```typescript
-// 1. Move components to their domain modules
-// Before: components/CallInterface.tsx
-// After: modules/calls/components/CallInterface.tsx
-
-// 2. Update imports in Next.js pages
-// app/(dashboard)/calls/page.tsx
-import { CallInterface } from '@/modules/calls'
-import { QueueDashboard } from '@/modules/queue'
-```
-
-### Phase 4: Type Safety & Boundaries
-```typescript
-// 1. Enforce module boundaries with TypeScript
-// eslint-plugin-boundaries or similar
-
-// 2. Create clear module interfaces
-// modules/auth/index.ts
-export type { Agent, AuthSession } from './types/auth.types'
-export { AuthService } from './services/auth.service'
-export { useAuth } from './hooks/useAuth'
-
-// 3. Update path mapping
-// tsconfig.json
-{
-  "compilerOptions": {
-    "paths": {
-      "@/modules/*": ["./modules/*"],
-      "@/modules/core": ["./modules/core"],
-      "@/app/*": ["./app/*"]
-    }
-  }
-}
-```
-
-### Module Dependency Visualization
-```mermaid
-graph TD
-    A[Next.js App Router] --> B[tRPC API Layer]
-    B --> C[Business Modules]
-    
-    C --> D[auth]
-    C --> E[queue]
-    C --> F[calls]
-    C --> G[communications]
-    C --> H[users]
-    C --> I[analytics]
-    
-    D --> J[core]
-    E --> J
-    E --> D
-    F --> J
-    F --> D
-    F --> E
-    G --> J
-    G --> D
-    G --> H
-    H --> J
-    I --> J
-    I --> D
-    I --> E
-    I --> F
-    I --> G
-    I --> H
-    
-    J --> K[Infrastructure]
-    K --> L[Database]
-    K --> M[Cache]
-    K --> N[External APIs]
-```
-
-### Migration Checklist
-- [ ] **Create module directories** with standard structure
-- [ ] **Move services** to appropriate modules with dependency injection
-- [ ] **Update tRPC routers** to delegate to module services
-- [ ] **Relocate components** to domain modules
-- [ ] **Update imports** throughout application
-- [ ] **Configure TypeScript paths** for clean imports
-- [ ] **Add module boundaries** linting rules
-- [ ] **Test module isolation** - ensure no cross-module internals
-- [ ] **Document module APIs** in each index.ts
-- [ ] **Update development processes** for modulith patterns
-
-## 🧪 Testing Requirements
-
-### Test Structure
-```
-__tests__/
-├── unit/           # Individual functions
-├── integration/    # API endpoints
-├── e2e/           # User workflows
-└── fixtures/      # Test data
-
-// Example test data that matches schema
-const testUser = {
-  id: 12345,
-  firstName: 'John',
-  lastName: 'Doe',
-  phoneNumber: '+447900123456',
-  claims: [{
-    id: 456,
-    type: 'VEHICLE',
-    status: 'documents_needed',
-    lender: 'Santander',
-    requirements: [{
-      type: 'BANK_STATEMENTS',
-      status: 'PENDING'
-    }]
-  }]
-};
-```
-
-### Test Patterns
-```typescript
-describe('Queue Service', () => {
-  it('should prioritize users with pending requirements', async () => {
-    // Create test data matching schema
-    const userWithRequirements = await createTestUser({
-      claims: [{
-        requirements: [
-          { type: 'ID_DOCUMENT', status: 'PENDING' }
-        ]
-      }]
-    });
-    
-    const userWithoutRequirements = await createTestUser({
-      claims: [{
-        requirements: []
-      }]
-    });
-    
-    const queue = await queueService.refreshQueue();
-    
-    // User with requirements should be higher in queue
-    expect(queue[0].userId).toBe(userWithRequirements.id);
-  });
-});
-```
-
-## 📈 Monitoring & Logging
-
-### Structured Logging
-```typescript
-logger.info('Call initiated', {
-  event: 'call_started',
-  callId: session.id,
-  userId: session.userId,
-  agentId: session.agentId,
-  userPhone: session.userPhone,
-  claimId: session.claimId,
-  claimType: session.claimType,
-  lender: session.lender,
-  pendingRequirements: session.pendingRequirements,
-  timestamp: new Date().toISOString()
-});
-```
-
-### Key Metrics to Track
-- **Call Metrics**: Duration, outcomes, connections per hour
-- **Queue Metrics**: Depth, wait times, assignment rates
-- **Agent Metrics**: Utilization, handle times, outcomes
-- **Business Metrics**: Requirements completed, magic links sent, callbacks scheduled
-
-## 🚢 Deployment
-
-### Environment Variables
-```env
-# Database
-DATABASE_URL=postgresql://user:pass@host:5432/dialler_features
-REPLICA_DATABASE_URL=mysql://readonly:pass@replica:3306/main_db
-
-# Redis
-REDIS_URL=redis://host:6379
-
-# Authentication
-NEXTAUTH_SECRET=your-super-secret-nextauth-key-min-32-chars
-NEXTAUTH_URL=https://dialler.resolvemyclaim.co.uk
-
-# Twilio
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_PHONE_NUMBER=
-TWILIO_TWIML_APP_SID=
-TWILIO_API_KEY=
-TWILIO_API_SECRET=
-
-# External APIs
-SENDGRID_API_KEY=
-OPENAI_API_KEY=
-
-# Application URLs
-MAIN_APP_URL=https://claim.resolvemyclaim.co.uk
-
-# Feature Flags
-ENABLE_AI_AGENTS=false
-ENABLE_SMS_REPLIES=true
-
-# Monitoring
-SENTRY_DSN=
-VERCEL_ANALYTICS_ID=
-```
-
-### Vercel Configuration
-```json
-{
-  "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "installCommand": "npm ci",
-  "framework": "nextjs",
-  "functions": {
-    "app/api/**": {
-      "maxDuration": 30
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/api/webhooks/:path*",
-      "destination": "/api/webhooks/:path*"
-    }
-  ]
+// Always define complete types before implementation
+interface UserCallContext {
+  user: { id: number; firstName: string; /* ... */ };
+  claims: Array<{ id: number; type: string; /* ... */ }>;
+  callScore: { currentScore: number; /* ... */ };
 }
 ```
 
-## 🎨 UI/UX Principles
+### Import Conventions
+```typescript
+// ✅ Module imports via index
+import { QueueService, useQueue } from '@/modules/queue'
 
-1. **Call-First Interface**: Everything optimized for making calls quickly
-2. **Keyboard Navigation**: All actions accessible via keyboard shortcuts
-3. **Context at a Glance**: Show all relevant user info without scrolling
-4. **One-Click Actions**: Magic links, callbacks, dispositions in single clicks
-5. **Real-time Updates**: Queue and stats update without refresh
+// ✅ Internal module imports  
+import { validateUser } from './utils/validation.utils'
 
-## 🔄 Git Workflow
+// ✅ Core shared utilities
+import { logger } from '@/modules/core'
 
-### Branch Naming
-```
-feature/add-sms-conversations
-fix/queue-priority-calculation
-refactor/scoring-algorithm
-chore/update-dependencies
-```
-
-### Commit Messages
-```
-feat: add magic link tracking to outcomes
-fix: correct timezone handling in callbacks
-refactor: optimize user context queries
-docs: update queue algorithm documentation
-test: add scoring service edge cases
+// ❌ Never cross-module internals
+import { QueueService } from '@/modules/queue/services/queue.service'
 ```
 
 ## 📋 Critical Success Factors
 
-### Data Integrity
-- Never modify replica data
-- Always validate phone numbers before calling
-- Maintain audit trail of all actions
+### For AI Development
+- **Respect module boundaries** - never import across internal boundaries
+- **Use dependency injection** - services receive dependencies
+- **Delegate tRPC to services** - routers are thin layers
+- **Follow naming conventions** - consistent file/function naming
+- **Maintain type safety** - end-to-end TypeScript
+- **Test module isolation** - ensure clean boundaries
 
-### Performance Targets
-- Queue refresh: < 5 seconds
-- Call initiation: < 2 seconds
-- Page load: < 1 second
-- API response: < 200ms (cached), < 500ms (database)
+### Production Deployment
+- **Use merge requests only** for production changes
+- **Test in dev first** using Vercel CLI 
+- **Monitor health endpoints** after deployment
+- **Respect business rules** in all new features
+- **Maintain backward compatibility** with main app
 
-### Compliance Requirements
-- Record all call outcomes
-- Track consent and opt-outs
-- Respect time-based restrictions
-- Maintain call recordings (via Twilio)
+---
 
-### Business Rules
-- No calls before 9 AM or after 8 PM local time
-- Maximum 3 attempts per user per week
-- 48-hour cooldown after "not interested"
-- Callbacks take priority over new queue entries
-- Agent specialization: one queue type per agent
+**Remember**: This is a **production system** serving real users. Always prioritize stability, maintain module boundaries, and use the established deployment workflow.
+---
+
+**Remember**: This is a **production system** serving real users. Always prioritize stability, maintain module boundaries, and use the established deployment workflow.
+---
+
+**Remember**: This is a **production system** serving real users. Always prioritize stability, maintain module boundaries, and use the established deployment workflow.
