@@ -848,7 +848,27 @@ export const callsRouter = createTRPCRouter({
             callbackScheduled: session.callbackScheduled || false, // Now using CallSession field
             followUpRequired: session.followUpRequired || false,
             nextCallDelay: latestOutcome?.nextCallDelayHours || null, // Fallback to CallOutcome
-            documentsRequested: latestOutcome?.documentsRequested ? JSON.parse(latestOutcome.documentsRequested) : [],
+            documentsRequested: (() => {
+              if (!latestOutcome?.documentsRequested) return [];
+              try {
+                // Handle both string and already-parsed JSON
+                if (typeof latestOutcome.documentsRequested === 'string') {
+                  // Validate string is not empty before parsing
+                  const trimmed = latestOutcome.documentsRequested.trim();
+                  if (!trimmed || trimmed === '""' || trimmed === "''") return [];
+                  return JSON.parse(trimmed);
+                } else {
+                  // Already parsed JSON from Prisma
+                  return Array.isArray(latestOutcome.documentsRequested) ? latestOutcome.documentsRequested : [];
+                }
+              } catch (error) {
+                                 console.error('Failed to parse documentsRequested JSON', { 
+                   value: latestOutcome.documentsRequested,
+                   error: error instanceof Error ? error.message : String(error)
+                 });
+                return [];
+              }
+            })(),
             twilioCallSid: session.twilioCallSid,
             recordingUrl: session.recordingUrl,
             recordingStatus: session.recordingStatus,
