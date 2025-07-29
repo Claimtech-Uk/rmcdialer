@@ -6,9 +6,10 @@ import { Badge } from '@/modules/core/components/ui/badge'
 import { Button } from '@/modules/core/components/ui/button'
 import { Input } from '@/modules/core/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/modules/core/components/ui/select'
-import { Clock, Phone, MessageSquare, Calendar, User, Filter, ChevronDown, ChevronUp, RefreshCw, Play, Pause, Volume2, Download, PhoneIncoming, PhoneOutgoing, PhoneMissed } from 'lucide-react'
+import { Clock, Phone, MessageSquare, Calendar, User, Filter, ChevronDown, ChevronUp, RefreshCw, Play, Pause, Volume2, Download, PhoneIncoming, PhoneOutgoing, PhoneMissed, Send } from 'lucide-react'
 import { format, subDays, isAfter, isBefore } from 'date-fns'
 import { api } from '@/lib/trpc/client'
+import { useToast } from '@/modules/core/hooks/use-toast'
 import type { CallHistoryEntry } from '../types/call.types'
 
 interface CallHistoryTableProps {
@@ -72,6 +73,60 @@ export function CallHistoryTable({
   const [expandedCall, setExpandedCall] = useState<string | null>(null)
   const [playingRecording, setPlayingRecording] = useState<string | null>(null)
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null)
+  
+  const { toast } = useToast()
+
+  // Magic link sending mutation
+  const sendMagicLinkMutation = api.communications.sendMagicLinkSMS.useMutation({
+    onSuccess: (result) => {
+      console.log('✅ Magic link sent successfully from call history:', result);
+      toast({ 
+        title: "Portal Link Sent!", 
+        description: "User will receive the claim portal link via SMS" 
+      });
+    },
+    onError: (error) => {
+      console.error('❌ Magic link failed from call history:', error);
+      toast({
+        title: "Failed to Send Portal Link",
+        description: error.message || "Could not send magic link",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Handle sending magic link for a specific call
+  const handleSendMagicLink = (call: CallHistoryEntry) => {
+    if (!call.userPhone) {
+      toast({
+        title: "No Phone Number",
+        description: "This call record doesn't have a phone number on file",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Extract user ID from the call record
+    const userIdToUse = call.userId || userId;
+    
+    if (!userIdToUse) {
+      toast({
+        title: "No User ID",
+        description: "Cannot determine user ID for this call",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const payload = {
+      userId: userIdToUse,
+      phoneNumber: call.userPhone,
+      linkType: 'claimPortal' as const
+    };
+    
+    console.log('📤 Sending magic link from call history with payload:', payload);
+    sendMagicLinkMutation.mutate(payload);
+  };
 
   // Recording Player Component
   const RecordingPlayer = ({ call }: { call: CallHistoryEntry }) => {
@@ -648,8 +703,23 @@ export function CallHistoryTable({
                           {getOutcomeDisplay(call.outcome)}
                         </Badge>
                         
-                        {/* Recording Player */}
-                        <RecordingPlayer call={call} />
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2">
+                          {/* Recording Player */}
+                          <RecordingPlayer call={call} />
+                          
+                          {/* Portal Link Button */}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => handleSendMagicLink(call)}
+                            disabled={sendMagicLinkMutation.isPending || !call.userPhone}
+                            className="h-6 w-6 hover:bg-emerald-100 transition-colors"
+                            title={call.userPhone ? 'Send portal link to user' : 'No phone number available'}
+                          >
+                            <Send className="h-3 w-3 text-emerald-600" />
+                          </Button>
+                        </div>
                       </div>
 
                       <Button

@@ -18,11 +18,11 @@ export interface BusinessHoursConfig {
 export const DEFAULT_BUSINESS_HOURS: BusinessHoursConfig = {
   timezone: 'Europe/London', // UK timezone
   weekdays: {
-    monday: { start: '09:00', end: '17:00', enabled: true },
-    tuesday: { start: '09:00', end: '17:00', enabled: true },
-    wednesday: { start: '09:00', end: '17:00', enabled: true },
-    thursday: { start: '09:00', end: '17:00', enabled: true },
-    friday: { start: '09:00', end: '17:00', enabled: true },
+    monday: { start: '10:00', end: '19:00', enabled: true },
+    tuesday: { start: '10:00', end: '19:00', enabled: true },
+    wednesday: { start: '10:00', end: '19:00', enabled: true },
+    thursday: { start: '10:00', end: '19:00', enabled: true },
+    friday: { start: '10:00', end: '18:00', enabled: true },
     saturday: { start: '10:00', end: '14:00', enabled: false }, // Weekends disabled by default
     sunday: { start: '10:00', end: '14:00', enabled: false },
   },
