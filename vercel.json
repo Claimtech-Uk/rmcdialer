@@ -18,6 +18,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/queue-level-check",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/signature-conversion-cleanup",
       "schedule": "0 * * * *"
     },
@@ -34,8 +38,16 @@
       "schedule": "15 * * * *"
     },
     {
+      "path": "/api/cron/scoring-maintenance",
+      "schedule": "20 * * * *"
+    },
+    {
       "path": "/api/cron/populate-separated-queues",
       "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/cron/daily-cleanup",
+      "schedule": "0 2 * * *"
     }
   ],
   "git": {

@@ -2,13 +2,16 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
-  // CRITICAL: Allow Twilio webhooks and audio endpoints to bypass authentication
+  // CRITICAL: Allow Twilio webhooks, audio endpoints, and CRON jobs to bypass authentication
   const isWebhookPath = request.nextUrl.pathname.startsWith('/api/webhooks/twilio/') || 
                        request.nextUrl.pathname.startsWith('/api/test-webhook-public') ||
                        request.nextUrl.pathname.startsWith('/api/audio/')
   
-  if (isWebhookPath) {
-    console.log('🔓 Webhook bypass: Allowing unauthenticated access to', request.nextUrl.pathname)
+  // CRITICAL: Allow cron jobs to bypass authentication (Vercel cron doesn't send auth tokens)
+  const isCronPath = request.nextUrl.pathname.startsWith('/api/cron/')
+  
+  if (isWebhookPath || isCronPath) {
+    console.log('🔓 Bypass: Allowing unauthenticated access to', request.nextUrl.pathname)
     return NextResponse.next()
   }
 
