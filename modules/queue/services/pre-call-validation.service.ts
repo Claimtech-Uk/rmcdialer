@@ -243,10 +243,48 @@ export class PreCallValidationService {
       
       if (validation.isValid) {
         // Get complete user context for the call
-        const userContext = await this.userService.getUserCallContext(user.userId);
+        const userServiceContext = await this.userService.getUserCallContext(user.userId);
         
-        if (userContext) {
+        if (userServiceContext) {
           console.log(`✅ Found valid user ${user.userId} for ${queueType} queue`);
+          
+          // Transform from users module format (nested) to calls module format (flat)
+          // This ensures compatibility with auto dialler and other components expecting flat structure
+          const userContext = {
+            userId: userServiceContext.user.id,
+            firstName: userServiceContext.user.firstName || 'Unknown',
+            lastName: userServiceContext.user.lastName || 'User',
+            email: userServiceContext.user.email || `user${user.userId}@unknown.com`,
+            phoneNumber: userServiceContext.user.phoneNumber || '+44000000000',
+            address: userServiceContext.user.address ? {
+              fullAddress: userServiceContext.user.address.fullAddress || '',
+              postCode: userServiceContext.user.address.postCode || '',
+              county: userServiceContext.user.address.county || ''
+            } : undefined,
+            claims: userServiceContext.claims.map(claim => ({
+              id: claim.id,
+              type: claim.type || 'unknown',
+              status: claim.status || 'unknown',
+              lender: claim.lender || 'unknown',
+              value: 0, // Not available in users module data
+              requirements: claim.requirements.map(req => ({
+                id: req.id,
+                type: req.type || 'unknown',
+                status: req.status || 'unknown',
+                reason: req.reason || 'No reason provided'
+              }))
+            })),
+            callScore: userServiceContext.callScore ? {
+              currentScore: userServiceContext.callScore.currentScore,
+              totalAttempts: userServiceContext.callScore.totalAttempts,
+              lastOutcome: userServiceContext.callScore.lastOutcome || 'no_attempt'
+            } : {
+              currentScore: 50,
+              totalAttempts: 0,
+              lastOutcome: 'no_attempt'
+            }
+          };
+          
           return {
             userId: user.userId,
             userContext,
