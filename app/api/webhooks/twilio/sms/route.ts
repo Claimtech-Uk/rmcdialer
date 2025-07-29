@@ -54,10 +54,13 @@ export async function POST(request: NextRequest) {
     const conversationPhoneNumber = fromPhone;
 
     try {
-      // Find or create SMS conversation
+      // Find existing conversation - search for both formats (with and without + prefix)
       let conversation = await prisma.smsConversation.findFirst({
         where: {
-          phoneNumber: conversationPhoneNumber
+          OR: [
+            { phoneNumber: conversationPhoneNumber }, // Without + prefix
+            { phoneNumber: `+${conversationPhoneNumber}` } // With + prefix
+          ]
         }
       });
 
