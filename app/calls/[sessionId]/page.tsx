@@ -43,6 +43,8 @@ function NewCallInterface({
     lastName: userContextResponse.data.user.lastName || 'User',
     email: userContextResponse.data.user.email || '',
     phoneNumber: userContextResponse.data.user.phoneNumber || '',
+    dateOfBirth: userContextResponse.data.user.dateOfBirth || null,
+    createdAt: userContextResponse.data.user.createdAt || null,
     address: userContextResponse.data.user.address ? {
       fullAddress: userContextResponse.data.user.address.fullAddress || '',
       postCode: userContextResponse.data.user.address.postCode || '',
