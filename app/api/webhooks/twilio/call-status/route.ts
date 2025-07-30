@@ -142,14 +142,28 @@ export async function POST(request: NextRequest) {
       'ringing': 'ringing', 
       'answered': 'connected',
       'in-progress': 'connected',
-      'completed': 'completed',
       'busy': 'no_answer',
       'failed': 'failed',
       'no-answer': 'no_answer',
       'canceled': 'failed'
     };
 
-    const ourStatus = statusMapping[effectiveStatus] || effectiveStatus;
+    // CRITICAL FIX: Handle 'completed' status based on whether agent actually connected
+    let ourStatus: string;
+    if (effectiveStatus === 'completed') {
+      // Only mark as 'completed' if agent actually answered and had meaningful talk time
+      if (callSession.connectedAt && callSession.talkTimeSeconds && callSession.talkTimeSeconds > 5) {
+        ourStatus = 'completed';
+        console.log(`✅ Call ${CallSid} marked as completed - agent connected with ${callSession.talkTimeSeconds}s talk time`);
+      } else {
+        // Call flow completed but no agent connection = missed call
+        ourStatus = callSession.direction === 'inbound' ? 'missed_call' : 'no_answer';
+        console.log(`📞 Call ${CallSid} completed without agent connection - marking as ${ourStatus} (direction: ${callSession.direction})`);
+        console.log(`🔍 Connection details: connectedAt=${callSession.connectedAt}, talkTime=${callSession.talkTimeSeconds}s`);
+      }
+    } else {
+      ourStatus = statusMapping[effectiveStatus] || effectiveStatus;
+    }
     
     // Prepare update data
     const updateData: any = {

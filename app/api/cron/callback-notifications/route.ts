@@ -5,9 +5,11 @@ import { logger } from '@/modules/core';
 /**
  * Callback Notification Cron Job
  * 
- * Runs every minute to check for callbacks due in 5 minutes.
- * Queues callbacks for agents and triggers in-app notifications.
+ * Runs every minute to check for:
+ * 1. Callbacks due in 5 minutes (advance notification)
+ * 2. Overdue callbacks that haven't been dealt with yet
  * 
+ * Queues callbacks for agents and triggers in-app notifications.
  * If preferred agent is offline, routes to available online agent.
  */
 export async function GET(request: NextRequest) {
@@ -16,18 +18,33 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🔔 [CRON] Callback notification check starting...');
     
-    // Calculate 5 minutes from now
+    // Calculate time windows
+    const now = new Date();
     const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
     const oneMinuteFromNow = new Date(Date.now() + 1 * 60 * 1000);
     
-    // Find callbacks that are due in 5 minutes (±1 minute window to avoid missing any)
+    // Find callbacks that need to be queued:
+    // 1. Upcoming callbacks (4-6 minutes from now) with status 'pending'
+    // 2. Overdue callbacks (past scheduled time) with status 'pending' OR 'accepted'
     const dueCallbacks = await prisma.callback.findMany({
       where: {
-        status: 'pending',
-        scheduledFor: {
-          gte: new Date(Date.now() + 4 * 60 * 1000), // 4 minutes from now
-          lte: new Date(Date.now() + 6 * 60 * 1000), // 6 minutes from now
-        }
+        OR: [
+          // Upcoming callbacks for advance notification
+          {
+            status: 'pending',
+            scheduledFor: {
+              gte: new Date(Date.now() + 4 * 60 * 1000), // 4 minutes from now
+              lte: new Date(Date.now() + 6 * 60 * 1000), // 6 minutes from now
+            }
+          },
+          // Overdue callbacks that haven't been completed yet
+          {
+            status: { in: ['pending', 'accepted'] },
+            scheduledFor: {
+              lt: now // Past the scheduled time
+            }
+          }
+        ]
       },
       include: {
         preferredAgent: {
@@ -49,27 +66,47 @@ export async function GET(request: NextRequest) {
     });
 
     if (dueCallbacks.length === 0) {
-      console.log('📭 No callbacks due for notification');
+      console.log('📭 No callbacks due for notification or overdue callbacks to process');
       return NextResponse.json({ 
         success: true, 
-        message: 'No callbacks due for notification',
+        message: 'No callbacks due for notification or overdue callbacks to process',
         processed: 0
       });
     }
 
-    console.log(`🔔 Found ${dueCallbacks.length} callbacks due for notification`);
+    // Categorize callbacks for logging
+    const upcomingCallbacks = dueCallbacks.filter((cb: any) => 
+      cb.status === 'pending' && new Date(cb.scheduledFor) > now
+    );
+    const overdueCallbacks = dueCallbacks.filter((cb: any) => 
+      new Date(cb.scheduledFor) <= now
+    );
+
+    console.log(`🔔 Found ${dueCallbacks.length} callbacks to process:`);
+    console.log(`   📅 ${upcomingCallbacks.length} upcoming (advance notification)`);
+    console.log(`   ⏰ ${overdueCallbacks.length} overdue (past scheduled time)`);
 
     const results = {
       processed: 0,
       notified: 0,
       routed: 0,
-      errors: 0
+      errors: 0,
+      upcoming: 0,
+      overdue: 0
     };
 
     // Process each callback
     for (const callback of dueCallbacks) {
       try {
         results.processed++;
+        
+        // Track if this is upcoming or overdue
+        const isOverdue = new Date(callback.scheduledFor) <= now;
+        if (isOverdue) {
+          results.overdue++;
+        } else {
+          results.upcoming++;
+        }
         
         // Get user details for the callback
         const userContext = await getUserCallContext(Number(callback.userId));
@@ -133,11 +170,11 @@ export async function GET(request: NextRequest) {
 
     const duration = Date.now() - startTime;
     
-    console.log(`✅ [CRON] Callback notifications completed: ${results.notified}/${results.processed} notified, ${results.routed} routed (${duration}ms)`);
+    console.log(`✅ [CRON] Callback notifications completed: ${results.notified}/${results.processed} processed (${results.upcoming} upcoming, ${results.overdue} overdue), ${results.routed} routed (${duration}ms)`);
     
     return NextResponse.json({
       success: true,
-      message: `Processed ${results.processed} callbacks, sent ${results.notified} notifications`,
+      message: `Processed ${results.processed} callbacks (${results.upcoming} upcoming, ${results.overdue} overdue), sent ${results.notified} notifications`,
       results,
       duration
     });

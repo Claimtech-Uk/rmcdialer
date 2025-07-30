@@ -179,21 +179,37 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           },
         });
       } catch (error) {
-        console.warn(`⚠️ Hume TTS out-of-hours greeting failed, falling back to Alice voice:`, error instanceof Error ? error.message : String(error));
+        console.warn(`⚠️ Hume TTS out-of-hours greeting failed, trying fallback:`, error instanceof Error ? error.message : String(error));
         
-        const fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. Unfortunately, you've caught us outside of our normal working hours. We will call you back as soon as possible.`;
-        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+        // Fallback - try to generate basic Hume TTS without personalization
+        try {
+          const humeTTSService = new SimpleHumeTTSService();
+          const fallbackAudio = await humeTTSService.generateOutOfHoursGreeting(); // No caller name
+          
+          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">${fallbackMessage}</Say>
-    <Pause length="1"/>
-    <Say voice="alice">Thank you for your patience.</Say>
+    <Play>${fallbackAudio}</Play>
     <Hangup/>
 </Response>`, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/xml',
-          },
-        });
+            status: 200,
+            headers: { 'Content-Type': 'application/xml' }
+          });
+        } catch (fallbackError) {
+          console.error(`❌ Hume TTS fallback also failed:`, fallbackError);
+          
+          // Final fallback - simple text (no voice attribute)
+          const fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. Unfortunately, you've caught us outside of our normal working hours. We will call you back as soon as possible. Thank you for your patience.`;
+          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>${fallbackMessage}</Say>
+    <Hangup/>
+</Response>`, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/xml',
+            },
+          });
+        }
       }
     }
     
@@ -340,13 +356,16 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       }
     }
 
-    // 3. Find available agents with proper validation (if not using AI)
+    // 3. SIMPLIFIED AGENT VALIDATION - Check for available agents
+    console.log(`🔍 Checking for available agents...`);
+    
+    // Simple agent availability check (keeping existing logic working)
     const availableAgents = await prisma.agentSession.findMany({
       where: {
         status: 'available',
         logoutAt: null,
         agent: {
-          isActive: true // Ensure agent record exists and is active
+          isActive: true
         }
       },
       include: {
@@ -361,31 +380,26 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         }
       },
       orderBy: {
-        lastActivity: 'asc' // Least recently active agent first
+        lastActivity: 'asc'
       },
       take: 1
     });
 
-    const availableAgent = availableAgents[0];
+    const validatedAgent = availableAgents[0];
     console.log(`👥 Available agents: ${availableAgents.length}`);
     
-    // Additional validation: ensure agent record actually exists
-    let validatedAgent = null;
-    if (availableAgent?.agent?.id) {
-      try {
-        const agentExists = await prisma.agent.findUnique({
-          where: { id: availableAgent.agent.id, isActive: true }
-        });
-        if (agentExists) {
-          validatedAgent = availableAgent;
-          console.log(`✅ Validated agent ${availableAgent.agentId}: ${availableAgent.agent.firstName} ${availableAgent.agent.lastName}`);
-        } else {
-          console.warn(`⚠️ Agent session ${availableAgent.id} references non-existent agent ${availableAgent.agentId}`);
-        }
-      } catch (validationError) {
-        console.error(`❌ Failed to validate agent ${availableAgent.agentId}:`, validationError);
-      }
+    // CRITICAL: Determine the right message type based on agent availability
+    let messageType: 'connecting' | 'busy' | 'out_of_hours';
+    
+    if (!withinBusinessHours) {
+      messageType = 'out_of_hours';
+    } else if (validatedAgent) {
+      messageType = 'connecting'; 
+    } else {
+      messageType = 'busy';
     }
+    
+    console.log(`🎵 Message type determined: ${messageType} (Hours: ${withinBusinessHours}, Agent: ${!!validatedAgent})`);
 
     // 4. Create call session regardless of agent availability - with proper agent validation
     let callSession;
@@ -593,8 +607,9 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         : 'https://dialer.solvosolutions.co.uk';
       const recordingCallbackUrl = `${baseUrl}/api/webhooks/twilio/recording`;
       const statusCallbackUrl = `${baseUrl}/api/webhooks/twilio/call-status`;
+      const dialActionUrl = `${baseUrl}/api/webhooks/twilio/dial-action`;
       
-      console.log(`📡 Webhook URLs: Recording=${recordingCallbackUrl}, Status=${statusCallbackUrl}`);
+      console.log(`📡 Webhook URLs: Recording=${recordingCallbackUrl}, Status=${statusCallbackUrl}, DialAction=${dialActionUrl}`);
       
       console.log(`📞 [Voice Webhook] Generating TwiML for call from ${from} to agent ${agentClientName}`);
       console.log(`🔍 [Voice Webhook] CallerInfo for TwiML:`, {
@@ -627,7 +642,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           statusCallback="${statusCallbackUrl}"
           statusCallbackEvent="initiated ringing answered completed busy no-answer failed"
           statusCallbackMethod="POST"
-          action="${statusCallbackUrl}">
+          action="${dialActionUrl}">
         <Client>
             <Identity>${agentClientName}</Identity>
             <Parameter name="originalCallSid" value="${callSid}" />
@@ -661,17 +676,17 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
       } catch (error) {
         console.warn('⚠️ Hume TTS connecting greeting failed, using Alice voice:', error instanceof Error ? error.message : String(error));
         
-        // Fallback to Alice voice connecting greeting
+        // Fallback to simple voice connecting greeting (no Alice)
         return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Hello${firstName ? ' ' + firstName : ' there'}! Welcome to Resolve My Claim. Please hold while we connect you to an available agent.</Say>
+    <Say>Hello${firstName ? ' ' + firstName : ' there'}! Welcome to Resolve My Claim. Please hold while we connect you to an available agent.</Say>
     <Dial timeout="30" 
           record="record-from-answer" 
           recordingStatusCallback="${recordingCallbackUrl}"
           statusCallback="${statusCallbackUrl}"
           statusCallbackEvent="initiated ringing answered completed busy no-answer failed"
           statusCallbackMethod="POST"
-          action="${statusCallbackUrl}">
+          action="${dialActionUrl}">
         <Client>
             <Identity>${agentClientName}</Identity>
             <Parameter name="originalCallSid" value="${callSid}" />
@@ -681,7 +696,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
             ${callerInfo?.user ? `<Parameter name="userId" value="${callerInfo.user.id}" />` : ''}
         </Client>
     </Dial>
-    <Say voice="alice">I'm sorry, the agent couldn't be reached right now. We'll have someone call you back as soon as possible. Thank you!</Say>
+    <Say>I'm sorry, the agent couldn't be reached right now. We'll have someone call you back as soon as possible. Thank you!</Say>
     <Hangup/>
 </Response>`, {
           status: 200,
@@ -762,15 +777,29 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
           },
         });
       } catch (error) {
-        console.warn(`⚠️ Hume TTS busy greeting failed, falling back to Alice voice:`, error instanceof Error ? error.message : String(error));
+        console.warn(`⚠️ Hume TTS busy greeting failed, trying fallback:`, error instanceof Error ? error.message : String(error));
         
-        // Fallback to Alice voice greeting
-        const fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. All our agents are currently busy helping other customers. We'll have someone call you back shortly.`;
-        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+        // Fallback - try to generate basic Hume TTS without personalization
+        try {
+          const humeTTSService = new SimpleHumeTTSService();
+          const fallbackAudio = await humeTTSService.generateBusyGreeting(); // No caller name
+          
+          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">${fallbackMessage}</Say>
-    <Pause length="1"/>
-    <Say voice="alice">Thank you for your patience.</Say>
+    <Play>${fallbackAudio}</Play>
+    <Hangup/>
+</Response>`, {
+            status: 200,
+            headers: { 'Content-Type': 'application/xml' }
+          });
+        } catch (fallbackError) {
+          console.error(`❌ Hume TTS fallback also failed:`, fallbackError);
+          
+          // Final fallback - simple text (no voice attribute)
+          const fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. All our agents are currently busy helping other customers. We'll have someone call you back shortly. Thank you for your patience.`;
+          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>${fallbackMessage}</Say>
     <Hangup/>
 </Response>`, {
           status: 200,
@@ -786,7 +815,7 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
     
     return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">I'm sorry, there was an error processing your call. Please try again later.</Say>
+    <Say>I'm sorry, there was an error processing your call. Please try again later.</Say>
     <Hangup/>
 </Response>`, {
       status: 200,
