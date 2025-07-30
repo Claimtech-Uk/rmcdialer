@@ -71,14 +71,14 @@ export async function handleInboundCall(
     } : null;
     
     // Check agent availability
-    const availableAgents = await prisma.agent_sessions.findMany({
+    const availableAgents = await prisma.agentSession.findMany({
       where: {
         status: 'available',
-        logout_at: null,
-        agents: { isActive: true }
+        logoutAt: null,
+        agent: { isActive: true }
       },
       include: {
-        agents: {
+        agent: {
           select: {
             id: true,
             firstName: true,
@@ -88,7 +88,7 @@ export async function handleInboundCall(
           }
         }
       },
-      orderBy: { last_activity: 'asc' },
+      orderBy: { lastActivity: 'asc' },
       take: 1
     });
 
@@ -215,8 +215,8 @@ async function createCallSession(
     };
 
     // Only set agentId if we have a validated agent
-    if (validatedAgent?.agents?.id) {
-      sessionData.agentId = validatedAgent.agents.id;
+    if (validatedAgent?.agent?.id) {
+      sessionData.agentId = validatedAgent.agent.id;
     } else {
       // For missed calls, use AI agent for tracking
       const aiAgentService = createAiAgentService(prisma);
@@ -273,8 +273,8 @@ async function createCallSession(
     // Find agent ID for call session tracking
     let agentIdToUse;
     
-    if (validatedAgent?.agents?.id) {
-      agentIdToUse = validatedAgent.agents.id;
+    if (validatedAgent?.agent?.id) {
+      agentIdToUse = validatedAgent.agent.id;
     } else {
       // Use AI agent for unknown/missed calls
       const aiAgentService = createAiAgentService(prisma);
@@ -458,18 +458,18 @@ async function routeCallToAgent(
   validatedAgent: any,
   callSession: any
 ): Promise<NextResponse> {
-      console.log(`✅ Routing call from ${callerName} to agent ${validatedAgent.agents.firstName} ${validatedAgent.agents.lastName}`);
-      console.log(`📊 Agent Session Details:`, {
+          console.log(`✅ Routing call from ${callerName} to agent ${validatedAgent.agent.firstName} ${validatedAgent.agent.lastName}`);
+          console.log(`📊 Agent Session Details:`, {
       agentSessionId: validatedAgent.id,
-      agentId: validatedAgent.agent_id,
-    status: validatedAgent.status,
-    currentCallSessionId: validatedAgent.currentCallSessionId
+      agentId: validatedAgent.agentId,
+          status: validatedAgent.status,
+      currentCallSessionId: validatedAgent.current_call_session_id
   });
   
   // DO NOT update agent status here - let call-status webhook handle it
-    console.log(`📞 Attempting to dial agent ${validatedAgent.agent_id} - status will be updated on successful connection`);
+      console.log(`📞 Attempting to dial agent ${validatedAgent.agentId} - status will be updated on successful connection`);
   
-  const agentClientName = `agent_${validatedAgent.agent_id}`;
+  const agentClientName = `agent_${validatedAgent.agentId}`;
   console.log(`🎯 CRITICAL: Dialing Twilio client identity: "${agentClientName}"`);
   
   // Use environment-specific URL for webhooks
