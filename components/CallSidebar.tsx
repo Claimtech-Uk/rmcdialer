@@ -829,6 +829,35 @@ function PostCallContent({
     { value: 'schedule-appointment', label: 'Schedule appointment' }
   ];
 
+  // Add TRPC mutation for recording outcomes
+  const recordCallOutcomeMutation = api.calls.recordOutcome.useMutation({
+    onSuccess: (result: any) => {
+      console.log('✅ Call outcome recorded in database:', result);
+      alert('Call outcome saved successfully!');
+      onClose?.();
+      onDispositionComplete?.();
+    },
+    onError: (error: any) => {
+      console.error('❌ Failed to record call outcome:', error);
+      alert(`Failed to save call outcome: ${error.message || 'Please try again.'}`);
+    }
+  });
+
+  // Map CallSidebar dispositions to standard call outcome types
+  const mapDispositionToOutcomeType = (disposition: string) => {
+    const mappings = {
+      'completed': 'completed_form' as const,
+      'callback': 'call_back' as const,
+      'no-answer': 'no_answer' as const, 
+      'busy': 'no_answer' as const,
+      'wrong-number': 'bad_number' as const,
+      'voicemail': 'no_answer' as const, // Use standard outcome type
+      'declined': 'hung_up' as const,
+      'technical-issue': 'no_answer' as const
+    };
+    return mappings[disposition as keyof typeof mappings] || 'hung_up' as const;
+  };
+
   const handleSaveAndComplete = async () => {
     if (!disposition) {
       alert('Please select a call disposition before completing.');
@@ -837,7 +866,6 @@ function PostCallContent({
 
     setSaving(true);
     try {
-      // TODO: Implement actual save logic
       console.log('💾 Saving call outcome:', {
         callSid: callData?.callSid,
         disposition,
@@ -846,16 +874,60 @@ function PostCallContent({
         callbackDate
       });
 
-      // Simulate save delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // First, find the session ID from the call SID
+      let sessionId = null;
+      if (callData?.callSid) {
+        try {
+          const sessionLookup = await fetch('/api/simple-call-lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callSid: callData.callSid })
+          });
+          
+          if (sessionLookup.ok) {
+            const lookupResult = await sessionLookup.json();
+            if (lookupResult.success && lookupResult.session) {
+              sessionId = lookupResult.session.id;
+              console.log('✅ Found session ID:', sessionId);
+            }
+          }
+        } catch (lookupError) {
+          console.error('⚠️ Session lookup failed:', lookupError);
+        }
+      }
+
+      if (!sessionId) {
+        throw new Error('Could not find call session - unable to save outcome');
+      }
+
+      // Map to standard outcome type
+      const outcomeType = mapDispositionToOutcomeType(disposition);
       
-      alert('Call outcome saved successfully!');
-      onClose?.();
-      onDispositionComplete?.(); // Call the prop when disposition is saved
+      // Prepare callback data if callback disposition
+      let callbackDateTime: Date | undefined = undefined;
+      let callbackReason: string | undefined = undefined;
+      
+      if (disposition === 'callback' && callbackDate) {
+        callbackDateTime = new Date(callbackDate);
+        callbackReason = 'Customer requested callback via inbound call';
+      }
+
+      // Save outcome via TRPC
+      await recordCallOutcomeMutation.mutateAsync({
+        sessionId: sessionId,
+        outcomeType: outcomeType,
+        outcomeNotes: finalNotes || `Inbound call disposition: ${disposition}`,
+        magicLinkSent: false,
+        smsSent: false,
+        documentsRequested: [],
+        nextCallDelayHours: undefined,
+        callbackDateTime: callbackDateTime,
+        callbackReason: callbackReason
+      });
+      
     } catch (error) {
       console.error('❌ Failed to save call outcome:', error);
-      alert('Failed to save call outcome. Please try again.');
-    } finally {
+      alert(`Failed to save call outcome: ${error instanceof Error ? error.message : 'Please try again.'}`);
       setSaving(false);
     }
   };
