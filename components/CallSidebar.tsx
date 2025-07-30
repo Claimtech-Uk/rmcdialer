@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, User } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card } from '@/modules/core/components/ui/card';
+import { api } from '@/lib/trpc/client';
 
 type CallState = 'idle' | 'ringing' | 'connected' | 'ended';
 
@@ -698,67 +699,43 @@ function ConnectedCallContent({
   );
 }
 
-// Recent SMS Section Component
+// Recent SMS Section Component  
 function RecentSMSSection({ userDetails }: { userDetails: any }) {
-  const [smsData, setSmsData] = useState<any[]>([]);
-  const [loadingSMS, setLoadingSMS] = useState(false);
-
-  // Load recent SMS messages for this user
-  useEffect(() => {
-    if (userDetails?.userId) {
-      loadRecentSMS();
+  // Use TRPC to fetch real SMS conversations for this user
+  const { data: smsConversationsResponse, isLoading: loadingSMS } = api.communications.sms.getConversations.useQuery(
+    { userId: userDetails?.userId },
+    {
+      enabled: !!userDetails?.userId,
+      staleTime: 5 * 60 * 1000, // 5 minutes cache
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
     }
-  }, [userDetails?.userId]);
+  );
 
-  const loadRecentSMS = async () => {
-    if (!userDetails?.userId) return;
+  // Extract recent messages from conversations
+  const recentMessages = React.useMemo(() => {
+    if (!smsConversationsResponse?.data) return [];
     
-    setLoadingSMS(true);
-    try {
-      // This would be a new API endpoint to get recent SMS for a user
-      const response = await fetch(`/api/users/${userDetails.userId}/sms/recent`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setSmsData(result.messages || []);
-      } else {
-        console.warn('⚠️ Failed to load SMS data:', response.status);
-        // Mock data for now until API is implemented
-        setSmsData([
-          {
-            id: '1',
-            body: 'Hello, we need to discuss your claim. Please call us back.',
-            direction: 'outbound',
-            created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-            status: 'delivered'
-          },
-          {
-            id: '2', 
-            body: 'Yes I can talk tomorrow morning',
-            direction: 'inbound',
-            created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-            status: 'received'
-          },
-          {
-            id: '3',
-            body: 'We have sent you a magic link to access your documents.',
-            direction: 'outbound', 
-            created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-            status: 'delivered'
-          }
-        ]);
+    const allMessages: any[] = [];
+    
+    // Collect recent messages from all conversations
+    smsConversationsResponse.data.forEach((conversation: any) => {
+      if (conversation.recentMessages && conversation.recentMessages.length > 0) {
+        // Add conversation context to messages
+        const messagesWithContext = conversation.recentMessages.map((msg: any) => ({
+          ...msg,
+          conversationId: conversation.id,
+          phoneNumber: conversation.phoneNumber
+        }));
+        allMessages.push(...messagesWithContext);
       }
-    } catch (error) {
-      console.error('❌ Error loading SMS data:', error);
-      // Fallback to empty array
-      setSmsData([]);
-    } finally {
-      setLoadingSMS(false);
-    }
-  };
+    });
+    
+    // Sort by date (most recent first) and take top 4
+    return allMessages
+      .sort((a, b) => new Date(b.sentAt || b.created_at).getTime() - new Date(a.sentAt || a.created_at).getTime())
+      .slice(0, 4);
+  }, [smsConversationsResponse]);
 
   return (
     <Card className="p-4">
@@ -768,9 +745,9 @@ function RecentSMSSection({ userDetails }: { userDetails: any }) {
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
           <span>Loading messages...</span>
         </div>
-      ) : smsData.length > 0 ? (
+      ) : recentMessages.length > 0 ? (
         <div className="space-y-3 max-h-40 overflow-y-auto">
-          {smsData.slice(0, 4).map((sms: any, index: number) => (
+          {recentMessages.map((sms: any, index: number) => (
             <div key={sms.id || index} className={`p-3 rounded-lg text-sm ${
               sms.direction === 'inbound' 
                 ? 'bg-blue-50 border-l-4 border-blue-400 ml-4' 
@@ -783,31 +760,27 @@ function RecentSMSSection({ userDetails }: { userDetails: any }) {
                   {sms.direction === 'inbound' ? '📱 From User' : '📤 To User'}
                 </span>
                 <span className="text-xs text-gray-500">
-                  {new Date(sms.created_at).toLocaleDateString()} {new Date(sms.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  {new Date(sms.sentAt || sms.created_at).toLocaleDateString()} {new Date(sms.sentAt || sms.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </span>
               </div>
               <div className={`${
                 sms.direction === 'inbound' ? 'text-blue-900' : 'text-gray-800'
               }`}>
-                {sms.body}
+                {sms.body || sms.message}
               </div>
               <div className="flex justify-between items-center mt-2">
                 <span className={`text-xs px-2 py-0.5 rounded ${
                   sms.status === 'delivered' ? 'bg-green-100 text-green-700' :
                   sms.status === 'received' ? 'bg-blue-100 text-blue-700' :
+                  sms.status === 'sent' ? 'bg-blue-100 text-blue-700' :
                   sms.status === 'failed' ? 'bg-red-100 text-red-700' :
                   'bg-gray-100 text-gray-700'
                 }`}>
-                  {sms.status}
+                  {sms.status || 'sent'}
                 </span>
               </div>
             </div>
           ))}
-          {smsData.length > 4 && (
-            <div className="text-xs text-gray-500 text-center py-1">
-              +{smsData.length - 4} more messages
-            </div>
-          )}
         </div>
       ) : (
         <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded">
