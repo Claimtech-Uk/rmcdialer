@@ -340,108 +340,16 @@ export default function AgentManagementPage() {
         
         {/* Add Agent Buttons - with fallback options */}
         <div className="flex gap-2">
-          {/* Primary Dialog Trigger Button */}
-          <Dialog 
-            open={isCreateModalOpen} 
-            onOpenChange={(open) => {
-              console.log('Dialog onOpenChange called with:', open);
-              setIsCreateModalOpen(open);
+          {/* Simple Manual Button that directly opens modal */}
+          <Button
+            onClick={() => {
+              console.log('Add Agent button clicked - opening modal');
+              setIsCreateModalOpen(true);
             }}
           >
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Agent
-              </Button>
-            </DialogTrigger>
-            
-            <DialogContent className="max-w-md bg-red-500 border-4 border-black shadow-2xl p-6 rounded-lg z-[9999]">
-              <DialogHeader>
-                <DialogTitle>Create New Agent</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleCreateSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input
-                      id="firstName"
-                      value={createFormData.firstName}
-                      onChange={(e) => setCreateFormData(prev => ({ ...prev, firstName: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input
-                      id="lastName"
-                      value={createFormData.lastName}
-                      onChange={(e) => setCreateFormData(prev => ({ ...prev, lastName: e.target.value }))}
-                      required
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={createFormData.email}
-                    onChange={(e) => setCreateFormData(prev => ({ ...prev, email: e.target.value }))}
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={createFormData.password}
-                    onChange={(e) => setCreateFormData(prev => ({ ...prev, password: e.target.value }))}
-                    required
-                    minLength={8}
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="role">Role</Label>
-                  <Select 
-                    value={createFormData.role} 
-                    onValueChange={(value) => setCreateFormData(prev => ({ ...prev, role: value as any }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="agent">Agent</SelectItem>
-                      <SelectItem value="supervisor">Supervisor</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="isAiAgent"
-                    checked={createFormData.isAiAgent}
-                    onChange={(e) => setCreateFormData(prev => ({ ...prev, isAiAgent: e.target.checked }))}
-                  />
-                  <Label htmlFor="isAiAgent">AI Agent</Label>
-                </div>
-
-                <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={createAgentMutation.isPending}>
-                    {createAgentMutation.isPending ? 'Creating...' : 'Create Agent'}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Agent
+          </Button>
           
           {/* Fallback Manual Button for Testing */}
           <Button
@@ -452,6 +360,7 @@ export default function AgentManagementPage() {
             }}
           >
             Manual Open
+          </Button>
           
           {/* Simple Test Button */}
           <Button
@@ -461,7 +370,7 @@ export default function AgentManagementPage() {
             }}
           >
             Test Click
-          </Button>          </Button>
+          </Button>
         </div>
         
         {debugInfo?.isAdmin ? null : (
@@ -470,6 +379,116 @@ export default function AgentManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Simple Custom Modal - No Radix UI complexity */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm"
+            onClick={() => setIsCreateModalOpen(false)}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-white rounded-lg shadow-2xl border-4 border-red-500 p-6 max-w-md w-full mx-4 z-[10000]">
+            {/* Close Button */}
+            <button
+              onClick={() => setIsCreateModalOpen(false)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-xl font-bold"
+            >
+              ×
+            </button>
+            
+            {/* Modal Header */}
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Create New Agent</h2>
+            </div>
+            
+            {/* Modal Body - Form */}
+            <form onSubmit={handleCreateSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="firstName">First Name</Label>
+                  <Input
+                    id="firstName"
+                    value={createFormData.firstName}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lastName">Last Name</Label>
+                  <Input
+                    id="lastName"
+                    value={createFormData.lastName}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={createFormData.email}
+                  onChange={(e) => setCreateFormData(prev => ({ ...prev, email: e.target.value }))}
+                  required
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={createFormData.password}
+                  onChange={(e) => setCreateFormData(prev => ({ ...prev, password: e.target.value }))}
+                  required
+                  minLength={8}
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="role">Role</Label>
+                <Select 
+                  value={createFormData.role} 
+                  onValueChange={(value) => setCreateFormData(prev => ({ ...prev, role: value as any }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="agent">Agent</SelectItem>
+                    <SelectItem value="supervisor">Supervisor</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="isAiAgent"
+                  checked={createFormData.isAiAgent}
+                  onChange={(e) => setCreateFormData(prev => ({ ...prev, isAiAgent: e.target.checked }))}
+                />
+                <Label htmlFor="isAiAgent">AI Agent</Label>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={createAgentMutation.isPending}>
+                  {createAgentMutation.isPending ? 'Creating...' : 'Create Agent'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <Card>
