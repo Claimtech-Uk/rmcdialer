@@ -113,7 +113,7 @@ export class QueueLevelMonitorService {
             logger.info(`✅ [QUEUE-MONITOR] Unsigned users queue regenerated: ${result.queuePopulated} users`);
           } catch (error) {
             logger.error('❌ [QUEUE-MONITOR] Failed to regenerate unsigned users queue:', error);
-            regenerationDetails.unsigned_users = { error: error.message };
+            regenerationDetails.unsigned_users = { error: error instanceof Error ? error.message : String(error) };
           }
         }
         
@@ -130,7 +130,7 @@ export class QueueLevelMonitorService {
             logger.info(`✅ [QUEUE-MONITOR] Outstanding requests queue regenerated: ${result.queuePopulated} users`);
           } catch (error) {
             logger.error('❌ [QUEUE-MONITOR] Failed to regenerate outstanding requests queue:', error);
-            regenerationDetails.outstanding_requests = { error: error.message };
+            regenerationDetails.outstanding_requests = { error: error instanceof Error ? error.message : String(error) };
           }
         }
         
