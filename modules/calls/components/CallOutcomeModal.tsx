@@ -117,6 +117,9 @@ export function CallOutcomeModal({
   const [notes, setNotes] = useState('');
   const [callbackDateTime, setCallbackDateTime] = useState('');
   const [callbackReason, setCallbackReason] = useState('');
+  
+  // Outcomes that require scheduling a follow-up call
+  const callbackRequiredOutcomes = ['call_back', 'might_complete', 'going_to_complete'];
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -124,11 +127,11 @@ export function CallOutcomeModal({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Set default callback time to tomorrow at 10 AM when callback is selected
+  // Set default callback time when callback-required outcomes are selected
   const handleOutcomeChange = (outcomeType: string) => {
     setSelectedOutcome(outcomeType);
     
-    if (outcomeType === 'call_back' && !callbackDateTime) {
+    if (callbackRequiredOutcomes.includes(outcomeType) && !callbackDateTime) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(10, 0, 0, 0); // Default to 10 AM
@@ -140,7 +143,7 @@ export function CallOutcomeModal({
     if (!selectedOutcome) return;
 
     // Validation for callback scheduling
-    if (selectedOutcome === 'call_back') {
+    if (callbackRequiredOutcomes.includes(selectedOutcome)) {
       if (!callbackDateTime) {
         alert('Please select a callback date and time');
         return;
@@ -174,9 +177,12 @@ export function CallOutcomeModal({
     const outcome: CallOutcomeOptions = {
       outcomeType: selectedOutcome as any,
       outcomeNotes: notes.trim() || undefined,
-      ...(selectedOutcome === 'call_back' && callbackDateTime && {
+      ...(callbackRequiredOutcomes.includes(selectedOutcome) && callbackDateTime && {
         callbackDateTime: new Date(callbackDateTime),
-        callbackReason: callbackReason.trim() || 'Customer requested callback',
+        callbackReason: callbackReason.trim() || 
+          (selectedOutcome === 'might_complete' ? 'Follow up on interest shown' :
+           selectedOutcome === 'going_to_complete' ? 'Follow up on commitment to complete' :
+           'Customer requested callback'),
         callbackScheduled: true
       })
     };
@@ -190,7 +196,7 @@ export function CallOutcomeModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white shadow-2xl border-0">
+      <Card className="w-full max-w-md sm:max-w-lg md:max-w-2xl lg:max-w-3xl xl:max-w-4xl max-h-[90vh] overflow-y-auto bg-white shadow-2xl border-0">
         <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
           <CardTitle className="flex items-center gap-3">
             <Phone className="w-6 h-6" />
@@ -212,7 +218,7 @@ export function CallOutcomeModal({
           {/* Disposition Selection */}
           <div>
             <Label className="text-base font-semibold mb-3 block">Disposition *</Label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {OUTCOME_TYPES.map((outcome) => {
                 const Icon = outcome.icon;
                 const isSelected = selectedOutcome === outcome.type;
@@ -240,19 +246,23 @@ export function CallOutcomeModal({
           </div>
 
           {/* Callback Scheduling */}
-          {selectedOutcome === 'call_back' && (
+          {['call_back', 'might_complete', 'going_to_complete'].includes(selectedOutcome) && (
             <div className="border rounded-lg p-4 bg-purple-50 border-purple-200">
               <h3 className="font-semibold mb-3 flex items-center gap-2 text-purple-800">
                 <Calendar className="w-4 h-4" />
-                Schedule Callback
+                Schedule Follow-up Call
               </h3>
               
               <div className="mb-4 p-3 bg-purple-100 rounded-lg">
                 <p className="text-sm text-purple-700 mb-2">
-                  📞 <strong>A callback will be created for {userContext.firstName} {userContext.lastName}</strong>
+                  📞 <strong>A follow-up call will be scheduled for {userContext.firstName} {userContext.lastName}</strong>
                 </p>
                 <p className="text-xs text-purple-600">
-                  The customer will appear in the callback queue at the scheduled time for the preferred agent to call back.
+                  {selectedOutcome === 'might_complete' 
+                    ? 'The customer showed interest but needs more time. They will be called back to help them complete their claim.'
+                    : selectedOutcome === 'going_to_complete'
+                    ? 'The customer committed to completing their claim. A follow-up call will ensure they complete the process.'
+                    : 'The customer will appear in the callback queue at the scheduled time for the preferred agent to call back.'}
                 </p>
               </div>
               
@@ -388,7 +398,7 @@ export function CallOutcomeModal({
             disabled={
               !selectedOutcome || 
               isSubmitting || 
-              (selectedOutcome === 'call_back' && !callbackDateTime) ||
+              (callbackRequiredOutcomes.includes(selectedOutcome) && !callbackDateTime) ||
               (selectedOutcome === 'do_not_contact' && !notes.trim())
             }
             className={selectedOutcome === 'do_not_contact' 

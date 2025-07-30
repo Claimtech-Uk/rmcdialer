@@ -174,7 +174,7 @@ Thank you for calling!`;
       // If R2 is configured, upload and return URL
       if (this.r2Service) {
         try {
-          const audioUrl = await this.r2Service.uploadAudioFile(audioBase64, 'emergency', 'emergency');
+          const audioUrl = await this.r2Service.uploadAudioFile(audioBase64, 'busy', 'emergency');
           console.log('✅ Emergency message uploaded to R2:', audioUrl);
           return audioUrl;
         } catch (r2Error) {
