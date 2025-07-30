@@ -29,6 +29,9 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
+// Add debug hook to check auth state
+import { useEffect } from 'react';
+
 interface AgentFormData {
   email: string;
   password: string;

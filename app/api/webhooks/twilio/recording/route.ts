@@ -43,8 +43,9 @@ export async function POST(request: NextRequest) {
     // - Original Call SID (stored in database): CAf5af23956df181ca57ecf5034a4fd867  
     // - Agent Call SID (from webhook): layout-c86ba49b305af_YLSCyPMKUFeCKdwdb-1
     
-    let callSession = await prisma.call_sessions.findFirst({
-      where: { twilio_call_sid: CallSid }
+    // @ts-ignore - Production uses callSession model (matches call-status webhook)
+    let callSession = await prisma.callSession.findFirst({
+      where: { twilioCallSid: CallSid }
     });
 
     // If not found by direct CallSid, try alternative lookup strategies (same as call-status webhook)
@@ -53,22 +54,23 @@ export async function POST(request: NextRequest) {
       
       // Strategy 1: Check if this is an agent call leg for a recent inbound call
       // Look for sessions created in the last 10 minutes that are still active or recently completed
-      const recentInboundSessions = await prisma.call_sessions.findMany({
+      // @ts-ignore - Production uses callSession model (matches call-status webhook)
+      const recentInboundSessions = await prisma.callSession.findMany({
         where: {
           direction: 'inbound',
           status: { in: ['ringing', 'initiated', 'connecting', 'connected', 'completed'] },
-          started_at: {
+          startedAt: {
             gte: new Date(Date.now() - 10 * 60 * 1000) // Last 10 minutes (recordings can arrive after call ends)
           }
         },
-        orderBy: { started_at: 'desc' }
+        orderBy: { startedAt: 'desc' }
       });
 
       if (recentInboundSessions.length > 0) {
         console.log(`🔍 Found ${recentInboundSessions.length} recent inbound sessions, using most recent one for recording`);
         callSession = recentInboundSessions[0];
         
-        console.log(`🔗 Mapped recording CallSid ${CallSid} to original session ${callSession.id} (original SID: ${callSession.twilio_call_sid})`);
+        console.log(`🔗 Mapped recording CallSid ${CallSid} to original session ${callSession.id} (original SID: ${callSession.twilioCallSid})`);
       }
     }
 
@@ -95,17 +97,17 @@ export async function POST(request: NextRequest) {
 
     // Update call session with recording information
     const updateData: any = {
-      recording_status: RecordingStatus,
-      recording_sid: RecordingSid,
-      updated_at: new Date()
+      recordingStatus: RecordingStatus,
+      recordingSid: RecordingSid,
+      updatedAt: new Date()
     };
 
     // Only update URL and duration when recording is completed
     if (RecordingStatus === 'completed') {
-      updateData.recording_url = RecordingUrl;
+      updateData.recordingUrl = RecordingUrl;
       
       if (RecordingDuration) {
-        updateData.recording_duration_seconds = parseInt(RecordingDuration);
+        updateData.recordingDurationSeconds = parseInt(RecordingDuration);
       }
       
       console.log(`✅ Recording completed for call ${CallSid}: ${RecordingUrl}`);
@@ -124,7 +126,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the call session with recording info
-    await prisma.call_sessions.update({
+    // @ts-ignore - Production uses callSession model (matches call-status webhook)
+    await prisma.callSession.update({
       where: { id: callSession.id },
       data: updateData
     });

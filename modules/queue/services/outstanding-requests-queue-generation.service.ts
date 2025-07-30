@@ -6,7 +6,6 @@
  */
 
 import { prisma } from '../../../lib/db';
-import { replicaDb } from '@/lib/mysql';
 import { logger } from '../../core/utils/logger.utils';
 
 interface QueueGenerationResult {
@@ -83,17 +82,17 @@ export class OutstandingRequestsQueueGenerationService {
   }
   
   /**
-   * Get qualified users from user_call_scores table with validation
-   * Criteria: currentQueueType = 'outstanding_requests' AND isActive = true
-   * Enhanced: 2-hour cooling period + newest-first for tied scores + requirement validation
+   * Get qualified users from user_call_scores table - SIMPLIFIED
+   * No validation needed - users are already validated by scoring system
+   * Pre-call validation will happen when agents load them anyway
    */
   private async getQualifiedUsersFromScores() {
     try {
-      // Calculate 2-hour delay threshold
+      // Calculate 2-hour delay threshold (keep this safety check)
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
       
-      // Step 1: Get candidate users from user_call_scores
-      const candidateUsers = await prisma.userCallScore.findMany({
+      // Simply get the top 200 users with lowest scores - trust the scoring system
+      const qualifiedUsers = await prisma.userCallScore.findMany({
         where: {
           currentQueueType: 'outstanding_requests',
           isActive: true,
@@ -102,85 +101,21 @@ export class OutstandingRequestsQueueGenerationService {
             { nextCallAfter: null },
             { nextCallAfter: { lte: new Date() } }
           ],
-          // NEW: 2-hour cooling period for new user_call_scores
+          // 2-hour cooling period for new user_call_scores
           createdAt: {
             lte: twoHoursAgo
           }
         },
         orderBy: [
           { currentScore: 'asc' },    // Lower score = higher priority (0 is best)
-          { createdAt: 'desc' }       // NEW: Most recent first for tied scores (fresher leads prioritized)
+          { createdAt: 'desc' }       // Most recent first for tied scores
         ],
-        take: this.QUEUE_SIZE_LIMIT * 2   // Get more candidates for validation filtering
+        take: this.QUEUE_SIZE_LIMIT   // Just take exactly what we need (200)
       });
 
-      logger.info(`📊 [OUTSTANDING] Found ${candidateUsers.length} candidate users, validating requirements...`);
-
-      // Step 2: Validate each user actually has valid pending requirements
-      const validatedUsers = [];
-      const EXCLUDED_TYPES = [
-        'signature',
-        'vehicle_registration', 
-        'cfa',
-        'solicitor_letter_of_authority',
-        'letter_of_authority'
-      ];
-
-      for (const user of candidateUsers) {
-        try {
-          // Check user's actual requirements in replica DB
-          const userData = await replicaDb.user.findUnique({
-            where: { id: user.userId },
-            include: {
-              claims: {
-                include: {
-                  requirements: {
-                    where: { status: 'PENDING' },
-                    select: {
-                      type: true,
-                      claim_requirement_reason: true
-                    }
-                  }
-                }
-              }
-            }
-          });
-
-          if (!userData || !userData.is_enabled || !userData.current_signature_file_id) {
-            continue; // Skip invalid users
-          }
-
-          // Count valid pending requirements (applying our filtering logic)
-          const allRequirements = userData.claims.flatMap((claim: any) => claim.requirements);
-          const validRequirements = allRequirements.filter((req: any) => {
-            // Exclude standard excluded types
-            if (EXCLUDED_TYPES.includes(req.type || '')) {
-              return false;
-            }
-            // Exclude id_document with specific reason
-            if (req.type === 'id_document' && req.claim_requirement_reason === 'base requirement for claim.') {
-              return false;
-            }
-            return true;
-          });
-
-          if (validRequirements.length > 0) {
-            validatedUsers.push(user);
-            
-            // Stop when we have enough validated users
-            if (validatedUsers.length >= this.QUEUE_SIZE_LIMIT) {
-              break;
-            }
-          }
-
-        } catch (error) {
-          logger.warn(`⚠️ [OUTSTANDING] Failed to validate user ${user.userId}:`, error);
-          // Continue with next user
-        }
-      }
-
-      logger.info(`✅ [OUTSTANDING] Validated ${validatedUsers.length} out of ${candidateUsers.length} candidate users`);
-      return validatedUsers;
+      logger.info(`✅ [OUTSTANDING] Selected ${qualifiedUsers.length} pre-validated users (no additional validation needed)`);
+      
+      return qualifiedUsers;
 
     } catch (error) {
       logger.error('❌ [OUTSTANDING] Failed to get qualified users from user_call_scores:', error);
@@ -189,52 +124,44 @@ export class OutstandingRequestsQueueGenerationService {
   }
   
   /**
-   * Bulk populate outstanding_requests_queue table
+   * Bulk populate outstanding_requests_queue table using createMany
    */
   private async bulkPopulateQueue(users: any[]): Promise<number> {
-    let populated = 0;
+    logger.info(`📝 [OUTSTANDING] Bulk populating queue with ${users.length} users...`);
     
-    logger.info(`📝 [OUTSTANDING] Populating queue with ${users.length} users...`);
-    
-    for (let i = 0; i < users.length; i++) {
-      const user = users[i];
-      
-      try {
-        await (prisma as any).outstandingRequestsQueue.create({
-          data: {
-            userId: user.userId,
-            claimId: null, // Will be populated if needed
-            priorityScore: user.currentScore,
-            queuePosition: i + 1, // Position based on score ranking
-            status: 'pending',
-            queueReason: this.getQueueReason(user.currentScore),
-            // Outstanding requests specific fields
-            requirementTypes: ['document'], // Default requirement type
-            totalRequirements: 1,
-            pendingRequirements: 1,
-            completedRequirements: 0,
-            oldestRequirementDate: user.createdAt,
-            availableFrom: user.nextCallAfter || new Date(),
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        });
-        
-        populated++;
-        
-        // Log every 25 users for progress tracking
-        if (populated % 25 === 0) {
-          logger.info(`📝 [OUTSTANDING] Populated ${populated}/${users.length} users...`);
-        }
-        
-      } catch (error) {
-        logger.error(`❌ [OUTSTANDING] Failed to add user ${user.userId} to queue:`, error);
-        // Continue with next user instead of failing entire operation
-      }
+    try {
+      // Prepare all queue entries for bulk insert
+      const queueEntries = users.map((user, index) => ({
+        userId: user.userId,
+        claimId: null, // Will be populated if needed
+        priorityScore: user.currentScore,
+        queuePosition: index + 1, // Position based on score ranking
+        status: 'pending',
+        queueReason: this.getQueueReason(user.currentScore),
+        // Outstanding requests specific fields
+        requirementTypes: ['document'], // Default requirement type
+        totalRequirements: 1,
+        pendingRequirements: 1,
+        completedRequirements: 0,
+        oldestRequirementDate: user.createdAt,
+        availableFrom: user.nextCallAfter || new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }));
+
+      // Single bulk insert operation
+      const result = await (prisma as any).outstandingRequestsQueue.createMany({
+        data: queueEntries,
+        skipDuplicates: true // Skip if user already exists in queue
+      });
+
+      logger.info(`✅ [OUTSTANDING] Successfully bulk populated ${result.count} users in single operation`);
+      return result.count;
+
+    } catch (error) {
+      logger.error(`❌ [OUTSTANDING] Bulk population failed:`, error);
+      throw error;
     }
-    
-    logger.info(`✅ [OUTSTANDING] Successfully populated ${populated} out of ${users.length} users`);
-    return populated;
   }
   
   /**
