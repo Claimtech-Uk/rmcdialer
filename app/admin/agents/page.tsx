@@ -64,6 +64,24 @@ export default function AgentManagementPage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentEditData | null>(null);
   const [newPassword, setNewPassword] = useState('');
 
+  // Add debug state
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+
+  // Get current user info for debugging
+  const { data: currentUser } = api.auth.me.useQuery();
+
+  // Debug effect
+  useEffect(() => {
+    if (currentUser) {
+      setDebugInfo({
+        isLoggedIn: !!currentUser,
+        role: currentUser.agent?.role,
+        isAdmin: currentUser.agent?.role === 'admin',
+        permissions: currentUser.permissions
+      });
+    }
+  }, [currentUser]);
+
   // Form state for create
   const [createFormData, setCreateFormData] = useState<AgentFormData>({
     email: '',
@@ -288,6 +306,18 @@ export default function AgentManagementPage() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Debug Information */}
+      {debugInfo && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardContent className="p-4">
+            <h3 className="font-semibold text-yellow-800 mb-2">Debug Information</h3>
+            <pre className="text-sm text-yellow-700">
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -300,100 +330,128 @@ export default function AgentManagementPage() {
           </p>
         </div>
         
-        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Agent
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Create New Agent</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+        {/* Add Agent Buttons - with fallback options */}
+        <div className="flex gap-2">
+          {/* Primary Dialog Trigger Button */}
+          <Dialog 
+            open={isCreateModalOpen} 
+            onOpenChange={(open) => {
+              console.log('Dialog onOpenChange called with:', open);
+              setIsCreateModalOpen(open);
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Agent
+              </Button>
+            </DialogTrigger>
+            
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create New Agent</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreateSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="firstName">First Name</Label>
+                    <Input
+                      id="firstName"
+                      value={createFormData.firstName}
+                      onChange={(e) => setCreateFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="lastName">Last Name</Label>
+                    <Input
+                      id="lastName"
+                      value={createFormData.lastName}
+                      onChange={(e) => setCreateFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                      required
+                    />
+                  </div>
+                </div>
+                
                 <div>
-                  <Label htmlFor="firstName">First Name</Label>
+                  <Label htmlFor="email">Email</Label>
                   <Input
-                    id="firstName"
-                    value={createFormData.firstName}
-                    onChange={(e) => setCreateFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                    id="email"
+                    type="email"
+                    value={createFormData.email}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, email: e.target.value }))}
                     required
                   />
                 </div>
+                
                 <div>
-                  <Label htmlFor="lastName">Last Name</Label>
+                  <Label htmlFor="password">Password</Label>
                   <Input
-                    id="lastName"
-                    value={createFormData.lastName}
-                    onChange={(e) => setCreateFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                    id="password"
+                    type="password"
+                    value={createFormData.password}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, password: e.target.value }))}
                     required
+                    minLength={8}
                   />
                 </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={createFormData.email}
-                  onChange={(e) => setCreateFormData(prev => ({ ...prev, email: e.target.value }))}
-                  required
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={createFormData.password}
-                  onChange={(e) => setCreateFormData(prev => ({ ...prev, password: e.target.value }))}
-                  required
-                  minLength={8}
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="role">Role</Label>
-                <Select 
-                  value={createFormData.role} 
-                  onValueChange={(value) => setCreateFormData(prev => ({ ...prev, role: value as any }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="agent">Agent</SelectItem>
-                    <SelectItem value="supervisor">Supervisor</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="isAiAgent"
-                  checked={createFormData.isAiAgent}
-                  onChange={(e) => setCreateFormData(prev => ({ ...prev, isAiAgent: e.target.checked }))}
-                />
-                <Label htmlFor="isAiAgent">AI Agent</Label>
-              </div>
+                
+                <div>
+                  <Label htmlFor="role">Role</Label>
+                  <Select 
+                    value={createFormData.role} 
+                    onValueChange={(value) => setCreateFormData(prev => ({ ...prev, role: value as any }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="agent">Agent</SelectItem>
+                      <SelectItem value="supervisor">Supervisor</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="isAiAgent"
+                    checked={createFormData.isAiAgent}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, isAiAgent: e.target.checked }))}
+                  />
+                  <Label htmlFor="isAiAgent">AI Agent</Label>
+                </div>
 
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={createAgentMutation.isPending}>
-                  {createAgentMutation.isPending ? 'Creating...' : 'Create Agent'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <div className="flex justify-end space-x-2">
+                  <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={createAgentMutation.isPending}>
+                    {createAgentMutation.isPending ? 'Creating...' : 'Create Agent'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+          
+          {/* Fallback Manual Button for Testing */}
+          <Button
+            variant="outline"
+            onClick={() => {
+              console.log('Fallback button clicked - manually opening modal');
+              setIsCreateModalOpen(true);
+            }}
+          >
+            Manual Open
+          </Button>
+        </div>
+        
+        {debugInfo?.isAdmin ? null : (
+          <div className="text-sm text-red-600">
+            Admin access required to add agents
+          </div>
+        )}
       </div>
 
       {/* Filters */}

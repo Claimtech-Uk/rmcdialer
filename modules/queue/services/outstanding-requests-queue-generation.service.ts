@@ -82,7 +82,7 @@ export class OutstandingRequestsQueueGenerationService {
   }
   
   /**
-   * Get qualified users from user_call_scores table - SIMPLIFIED
+   * Get qualified users from user_call_scores table - SIMPLIFIED - Optimized for Production
    * No validation needed - users are already validated by scoring system
    * Pre-call validation will happen when agents load them anyway
    */
