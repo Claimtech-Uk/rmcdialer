@@ -5,6 +5,7 @@ import { X, Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, User } from '
 import { Button } from '@/modules/core/components/ui/button';
 import { Card } from '@/modules/core/components/ui/card';
 import { api } from '@/lib/trpc/client';
+import { CallOutcomeModal } from '@/modules/calls/components/CallOutcomeModal';
 
 type CallState = 'idle' | 'ringing' | 'connected' | 'ended';
 
@@ -803,134 +804,96 @@ function PostCallContent({
   onDispositionComplete?: () => void;
   isMobile?: boolean;
 }) {
-  const [disposition, setDisposition] = useState('');
-  const [finalNotes, setFinalNotes] = useState('');
-  const [nextAction, setNextAction] = useState('');
-  const [callbackDate, setCallbackDate] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [showOutcomeModal, setShowOutcomeModal] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('');
+  const [userDetails, setUserDetails] = useState<any>(null);
+  const [loadingSession, setLoadingSession] = useState(false);
 
-  const dispositionOptions = [
-    { value: 'completed', label: '✅ Completed Successfully', color: 'text-green-600' },
-    { value: 'callback', label: '📅 Callback Scheduled', color: 'text-blue-600' },
-    { value: 'no-answer', label: '📞❌ No Answer', color: 'text-yellow-600' },
-    { value: 'busy', label: '📞🔄 Busy Signal', color: 'text-orange-600' },
-    { value: 'wrong-number', label: '📞❓ Wrong Number', color: 'text-red-600' },
-    { value: 'voicemail', label: '📨 Left Voicemail', color: 'text-purple-600' },
-    { value: 'declined', label: '❌ Customer Declined', color: 'text-red-600' },
-    { value: 'technical-issue', label: '⚠️ Technical Issue', color: 'text-gray-600' }
-  ];
+  // Load session details when component mounts
+  useEffect(() => {
+    if (callData?.callSid && !sessionId && !loadingSession) {
+      loadSessionDetails();
+    }
+  }, [callData?.callSid]);
 
-  const nextActionOptions = [
-    { value: 'none', label: 'No further action required' },
-    { value: 'callback', label: 'Schedule callback' },
-    { value: 'send-documents', label: 'Send documents to customer' },
-    { value: 'follow-up-email', label: 'Send follow-up email' },
-    { value: 'escalate', label: 'Escalate to supervisor' },
-    { value: 'schedule-appointment', label: 'Schedule appointment' }
-  ];
+  const loadSessionDetails = async () => {
+    if (!callData?.callSid) return;
+    
+    setLoadingSession(true);
+    try {
+      console.log('🔍 [CallSidebar] Loading session details for CallSid:', callData.callSid);
+      
+      const response = await fetch('/api/simple-call-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callSid: callData.callSid })
+      });
 
-  // Add TRPC mutation for recording outcomes
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.session) {
+          console.log('✅ Session details loaded:', result.session);
+          setSessionId(result.session.id);
+          setUserDetails(result.session);
+        } else {
+          console.warn('⚠️ No session details found for Call SID:', callData.callSid);
+        }
+      } else {
+        console.error('❌ Failed to load session details:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error loading session details:', error);
+    } finally {
+      setLoadingSession(false);
+    }
+  };
+
+  // Record outcome using the existing TRPC mutation
   const recordCallOutcomeMutation = api.calls.recordOutcome.useMutation({
     onSuccess: (result: any) => {
       console.log('✅ Call outcome recorded in database:', result);
-      alert('Call outcome saved successfully!');
+      setShowOutcomeModal(false);
       onClose?.();
       onDispositionComplete?.();
     },
     onError: (error: any) => {
       console.error('❌ Failed to record call outcome:', error);
-      alert(`Failed to save call outcome: ${error.message || 'Please try again.'}`);
     }
   });
 
-  // Map CallSidebar dispositions to standard call outcome types
-  const mapDispositionToOutcomeType = (disposition: string) => {
-    const mappings = {
-      'completed': 'completed_form' as const,
-      'callback': 'call_back' as const,
-      'no-answer': 'no_answer' as const, 
-      'busy': 'no_answer' as const,
-      'wrong-number': 'bad_number' as const,
-      'voicemail': 'no_answer' as const, // Use standard outcome type
-      'declined': 'hung_up' as const,
-      'technical-issue': 'no_answer' as const
+  // Handle outcome submission from the modal
+  const handleOutcomeSubmit = async (outcome: any) => {
+    if (!sessionId) {
+      throw new Error('No session ID available - cannot save outcome');
+    }
+
+    console.log('📋 Recording call outcome from sidebar:', {
+      sessionId,
+      outcome
+    });
+
+    // Use the existing recordCallOutcome mutation
+    await recordCallOutcomeMutation.mutateAsync({
+      sessionId: sessionId,
+      outcomeType: outcome.outcomeType,
+      outcomeNotes: outcome.outcomeNotes || '',
+      magicLinkSent: outcome.magicLinkSent || false,
+      smsSent: outcome.smsSent || false,
+      documentsRequested: outcome.documentsRequested || [],
+      nextCallDelayHours: outcome.nextCallDelayHours,
+      callbackDateTime: outcome.callbackDateTime,
+      callbackReason: outcome.callbackReason
+    });
+  };
+
+  // Prepare user context for the modal (similar to CallInterface)
+  const userContext = userDetails?.userClaimsContext ? 
+    JSON.parse(userDetails.userClaimsContext) : {
+      userId: userDetails?.userId || 999999,
+      phoneNumber: userDetails?.phoneNumber || 'Unknown',
+      firstName: 'Unknown',
+      lastName: 'Customer'
     };
-    return mappings[disposition as keyof typeof mappings] || 'hung_up' as const;
-  };
-
-  const handleSaveAndComplete = async () => {
-    if (!disposition) {
-      alert('Please select a call disposition before completing.');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      console.log('💾 Saving call outcome:', {
-        callSid: callData?.callSid,
-        disposition,
-        finalNotes,
-        nextAction,
-        callbackDate
-      });
-
-      // First, find the session ID from the call SID
-      let sessionId = null;
-      if (callData?.callSid) {
-        try {
-          const sessionLookup = await fetch('/api/simple-call-lookup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ callSid: callData.callSid })
-          });
-          
-          if (sessionLookup.ok) {
-            const lookupResult = await sessionLookup.json();
-            if (lookupResult.success && lookupResult.session) {
-              sessionId = lookupResult.session.id;
-              console.log('✅ Found session ID:', sessionId);
-            }
-          }
-        } catch (lookupError) {
-          console.error('⚠️ Session lookup failed:', lookupError);
-        }
-      }
-
-      if (!sessionId) {
-        throw new Error('Could not find call session - unable to save outcome');
-      }
-
-      // Map to standard outcome type
-      const outcomeType = mapDispositionToOutcomeType(disposition);
-      
-      // Prepare callback data if callback disposition
-      let callbackDateTime: Date | undefined = undefined;
-      let callbackReason: string | undefined = undefined;
-      
-      if (disposition === 'callback' && callbackDate) {
-        callbackDateTime = new Date(callbackDate);
-        callbackReason = 'Customer requested callback via inbound call';
-      }
-
-      // Save outcome via TRPC
-      await recordCallOutcomeMutation.mutateAsync({
-        sessionId: sessionId,
-        outcomeType: outcomeType,
-        outcomeNotes: finalNotes || `Inbound call disposition: ${disposition}`,
-        magicLinkSent: false,
-        smsSent: false,
-        documentsRequested: [],
-        nextCallDelayHours: undefined,
-        callbackDateTime: callbackDateTime,
-        callbackReason: callbackReason
-      });
-      
-    } catch (error) {
-      console.error('❌ Failed to save call outcome:', error);
-      alert(`Failed to save call outcome: ${error instanceof Error ? error.message : 'Please try again.'}`);
-      setSaving(false);
-    }
-  };
 
   return (
     <div className="p-6 space-y-6">
@@ -959,122 +922,76 @@ function PostCallContent({
         </div>
       </Card>
 
-      {/* Call Disposition */}
+      {/* Call Outcome Section */}
       <Card className="p-4">
-        <h4 className="font-medium text-gray-900 mb-3">
-          Call Disposition <span className="text-red-500">*</span>
-        </h4>
-        <div className="space-y-2">
-          {dispositionOptions.map((option) => (
-            <label key={option.value} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-              <input
-                type="radio"
-                name="disposition"
-                value={option.value}
-                checked={disposition === option.value}
-                onChange={(e) => setDisposition(e.target.value)}
-                className="text-blue-600"
-              />
-              <span className={`text-sm ${option.color}`}>{option.label}</span>
-            </label>
-          ))}
-        </div>
-      </Card>
-
-      {/* Next Action */}
-      <Card className="p-4">
-        <h4 className="font-medium text-gray-900 mb-3">Next Action Required</h4>
-        <select 
-          value={nextAction}
-          onChange={(e) => setNextAction(e.target.value)}
-          className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        >
-          <option value="">Select next action...</option>
-          {nextActionOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        {(nextAction === 'callback' || disposition === 'callback') && (
-          <div className="mt-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Callback Date & Time
-            </label>
-            <input
-              type="datetime-local"
-              value={callbackDate}
-              onChange={(e) => setCallbackDate(e.target.value)}
-              className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              min={new Date().toISOString().slice(0, 16)}
-            />
+        <h4 className="font-medium text-gray-900 mb-3">Call Disposition Required</h4>
+        
+        {loadingSession ? (
+          <div className="flex items-center space-x-2 text-sm text-gray-500 mb-4">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span>Loading call session...</span>
+          </div>
+        ) : !sessionId ? (
+          <div className="text-sm text-red-600 mb-4 p-3 bg-red-50 rounded-lg">
+            ⚠️ Unable to load call session. Please try again.
+          </div>
+        ) : (
+          <div className="text-sm text-green-600 mb-4 p-3 bg-green-50 rounded-lg">
+            ✅ Call session loaded successfully
           </div>
         )}
-      </Card>
 
-      {/* Final Notes */}
-      <Card className="p-4">
-        <h4 className="font-medium text-gray-900 mb-3">Call Summary & Notes</h4>
-        <textarea
-          value={finalNotes}
-          onChange={(e) => setFinalNotes(e.target.value)}
-          placeholder="Summarize the call discussion, key points, customer concerns, and any commitments made..."
-          className="w-full h-24 p-3 border border-gray-200 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-        <div className="mt-2 text-xs text-gray-500">
-          {finalNotes.length}/500 characters
-        </div>
-      </Card>
+        <p className="text-sm text-gray-600 mb-4">
+          Select call outcome to complete this call and schedule any follow-up actions.
+        </p>
 
-      {/* Actions */}
-      <div className="space-y-3">
         <Button 
-          onClick={handleSaveAndComplete}
-          disabled={!disposition || saving}
-          className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300"
+          onClick={() => setShowOutcomeModal(true)}
+          disabled={!sessionId || recordCallOutcomeMutation.isPending}
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300"
         >
-          {saving ? (
+          {recordCallOutcomeMutation.isPending ? (
             <div className="flex items-center justify-center space-x-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              <span>Saving...</span>
+              <span>Saving outcome...</span>
             </div>
           ) : (
-            '✅ Complete & Save Call'
+            '📋 Set Call Outcome'
           )}
         </Button>
+      </Card>
         
-        <div className="grid grid-cols-2 gap-3">
-          <Button 
-            variant="outline" 
-            onClick={() => {
-              // TODO: Implement save as draft
-              console.log('💾 Saving as draft');
-            }}
-            disabled={saving}
-            className="text-blue-600 border-blue-200 hover:bg-blue-50"
-          >
-            💾 Save Draft
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={onClose}
-            disabled={saving}
-            className="text-red-600 border-red-200 hover:bg-red-50"
-          >
-            ❌ Cancel
-          </Button>
-        </div>
+      <div className="space-y-3">
+        <Button 
+          variant="outline" 
+          onClick={onClose}
+          disabled={recordCallOutcomeMutation.isPending}
+          className="w-full text-gray-600 border-gray-200 hover:bg-gray-50"
+        >
+          ❌ Close
+        </Button>
       </div>
 
       {/* Quick Stats */}
       <Card className="p-3 bg-gray-50">
         <div className="text-xs text-gray-600 text-center">
           📊 Call #{callData?.callSid?.slice(-4) || '0000'} • 
-          Agent: {callData?.agentName || 'Agent'} • 
-          Session: {callData?.sessionId?.slice(0, 8) || 'Unknown'}
+          Session: {sessionId?.slice(0, 8) || 'Unknown'}
         </div>
       </Card>
+
+      {/* Call Outcome Modal */}
+      {sessionId && (
+        <CallOutcomeModal
+          isOpen={showOutcomeModal}
+          onClose={() => setShowOutcomeModal(false)}
+          onSubmit={handleOutcomeSubmit}
+          callSessionId={sessionId}
+          userContext={userContext}
+          callDuration={0} // We don't track duration in sidebar
+          isSubmitting={recordCallOutcomeMutation.isPending}
+        />
+      )}
     </div>
   );
 } 
