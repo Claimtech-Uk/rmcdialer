@@ -221,7 +221,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                 <Button 
                   onClick={startSession} 
                   disabled={isLoading}
-                  className={`w-full ${teamConfig.color.gradient} text-white font-bold text-lg py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105`}
+                  className={`w-full bg-gradient-to-r ${teamConfig.color.gradient} text-white font-bold text-lg py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 border-2 border-slate-400`}
                 >
                   {isLoading ? 'Starting...' : 'Start Auto-Dialler Session'}
                 </Button>
