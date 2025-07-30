@@ -43,6 +43,10 @@ export function CallSidebar({
   onDispositionComplete,
 }: CallSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
+  
+  // Shared session state between Connected and PostCall components
+  const [userDetails, setUserDetails] = useState<any>(null);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
 
   // Auto-expand when call connects
   useEffect(() => {
@@ -119,6 +123,10 @@ export function CallSidebar({
               onToggleHold={onToggleHold}
               isMuted={isMuted}
               isOnHold={isOnHold}
+              userDetails={userDetails}
+              setUserDetails={setUserDetails}
+              loadingUserDetails={loadingUserDetails}
+              setLoadingUserDetails={setLoadingUserDetails}
             />
           )}
           
@@ -127,6 +135,8 @@ export function CallSidebar({
               callData={callData}
               onClose={handleClose}
               onDispositionComplete={onDispositionComplete}
+              userDetails={userDetails}
+              loadingUserDetails={loadingUserDetails}
             />
           )}
         </div>
@@ -195,6 +205,10 @@ export function CallSidebar({
                 isMuted={isMuted}
                 isOnHold={isOnHold}
                 isMobile={true}
+                userDetails={userDetails}
+                setUserDetails={setUserDetails}
+                loadingUserDetails={loadingUserDetails}
+                setLoadingUserDetails={setLoadingUserDetails}
               />
             )}
             
@@ -203,6 +217,8 @@ export function CallSidebar({
                 callData={callData}
                 onClose={handleClose}
                 onDispositionComplete={onDispositionComplete}
+                userDetails={userDetails}
+                loadingUserDetails={loadingUserDetails}
                 isMobile={true}
               />
             )}
@@ -291,7 +307,11 @@ function ConnectedCallContent({
   onToggleHold,
   isMuted,
   isOnHold,
-  isMobile = false
+  isMobile = false,
+  userDetails,
+  setUserDetails,
+  loadingUserDetails,
+  setLoadingUserDetails
 }: {
   callData?: any;
   onEndCall?: () => void;
@@ -300,9 +320,11 @@ function ConnectedCallContent({
   isMuted?: boolean;
   isOnHold?: boolean;
   isMobile?: boolean;
+  userDetails: any;
+  setUserDetails: (details: any) => void;
+  loadingUserDetails: boolean;
+  setLoadingUserDetails: (loading: boolean) => void;
 }) {
-  const [userDetails, setUserDetails] = useState<any>(null);
-  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
   const [callNotes, setCallNotes] = useState('');
 
   // Load user details when call connects
@@ -797,56 +819,21 @@ function PostCallContent({
   callData,
   onClose,
   onDispositionComplete,
+  userDetails,
+  loadingUserDetails,
   isMobile = false
 }: {
   callData?: any;
   onClose?: () => void;
   onDispositionComplete?: () => void;
+  userDetails: any;
+  loadingUserDetails: boolean;
   isMobile?: boolean;
 }) {
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
-  const [sessionId, setSessionId] = useState<string>('');
-  const [userDetails, setUserDetails] = useState<any>(null);
-  const [loadingSession, setLoadingSession] = useState(false);
-
-  // Load session details when component mounts
-  useEffect(() => {
-    if (callData?.callSid && !sessionId && !loadingSession) {
-      loadSessionDetails();
-    }
-  }, [callData?.callSid]);
-
-  const loadSessionDetails = async () => {
-    if (!callData?.callSid) return;
-    
-    setLoadingSession(true);
-    try {
-      console.log('🔍 [CallSidebar] Loading session details for CallSid:', callData.callSid);
-      
-      const response = await fetch('/api/simple-call-lookup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callSid: callData.callSid })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.session) {
-          console.log('✅ Session details loaded:', result.session);
-          setSessionId(result.session.id);
-          setUserDetails(result.session);
-        } else {
-          console.warn('⚠️ No session details found for Call SID:', callData.callSid);
-        }
-      } else {
-        console.error('❌ Failed to load session details:', response.status);
-      }
-    } catch (error) {
-      console.error('❌ Error loading session details:', error);
-    } finally {
-      setLoadingSession(false);
-    }
-  };
+  
+  // Extract session ID from already-loaded user details
+  const sessionId = userDetails?.id || '';
 
   // Record outcome using the existing TRPC mutation
   const recordCallOutcomeMutation = api.calls.recordOutcome.useMutation({
@@ -926,7 +913,7 @@ function PostCallContent({
       <Card className="p-4">
         <h4 className="font-medium text-gray-900 mb-3">Call Disposition Required</h4>
         
-        {loadingSession ? (
+        {loadingUserDetails ? (
           <div className="flex items-center space-x-2 text-sm text-gray-500 mb-4">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
             <span>Loading call session...</span>
