@@ -190,7 +190,7 @@ export function CallOutcomeModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white shadow-2xl border-0">
+      <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white shadow-2xl border-0">
         <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
           <CardTitle className="flex items-center gap-3">
             <Phone className="w-6 h-6" />
@@ -212,7 +212,7 @@ export function CallOutcomeModal({
           {/* Disposition Selection */}
           <div>
             <Label className="text-base font-semibold mb-3 block">Disposition *</Label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {OUTCOME_TYPES.map((outcome) => {
                 const Icon = outcome.icon;
                 const isSelected = selectedOutcome === outcome.type;

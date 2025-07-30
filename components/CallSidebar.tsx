@@ -805,7 +805,11 @@ function PostCallContent({
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span className="text-green-700 font-medium">Duration:</span>
-            <div className="text-green-600">{callData?.callDuration || '02:35'}</div>
+            <div className="text-green-600">
+              {userDetails?.durationSeconds ? 
+                `${Math.floor(userDetails.durationSeconds / 60)}:${(userDetails.durationSeconds % 60).toString().padStart(2, '0')}` : 
+                callData?.callDuration || '00:00'}
+            </div>
           </div>
           <div>
             <span className="text-green-700 font-medium">Caller:</span>
@@ -813,11 +817,18 @@ function PostCallContent({
           </div>
           <div>
             <span className="text-green-700 font-medium">Started:</span>
-            <div className="text-green-600">{new Date().toLocaleTimeString()}</div>
+            <div className="text-green-600">
+              {userDetails?.startedAt ? new Date(userDetails.startedAt).toLocaleTimeString() : 'Unknown'}
+            </div>
           </div>
           <div>
             <span className="text-green-700 font-medium">Ended:</span>
-            <div className="text-green-600">{new Date().toLocaleTimeString()}</div>
+            <div className="text-green-600">
+              {userDetails?.endedAt ? new Date(userDetails.endedAt).toLocaleTimeString() : 
+               userDetails?.durationSeconds && userDetails?.startedAt ? 
+                 new Date(new Date(userDetails.startedAt).getTime() + (userDetails.durationSeconds * 1000)).toLocaleTimeString() :
+                 'In progress'}
+            </div>
           </div>
         </div>
       </Card>

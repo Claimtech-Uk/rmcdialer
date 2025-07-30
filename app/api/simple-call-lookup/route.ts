@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
         status: true,
         direction: true,
         startedAt: true,
+        connectedAt: true,
+        endedAt: true,
+        durationSeconds: true,
         twilioCallSid: true
       }
     });
@@ -51,6 +54,9 @@ export async function POST(request: NextRequest) {
           status: true,
           direction: true,
           startedAt: true,
+          connectedAt: true,
+          endedAt: true,
+          durationSeconds: true,
           twilioCallSid: true
         },
         orderBy: { startedAt: 'desc' }
