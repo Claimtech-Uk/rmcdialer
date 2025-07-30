@@ -196,7 +196,7 @@ export function CallOutcomeModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md sm:max-w-lg md:max-w-2xl lg:max-w-3xl xl:max-w-4xl max-h-[90vh] overflow-y-auto bg-white shadow-2xl border-0">
+      <Card className="w-full max-w-md sm:max-w-lg md:max-w-4xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-[90vw] max-h-[90vh] overflow-y-auto bg-white shadow-2xl border-0">
         <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
           <CardTitle className="flex items-center gap-3">
             <Phone className="w-6 h-6" />

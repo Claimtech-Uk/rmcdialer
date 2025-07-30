@@ -183,10 +183,8 @@ export const communicationsRouter = createTRPCRouter({
     getConversations: protectedProcedure
       .input(ConversationFiltersSchema)
       .query(async ({ input, ctx }) => {
-        // If not admin/supervisor, filter to assigned conversations
-        const filters = ctx.agent.role === 'agent' 
-          ? { ...input, agentId: ctx.agent.id }
-          : input;
+        // Allow all agents to see full SMS conversations for better user context
+        const filters = input;
         
         return await smsService.getConversations(filters);
       }),
@@ -254,8 +252,8 @@ export const communicationsRouter = createTRPCRouter({
     getStats: protectedProcedure
       .input(SMSStatsSchema)
       .query(async ({ input, ctx }) => {
-        // If agent, filter to their stats only
-        const agentId = ctx.agent.role === 'agent' ? ctx.agent.id : input.agentId;
+        // Allow all agents to see full SMS stats for better insights
+        const agentId = input.agentId;
         
         return await smsService.getSMSStats(agentId, input.startDate, input.endDate);
       })
@@ -329,8 +327,8 @@ export const communicationsRouter = createTRPCRouter({
     getAnalytics: protectedProcedure
       .input(MagicLinkAnalyticsSchema)
       .query(async ({ input, ctx }) => {
-        // If agent, filter to their analytics only
-        const agentId = ctx.agent.role === 'agent' ? ctx.agent.id : input.agentId;
+        // Allow all agents to see full magic link analytics for better insights
+        const agentId = input.agentId;
         
         return await magicLinkService.getAnalytics({
           agentId,

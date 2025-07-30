@@ -6,6 +6,7 @@ import { Button } from '@/modules/core/components/ui/button';
 import { Badge } from '@/modules/core/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
 import { api } from '@/lib/trpc/client';
+import { useRouter } from 'next/navigation';
 
 interface CallbackItem {
   id: string;
@@ -21,86 +22,63 @@ interface CallbackItem {
 }
 
 export function CallbackIcon() {
-  const { agent } = useAuth();
-  const [callbacks, setCallbacks] = useState<CallbackItem[]>([]);
+  // Get current agent data using tRPC (same pattern as profile page and CallInterface)
+  const { data: session } = api.auth.me.useQuery(undefined, {
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    refetchOnWindowFocus: false,
+  });
+  
+  const agent = session?.agent;
   const [isOpen, setIsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
-  // Poll for all callbacks every 30 seconds
-  useEffect(() => {
-    if (!agent?.id) return;
+  // Get callbacks using authenticated tRPC query instead of raw fetch
+  const { data: callbacksData, refetch } = api.calls.getCallbacks.useQuery(
+    {
+      status: 'pending',
+      limit: 50, // Get more callbacks to show in dashboard
+    },
+    {
+      enabled: !!agent?.id,
+      refetchInterval: 30000, // Poll every 30 seconds
+      staleTime: 30000, // Consider data stale after 30 seconds
+    }
+  );
 
-    const fetchAllCallbacks = async () => {
-      try {
-        // Fetch both upcoming and overdue callbacks
-        const [upcomingRes, overdueRes] = await Promise.all([
-          fetch(`/api/agents/${agent.id}/pending-callbacks`),
-          fetch('/api/callbacks/overdue')
-        ]);
-
-        const upcoming = upcomingRes.ok ? (await upcomingRes.json()).callbacks || [] : [];
-        const overdue = overdueRes.ok ? (await overdueRes.json()).callbacks || [] : [];
-
-        // Combine and categorize callbacks
-        const now = new Date();
-        const allCallbacks: CallbackItem[] = [
-          // Overdue callbacks
-          ...overdue.map((cb: any) => ({
-            id: cb.id,
-            userId: cb.userId,
-            scheduledFor: new Date(cb.scheduledFor),
-            callbackReason: cb.callbackReason,
-            userName: cb.userName,
-            userPhone: cb.userPhone,
-            status: 'overdue' as const,
-            minutesOverdue: cb.minutesOverdue,
-            isPreferred: cb.preferredAgentId === agent.id
-          })),
-          // Upcoming callbacks (categorize as due soon or upcoming)
-          ...upcoming.map((cb: any) => {
-            const scheduledTime = new Date(cb.scheduledFor);
-            const minutesUntil = Math.floor((scheduledTime.getTime() - now.getTime()) / (1000 * 60));
-            
-            return {
-              id: cb.id,
-              userId: cb.userId,
-              scheduledFor: scheduledTime,
-              callbackReason: cb.callbackReason,
-              userName: cb.userName,
-              userPhone: cb.userPhone,
-              status: minutesUntil <= 10 ? 'due_soon' as const : 'upcoming' as const,
-              minutesUntil,
-              isPreferred: true // These are assigned to the agent
-            };
-          })
-        ];
-
-        // Sort by urgency: overdue first, then due soon, then upcoming
-        allCallbacks.sort((a, b) => {
-          if (a.status === 'overdue' && b.status !== 'overdue') return -1;
-          if (b.status === 'overdue' && a.status !== 'overdue') return 1;
-          if (a.status === 'due_soon' && b.status === 'upcoming') return -1;
-          if (b.status === 'due_soon' && a.status === 'upcoming') return 1;
-          
-          // Within same category, sort by time
-          return a.scheduledFor.getTime() - b.scheduledFor.getTime();
-        });
-
-        setCallbacks(allCallbacks);
-      } catch (error) {
-        console.error('Error fetching callbacks:', error);
-      }
+  // Process callbacks to add status categorization
+  const callbacks: CallbackItem[] = callbacksData?.callbacks ? callbacksData.callbacks.map((cb: any) => {
+    const now = new Date();
+    const scheduledTime = new Date(cb.scheduledFor);
+    const timeDiff = scheduledTime.getTime() - now.getTime();
+    const minutesUntil = Math.floor(timeDiff / (1000 * 60));
+    
+    let status: 'upcoming' | 'due_soon' | 'overdue';
+    let minutesOverdue: number | undefined;
+    
+    if (timeDiff < 0) {
+      status = 'overdue';
+      minutesOverdue = Math.abs(minutesUntil);
+    } else if (minutesUntil <= 10) {
+      status = 'due_soon';
+    } else {
+      status = 'upcoming';
+    }
+    
+    return {
+      id: cb.id,
+      userId: Number(cb.userId),
+      scheduledFor: scheduledTime,
+      callbackReason: cb.callbackReason,
+      userName: `${cb.user.firstName || 'Unknown'} ${cb.user.lastName || 'User'}`.trim(),
+      userPhone: cb.user.phoneNumber || 'Unknown',
+      status,
+      minutesUntil: timeDiff >= 0 ? minutesUntil : undefined,
+      minutesOverdue,
+      isPreferred: cb.preferredAgentId === agent?.id
     };
-
-    // Initial fetch
-    fetchAllCallbacks();
-
-    // Poll every 30 seconds
-    const interval = setInterval(fetchAllCallbacks, 30000);
-
-    return () => clearInterval(interval);
-  }, [agent?.id]);
+  }) : [];
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -119,33 +97,34 @@ export function CallbackIcon() {
     };
   }, [isOpen]);
 
+  // Handle callback acceptance
   const handleAcceptCallback = async (callback: CallbackItem) => {
-    setIsLoading(true);
     try {
       const response = await fetch('/api/callbacks/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          callbackId: callback.id,
-          agentId: agent?.id
-        }),
+        body: JSON.stringify({ callbackId: callback.id })
       });
 
       if (response.ok) {
-        // Remove from list and navigate to queue
-        setCallbacks(prev => prev.filter(cb => cb.id !== callback.id));
-        setIsOpen(false);
-        window.location.href = '/queue';
-      } else {
-        console.error('Failed to accept callback');
+        // Refresh the callbacks
+        refetch();
       }
     } catch (error) {
       console.error('Error accepting callback:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
+  // Handle call initiation
+  const handleCallNow = (callback: CallbackItem) => {
+    // Close dropdown
+    setIsOpen(false);
+    
+    // Navigate to call page with user context
+    router.push(`/calls/new?userId=${callback.userId}&phone=${encodeURIComponent(callback.userPhone)}&name=${encodeURIComponent(callback.userName)}&callbackId=${callback.id}`);
+  };
+
+  // Calculate summary counts
   const overdueCount = callbacks.filter(cb => cb.status === 'overdue').length;
   const dueSoonCount = callbacks.filter(cb => cb.status === 'due_soon').length;
   const totalCount = callbacks.length;
@@ -160,18 +139,18 @@ export function CallbackIcon() {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Always visible callback icon */}
+      {/* Always visible callback icon - made less transparent */}
       <Button
         onClick={() => setIsOpen(!isOpen)}
         variant="outline"
         size="sm"
-        className={`relative ${getIconStyle()} hover:opacity-80`}
+        className={`relative ${getIconStyle()} hover:opacity-90 bg-white border-2`}
       >
         <Calendar className="w-4 h-4" />
         {agent?.id && totalCount > 0 && (
           <Badge 
             variant={overdueCount > 0 ? "destructive" : dueSoonCount > 0 ? "default" : "secondary"}
-            className="absolute -top-2 -right-2 min-w-[20px] h-5 flex items-center justify-center text-xs"
+            className="absolute -top-2 -right-2 min-w-[20px] h-5 flex items-center justify-center text-xs font-semibold"
           >
             {totalCount}
           </Badge>
@@ -179,24 +158,24 @@ export function CallbackIcon() {
         <ChevronDown className="w-3 h-3 ml-1" />
       </Button>
 
-      {/* Dropdown menu */}
+      {/* Dropdown menu - made more opaque */}
       {isOpen && (
         <div className="absolute top-full right-0 mt-2 w-80 max-h-96 overflow-y-auto z-[200]">
-          <Card className="border shadow-lg">
-            <CardHeader className="pb-2">
+          <Card className="border-2 shadow-xl bg-white">
+            <CardHeader className="pb-2 bg-gradient-to-r from-slate-50 to-white">
               <CardTitle className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  <span>Your Callbacks</span>
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                  <span className="font-semibold">Your Callbacks</span>
                 </div>
                 <div className="flex gap-1">
                   {overdueCount > 0 && (
-                    <Badge variant="destructive" className="text-xs">
+                    <Badge variant="destructive" className="text-xs font-semibold">
                       {overdueCount} overdue
                     </Badge>
                   )}
                   {dueSoonCount > 0 && (
-                    <Badge variant="default" className="bg-yellow-600 text-xs">
+                    <Badge variant="default" className="bg-yellow-600 text-xs font-semibold">
                       {dueSoonCount} due soon
                     </Badge>
                   )}
@@ -204,16 +183,16 @@ export function CallbackIcon() {
               </CardTitle>
             </CardHeader>
             
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3 p-4">
               {!agent?.id ? (
-                <div className="text-center py-4 text-gray-500">
-                  <User className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Please log in to view callbacks</p>
+                <div className="text-center py-6 text-gray-600">
+                  <User className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+                  <p className="text-sm font-medium">Please log in to view callbacks</p>
                 </div>
               ) : callbacks.length === 0 ? (
-                <div className="text-center py-4 text-gray-500">
-                  <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No callbacks scheduled</p>
+                <div className="text-center py-6 text-gray-600">
+                  <Calendar className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+                  <p className="text-sm font-medium">No callbacks scheduled</p>
                 </div>
               ) : (
                 callbacks.map((callback) => (
@@ -221,7 +200,8 @@ export function CallbackIcon() {
                     key={callback.id}
                     callback={callback}
                     onAccept={handleAcceptCallback}
-                    isLoading={isLoading}
+                    onCallNow={handleCallNow}
+                    isLoading={false}
                   />
                 ))
               )}
@@ -236,41 +216,42 @@ export function CallbackIcon() {
 interface CallbackDropdownCardProps {
   callback: CallbackItem;
   onAccept: (callback: CallbackItem) => void;
+  onCallNow: (callback: CallbackItem) => void;
   isLoading: boolean;
 }
 
-function CallbackDropdownCard({ callback, onAccept, isLoading }: CallbackDropdownCardProps) {
+function CallbackDropdownCard({ callback, onAccept, onCallNow, isLoading }: CallbackDropdownCardProps) {
   const getStatusBadge = () => {
     switch (callback.status) {
       case 'overdue':
-        return <Badge variant="destructive" className="text-xs">{callback.minutesOverdue}m overdue</Badge>;
+        return <Badge variant="destructive" className="text-xs font-semibold">{callback.minutesOverdue}m overdue</Badge>;
       case 'due_soon':
-        return <Badge variant="default" className="bg-yellow-600 text-xs">Due in {callback.minutesUntil}m</Badge>;
+        return <Badge variant="default" className="bg-yellow-600 text-xs font-semibold">Due in {callback.minutesUntil}m</Badge>;
       case 'upcoming':
-        return <Badge variant="outline" className="text-xs">In {callback.minutesUntil}m</Badge>;
+        return <Badge variant="outline" className="text-xs font-semibold">In {callback.minutesUntil}m</Badge>;
     }
   };
 
   const shouldShowAcceptButton = callback.status === 'overdue' || callback.status === 'due_soon';
 
   return (
-    <Card className={`border ${callback.status === 'overdue' ? 'border-red-200 bg-red-50' : callback.status === 'due_soon' ? 'border-yellow-200 bg-yellow-50' : 'border-gray-200'}`}>
-      <CardContent className="p-3 space-y-2">
+    <Card className={`border-2 ${callback.status === 'overdue' ? 'border-red-300 bg-red-50' : callback.status === 'due_soon' ? 'border-yellow-300 bg-yellow-50' : 'border-gray-300 bg-white'} hover:shadow-md transition-shadow`}>
+      <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {callback.status === 'overdue' && <AlertTriangle className="w-3 h-3 text-red-500" />}
-            <span className="font-medium text-sm">{callback.userName}</span>
+            {callback.status === 'overdue' && <AlertTriangle className="w-4 h-4 text-red-500" />}
+            <span className="font-semibold text-sm">{callback.userName}</span>
           </div>
           {getStatusBadge()}
         </div>
 
-        <div className="space-y-1 text-xs text-gray-600">
-          <div className="flex items-center gap-1">
-            <Phone className="w-3 h-3" />
-            <span>{callback.userPhone}</span>
+        <div className="space-y-2 text-xs text-gray-700">
+          <div className="flex items-center gap-2">
+            <Phone className="w-3 h-3 text-blue-600" />
+            <span className="font-medium">{callback.userPhone}</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
+          <div className="flex items-center gap-2">
+            <Clock className="w-3 h-3 text-gray-500" />
             <span>
               {callback.status === 'overdue' ? 'Was scheduled for' : 'Scheduled for'}{' '}
               {new Date(callback.scheduledFor).toLocaleTimeString()}
@@ -279,24 +260,38 @@ function CallbackDropdownCard({ callback, onAccept, isLoading }: CallbackDropdow
         </div>
 
         {callback.callbackReason && (
-          <div className="bg-white rounded p-2 border">
+          <div className="bg-white rounded-md p-3 border border-gray-200">
             <p className="text-xs text-gray-700">
-              <span className="font-medium">Reason:</span> {callback.callbackReason}
+              <span className="font-semibold text-gray-900">Reason:</span> {callback.callbackReason}
             </p>
           </div>
         )}
 
-        {shouldShowAcceptButton && (
+        {/* Always show Call Now button, plus Accept button for urgent callbacks */}
+        <div className="flex gap-2">
           <Button
-            onClick={() => onAccept(callback)}
+            onClick={() => onCallNow(callback)}
             disabled={isLoading}
             size="sm"
-            className="w-full text-xs bg-green-600 hover:bg-green-700"
+            className="flex-1 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
           >
-            <CheckCircle className="w-3 h-3 mr-1" />
-            Accept & Call Now
+            <Phone className="w-3 h-3 mr-1" />
+            Call Now
           </Button>
-        )}
+          
+          {shouldShowAcceptButton && (
+            <Button
+              onClick={() => onAccept(callback)}
+              disabled={isLoading}
+              size="sm"
+              variant="outline"
+              className="text-xs border-green-600 text-green-600 hover:bg-green-50 font-semibold"
+            >
+              <CheckCircle className="w-3 h-3 mr-1" />
+              Accept
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

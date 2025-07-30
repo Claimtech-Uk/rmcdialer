@@ -178,6 +178,36 @@ export class CallService {
         });
       }
 
+      // 🎯 AUTO-COMPLETE ANY PENDING CALLBACKS FOR THIS USER
+      // When a user is called, mark their pending callbacks as complete
+      const pendingCallbacks = await tx.callback.findMany({
+        where: {
+          userId: BigInt(userId),
+          status: { in: ['pending', 'accepted'] }
+        }
+      });
+
+      if (pendingCallbacks.length > 0) {
+        // Mark all pending/accepted callbacks as complete
+        await tx.callback.updateMany({
+          where: {
+            userId: BigInt(userId),
+            status: { in: ['pending', 'accepted'] }
+          },
+          data: {
+            status: 'completed',
+            completedCallSessionId: callSession.id
+          }
+        });
+
+        this.deps.logger.info('Auto-completed callbacks on call initiation', {
+          callSessionId: callSession.id,
+          userId,
+          completedCallbacks: pendingCallbacks.length,
+          callbackIds: pendingCallbacks.map(cb => cb.id)
+        });
+      }
+
       this.deps.logger.info('Call session initiated', {
         callSessionId: callSession.id,
         userId,
@@ -593,7 +623,15 @@ export class CallService {
     const { page = 1, limit = 20, agentId, status, scheduledFrom, scheduledTo } = options;
 
     const where: any = {};
-    if (agentId) where.preferredAgentId = agentId;
+    
+    // If filtering by agent, include both assigned callbacks AND unassigned callbacks
+    if (agentId) {
+      where.OR = [
+        { preferredAgentId: agentId },  // Callbacks assigned to this agent
+        { preferredAgentId: null }     // Unassigned callbacks (any agent can handle)
+      ];
+    }
+    
     if (status) where.status = status;
     if (scheduledFrom || scheduledTo) {
       where.scheduledFor = {};

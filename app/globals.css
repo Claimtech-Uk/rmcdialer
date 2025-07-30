@@ -134,6 +134,20 @@
     }
   }
   
+  /* 4 columns on extra large screens */
+  @media (min-width: 1536px) {
+    .call-outcome-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  
+  /* 5 columns on very wide screens */
+  @media (min-width: 1920px) {
+    .call-outcome-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+  
   /* Force single column in very narrow containers (like sidebar) */
   @media (max-width: 400px) {
     .call-outcome-grid {

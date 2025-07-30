@@ -38,7 +38,9 @@ export async function GET(
                 status: 'assigned'
               }
             }
-          }
+          },
+          // ADDED: Unassigned callbacks that any agent can handle
+          { preferredAgentId: null }
         ]
       },
       orderBy: {

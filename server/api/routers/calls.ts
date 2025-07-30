@@ -295,11 +295,8 @@ export const callsRouter = createTRPCRouter({
     .input(CallHistoryFiltersSchema)
     .query(async ({ input, ctx }) => {
       try {
-        // If not admin/supervisor, limit to agent's own calls
+        // Allow all agents to see full call history for better user context
         const filters = { ...input };
-        if (ctx.agent.role === 'agent') {
-          filters.agentId = ctx.agent.id;
-        }
 
         const history = await callService.getCallHistory(filters);
         return history;
@@ -316,11 +313,8 @@ export const callsRouter = createTRPCRouter({
     .input(CallAnalyticsFiltersSchema)
     .query(async ({ input, ctx }) => {
       try {
-        // If not admin/supervisor, limit to agent's own analytics
+        // Allow all agents to see full call analytics for better insights
         const filters = { ...input };
-        if (ctx.agent.role === 'agent') {
-          filters.agentId = ctx.agent.id;
-        }
 
         const analytics = await callService.getCallAnalytics(filters);
         return analytics;
@@ -759,11 +753,8 @@ export const callsRouter = createTRPCRouter({
     .input(CallHistoryFiltersSchema)
     .query(async ({ input, ctx }) => {
       try {
-        // If not admin/supervisor, limit to agent's own calls
+        // Allow all agents to see full call history for better user context
         const filters = { ...input };
-        if (ctx.agent.role === 'agent') {
-          filters.agentId = ctx.agent.id;
-        }
 
         // Get call sessions with outcomes and user/agent details
         const callSessions = await prisma.callSession.findMany({
