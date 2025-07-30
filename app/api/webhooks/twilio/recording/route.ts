@@ -38,32 +38,74 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎙️ Recording ${RecordingSid} for call ${CallSid} - Status: ${RecordingStatus}`);
 
-    // Find the call session by Twilio Call SID
-    const callSession = await prisma.callSession.findFirst({
-      where: { twilioCallSid: CallSid }
+    // CRITICAL FIX: Enhanced call session lookup to handle multiple Call SIDs
+    // For inbound calls with <Dial><Client>, Twilio creates separate call legs:
+    // - Original Call SID (stored in database): CAf5af23956df181ca57ecf5034a4fd867  
+    // - Agent Call SID (from webhook): layout-c86ba49b305af_YLSCyPMKUFeCKdwdb-1
+    
+    let callSession = await prisma.call_sessions.findFirst({
+      where: { twilio_call_sid: CallSid }
     });
+
+    // If not found by direct CallSid, try alternative lookup strategies (same as call-status webhook)
+    if (!callSession) {
+      console.log(`🔍 Call session not found for Recording CallSid: ${CallSid}, trying alternative lookups...`);
+      
+      // Strategy 1: Check if this is an agent call leg for a recent inbound call
+      // Look for sessions created in the last 10 minutes that are still active or recently completed
+      const recentInboundSessions = await prisma.call_sessions.findMany({
+        where: {
+          direction: 'inbound',
+          status: { in: ['ringing', 'initiated', 'connecting', 'connected', 'completed'] },
+          started_at: {
+            gte: new Date(Date.now() - 10 * 60 * 1000) // Last 10 minutes (recordings can arrive after call ends)
+          }
+        },
+        orderBy: { started_at: 'desc' }
+      });
+
+      if (recentInboundSessions.length > 0) {
+        console.log(`🔍 Found ${recentInboundSessions.length} recent inbound sessions, using most recent one for recording`);
+        callSession = recentInboundSessions[0];
+        
+        console.log(`🔗 Mapped recording CallSid ${CallSid} to original session ${callSession.id} (original SID: ${callSession.twilio_call_sid})`);
+      }
+    }
 
     if (!callSession) {
       console.warn(`⚠️ Recording webhook for unknown call session: ${CallSid}`);
+      console.log(`🔍 Recording Debug info:`, {
+        CallSid,
+        RecordingSid,
+        RecordingStatus,
+        RecordingUrl,
+        timestamp: new Date().toISOString()
+      });
+      
       return NextResponse.json({ 
         success: false, 
-        message: 'Call session not found' 
+        message: 'Call session not found after enhanced lookup',
+        callSid: CallSid,
+        recordingSid: RecordingSid,
+        searchAttempted: true
       }, { status: 404 });
     }
 
+    console.log(`📍 Found call session ${callSession.id} for recording ${RecordingSid}`);
+
     // Update call session with recording information
     const updateData: any = {
-      recordingStatus: RecordingStatus,
-      recordingSid: RecordingSid,
-      updatedAt: new Date()
+      recording_status: RecordingStatus,
+      recording_sid: RecordingSid,
+      updated_at: new Date()
     };
 
     // Only update URL and duration when recording is completed
     if (RecordingStatus === 'completed') {
-      updateData.recordingUrl = RecordingUrl;
+      updateData.recording_url = RecordingUrl;
       
       if (RecordingDuration) {
-        updateData.recordingDurationSeconds = parseInt(RecordingDuration);
+        updateData.recording_duration_seconds = parseInt(RecordingDuration);
       }
       
       console.log(`✅ Recording completed for call ${CallSid}: ${RecordingUrl}`);
@@ -82,7 +124,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the call session with recording info
-    await prisma.callSession.update({
+    await prisma.call_sessions.update({
       where: { id: callSession.id },
       data: updateData
     });
@@ -93,7 +135,8 @@ export async function POST(request: NextRequest) {
       success: true, 
       message: 'Recording webhook processed',
       callSessionId: callSession.id,
-      recordingStatus: RecordingStatus
+      recordingStatus: RecordingStatus,
+      recordingSid: RecordingSid
     });
 
   } catch (error: any) {
