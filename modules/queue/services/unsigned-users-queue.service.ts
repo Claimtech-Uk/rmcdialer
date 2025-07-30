@@ -147,13 +147,13 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
       }
 
       // 2. Get from UnsignedUsersQueue table (the CORRECT new queue table)
-      const queueEntry = await this.prisma.unsigned_users_queue.findFirst({
+      const queueEntry = await this.prisma.unsignedUsersQueue.findFirst({
         where: {
           status: 'pending',
-          assigned_to_agent: null  // Not yet assigned to any agent
+          assignedToAgent: null  // Not yet assigned to any agent
         },
         orderBy: {
-          queue_position: 'asc'  // ✅ Use proper queue ordering (lowest position = highest priority)
+          queuePosition: 'asc'  // ✅ Use proper queue ordering (lowest position = highest priority)
         }
       });
 
