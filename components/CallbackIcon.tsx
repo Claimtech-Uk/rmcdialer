@@ -5,7 +5,7 @@ import { Bell, Calendar, Clock, User, Phone, CheckCircle, AlertTriangle, Chevron
 import { Button } from '@/modules/core/components/ui/button';
 import { Badge } from '@/modules/core/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
-import { useAuth } from '@/modules/auth';
+import { api } from '@/lib/trpc/client';
 
 interface CallbackItem {
   id: string;
@@ -158,8 +158,6 @@ export function CallbackIcon() {
     return 'text-gray-400 bg-gray-100 border-gray-300';
   };
 
-  if (!agent?.id) return null;
-
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Always visible callback icon */}
@@ -170,7 +168,7 @@ export function CallbackIcon() {
         className={`relative ${getIconStyle()} hover:opacity-80`}
       >
         <Calendar className="w-4 h-4" />
-        {totalCount > 0 && (
+        {agent?.id && totalCount > 0 && (
           <Badge 
             variant={overdueCount > 0 ? "destructive" : dueSoonCount > 0 ? "default" : "secondary"}
             className="absolute -top-2 -right-2 min-w-[20px] h-5 flex items-center justify-center text-xs"
@@ -207,7 +205,12 @@ export function CallbackIcon() {
             </CardHeader>
             
             <CardContent className="space-y-2">
-              {callbacks.length === 0 ? (
+              {!agent?.id ? (
+                <div className="text-center py-4 text-gray-500">
+                  <User className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Please log in to view callbacks</p>
+                </div>
+              ) : callbacks.length === 0 ? (
                 <div className="text-center py-4 text-gray-500">
                   <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">No callbacks scheduled</p>

@@ -81,8 +81,13 @@ export interface UserCallContext {
   createdAt?: Date | null;
   address?: {
     fullAddress: string;
+    houseNumber?: string;
+    street?: string;
+    buildingName?: string;
     postCode: string;
     county: string;
+    district?: string;
+    postTown?: string;
   };
   claims: Array<{
     id: number;

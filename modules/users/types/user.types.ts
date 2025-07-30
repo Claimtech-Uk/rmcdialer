@@ -25,8 +25,13 @@ export interface UserAddressContext {
   id: string;
   type: string | null;
   fullAddress: string | null;
+  houseNumber: string | null;
+  street: string | null;
+  buildingName: string | null;
   postCode: string | null;
   county: string | null;
+  district: string | null;
+  postTown: string | null;
 }
 
 export interface ClaimContext {

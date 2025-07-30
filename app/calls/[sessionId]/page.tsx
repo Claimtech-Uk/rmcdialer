@@ -47,8 +47,13 @@ function NewCallInterface({
     createdAt: userContextResponse.data.user.createdAt || null,
     address: userContextResponse.data.user.address ? {
       fullAddress: userContextResponse.data.user.address.fullAddress || '',
+      houseNumber: userContextResponse.data.user.address.houseNumber || '',
+      street: userContextResponse.data.user.address.street || '',
+      buildingName: userContextResponse.data.user.address.buildingName || '',
       postCode: userContextResponse.data.user.address.postCode || '',
-      county: userContextResponse.data.user.address.county || ''
+      county: userContextResponse.data.user.address.county || '',
+      district: userContextResponse.data.user.address.district || '',
+      postTown: userContextResponse.data.user.address.postTown || ''
     } : undefined,
     claims: userContextResponse.data.claims.map(claim => ({
       id: claim.id,
@@ -404,8 +409,13 @@ const userContext = {
     createdAt: userData.createdAt || userData.created_at || null,
     address: userData.address ? {
       fullAddress: userData.address.fullAddress || 'Address not available',
+      houseNumber: userData.address.houseNumber || '',
+      street: userData.address.street || '',
+      buildingName: userData.address.buildingName || '',
       postCode: userData.address.postCode || '',
-      county: userData.address.county || ''
+      county: userData.address.county || '',
+      district: userData.address.district || '',
+      postTown: userData.address.postTown || ''
     } : undefined,
     
     // Convert claims to the format expected by CallInterface

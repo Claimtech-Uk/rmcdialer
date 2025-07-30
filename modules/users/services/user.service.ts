@@ -668,8 +668,13 @@ export class UserService {
       id: addr.id,
       type: addr.type || 'Unknown',
       fullAddress: fullAddress || `${addr.post_code || 'Unknown postcode'}`,
+      houseNumber: addr.house_number || null,
+      street: addr.street || null,
+      buildingName: addr.building_name || null,
       postCode: addr.post_code || '',
-      county: addr.county || ''
+      county: addr.county || '',
+      district: addr.district || null,
+      postTown: addr.post_town || null
     };
   }
 
@@ -882,14 +887,23 @@ export class UserService {
               status: { not: 'complete' } // Only active claims
             }
           },
-          // Current address only - skip fetching all addresses for now
+          // Current address only - fetch all address fields for proper formatting
           address: {
             select: {
               id: true,
               type: true,
+              is_linked_address: true,
               full_address: true,
+              address_line_1: true,
+              address_line_2: true,
+              house_number: true,
+              street: true,
+              building_name: true,
+              county: true,
+              district: true,
               post_code: true,
-              county: true
+              post_town: true,
+              country: true
             }
           }
         }

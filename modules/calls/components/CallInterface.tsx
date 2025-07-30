@@ -765,9 +765,36 @@ export function CallInterface({
                     {userContext.phoneNumber}
                   </div>
                   {userContext.address && (
-                    <div className="text-slate-600 flex items-center gap-2 mt-1">
-                      <MapPin className="w-4 h-4 flex-shrink-0" />
-                      {userContext.address.fullAddress}
+                    <div className="text-slate-600 mt-2">
+                      <div className="flex items-center gap-2 mb-1">
+                        <MapPin className="w-4 h-4 flex-shrink-0" />
+                        <span className="font-medium">Address:</span>
+                      </div>
+                      <div className="ml-6 space-y-1 text-sm">
+                        {userContext.address.houseNumber && userContext.address.street && (
+                          <div>{userContext.address.houseNumber} {userContext.address.street}</div>
+                        )}
+                        {userContext.address.buildingName && (
+                          <div>{userContext.address.buildingName}</div>
+                        )}
+                        {userContext.address.postTown && (
+                          <div>{userContext.address.postTown}</div>
+                        )}
+                        <div className="flex gap-4">
+                          {userContext.address.county && (
+                            <span><strong>County:</strong> {userContext.address.county}</span>
+                          )}
+                          {userContext.address.district && (
+                            <span><strong>District:</strong> {userContext.address.district}</span>
+                          )}
+                        </div>
+                        {userContext.address.postCode && (
+                          <div><strong>Postcode:</strong> {userContext.address.postCode}</div>
+                        )}
+                        {(!userContext.address.houseNumber || !userContext.address.street) && userContext.address.fullAddress && (
+                          <div className="text-slate-500 italic">Full: {userContext.address.fullAddress}</div>
+                        )}
+                      </div>
                     </div>
                   )}
                   {userContext.dateOfBirth && (
