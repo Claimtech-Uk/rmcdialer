@@ -82,6 +82,14 @@ export default function AgentManagementPage() {
     }
   }, [currentUser]);
 
+  // Debug modal state
+  useEffect(() => {
+    if (isCreateModalOpen) {
+      console.log('🔴 CREATE MODAL IS NOW OPEN!');
+      console.log('Modal state:', isCreateModalOpen);
+    }
+  }, [isCreateModalOpen]);
+
   // Form state for create
   const [createFormData, setCreateFormData] = useState<AgentFormData>({
     email: '',
@@ -351,7 +359,6 @@ export default function AgentManagementPage() {
               <DialogHeader>
                 <DialogTitle>Create New Agent</DialogTitle>
               </DialogHeader>
-              {console.log('🔴 MODAL CONTENT IS RENDERING!', { isCreateModalOpen })}
               <form onSubmit={handleCreateSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
