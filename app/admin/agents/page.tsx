@@ -61,14 +61,41 @@ export default function AgentManagementPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
+  const [isAccountSummaryOpen, setIsAccountSummaryOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<AgentEditData | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [createdAgentDetails, setCreatedAgentDetails] = useState<any>(null);
 
   // Add debug state
   const [debugInfo, setDebugInfo] = useState<any>(null);
 
   // Get current user info for debugging
   const { data: currentUser } = api.auth.me.useQuery();
+
+  // Password generator function
+  const generateSecurePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$';
+    let password = '';
+    
+    // Ensure at least one of each type
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghijkmnpqrstuvwxyz';
+    const numbers = '23456789';
+    const symbols = '!@#$';
+    
+    password += upper[Math.floor(Math.random() * upper.length)];
+    password += lower[Math.floor(Math.random() * lower.length)];
+    password += numbers[Math.floor(Math.random() * numbers.length)];
+    password += symbols[Math.floor(Math.random() * symbols.length)];
+    
+    // Fill remaining 4 characters
+    for (let i = 4; i < 8; i++) {
+      password += chars[Math.floor(Math.random() * chars.length)];
+    }
+    
+    // Shuffle the password
+    return password.split('').sort(() => Math.random() - 0.5).join('');
+  };
 
   // Debug effect
   useEffect(() => {
@@ -124,12 +151,26 @@ export default function AgentManagementPage() {
 
   // Mutations
   const createAgentMutation = api.auth.createAgent.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Store created agent details for summary modal
+      setCreatedAgentDetails({
+        ...data,
+        email: createFormData.email,
+        password: createFormData.password, // Include the generated password
+        role: createFormData.role,
+        isAiAgent: createFormData.isAiAgent
+      });
+
       toast({
         title: "Success",
         description: "Agent created successfully",
       });
+      
+      // Close create modal and open summary modal
       setIsCreateModalOpen(false);
+      setIsAccountSummaryOpen(true);
+      
+      // Reset form
       setCreateFormData({
         email: '',
         password: '',
@@ -138,6 +179,7 @@ export default function AgentManagementPage() {
         role: 'agent',
         isAiAgent: false
       });
+      
       refetch();
     },
     onError: (error) => {
@@ -440,14 +482,32 @@ export default function AgentManagementPage() {
               
               <div>
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={createFormData.password}
-                  onChange={(e) => setCreateFormData(prev => ({ ...prev, password: e.target.value }))}
-                  required
-                  minLength={8}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="password"
+                    type="password"
+                    value={createFormData.password}
+                    onChange={(e) => setCreateFormData(prev => ({ ...prev, password: e.target.value }))}
+                    required
+                    minLength={8}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const newPassword = generateSecurePassword();
+                      setCreateFormData(prev => ({ ...prev, password: newPassword }));
+                      toast({
+                        title: "Password Generated",
+                        description: "Secure password generated successfully",
+                      });
+                    }}
+                    className="whitespace-nowrap"
+                  >
+                    Generate
+                  </Button>
+                </div>
               </div>
               
               <div>
@@ -486,6 +546,138 @@ export default function AgentManagementPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Account Summary Modal - Shows after successful creation */}
+      {isAccountSummaryOpen && createdAgentDetails && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm"
+            onClick={() => setIsAccountSummaryOpen(false)}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-white rounded-lg shadow-2xl border p-6 max-w-md w-full mx-4 z-[10000]">
+            {/* Close Button */}
+            <button
+              onClick={() => setIsAccountSummaryOpen(false)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-xl font-bold"
+            >
+              ×
+            </button>
+            
+            {/* Modal Header */}
+            <div className="mb-6 text-center">
+              <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">Agent Created Successfully!</h2>
+              <p className="text-sm text-gray-600 mt-1">Here are the account details to share with the new agent</p>
+            </div>
+            
+            {/* Account Details */}
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Full Name</label>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-gray-900">{createdAgentDetails.firstName} {createdAgentDetails.lastName}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${createdAgentDetails.firstName} ${createdAgentDetails.lastName}`);
+                        toast({ title: "Copied!", description: "Name copied to clipboard" });
+                      }}
+                      className="text-blue-600 hover:text-blue-800 text-sm"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Email</label>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-gray-900 font-mono text-sm">{createdAgentDetails.email}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(createdAgentDetails.email);
+                        toast({ title: "Copied!", description: "Email copied to clipboard" });
+                      }}
+                      className="text-blue-600 hover:text-blue-800 text-sm"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Password</label>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-gray-900 font-mono text-sm bg-yellow-50 px-2 py-1 rounded border">{createdAgentDetails.password}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(createdAgentDetails.password);
+                        toast({ title: "Copied!", description: "Password copied to clipboard" });
+                      }}
+                      className="text-blue-600 hover:text-blue-800 text-sm"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Role</label>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-gray-900 capitalize">{createdAgentDetails.role}</span>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      createdAgentDetails.isAiAgent ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {createdAgentDetails.isAiAgent ? 'AI Agent' : 'Human Agent'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Copy All Button */}
+              <button
+                onClick={() => {
+                  const allDetails = `New Agent Account Details:
+Name: ${createdAgentDetails.firstName} ${createdAgentDetails.lastName}
+Email: ${createdAgentDetails.email}
+Password: ${createdAgentDetails.password}
+Role: ${createdAgentDetails.role}
+Type: ${createdAgentDetails.isAiAgent ? 'AI Agent' : 'Human Agent'}
+
+Login URL: ${window.location.origin}/login
+
+Please keep these credentials secure and change the password on first login.`;
+                  
+                  navigator.clipboard.writeText(allDetails);
+                  toast({ 
+                    title: "All Details Copied!", 
+                    description: "Complete account information copied to clipboard" 
+                  });
+                }}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors font-medium"
+              >
+                📋 Copy All Details
+              </button>
+              
+              <div className="text-center">
+                <button
+                  onClick={() => setIsAccountSummaryOpen(false)}
+                  className="text-gray-600 hover:text-gray-800 text-sm"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
