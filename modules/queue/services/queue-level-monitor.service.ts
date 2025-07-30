@@ -6,7 +6,9 @@
  */
 
 import { logger } from '../../core/utils/logger.utils';
-import { SeparatedQueuePopulationService } from './separated-queue-population.service';
+import { prisma } from '../../../lib/db';
+import { UnsignedUsersQueueGenerationService } from './unsigned-users-queue-generation.service';
+import { OutstandingRequestsQueueGenerationService } from './outstanding-requests-queue-generation.service';
 import { UnsignedUsersQueueService } from './unsigned-users-queue.service';
 import { OutstandingRequestsQueueService } from './outstanding-requests-queue.service';
 
@@ -31,6 +33,10 @@ interface QueueLevelReport {
   outstanding_requests: QueueLevelStatus;
   regenerationTriggered: boolean;
   reason?: string;
+  regenerationDetails?: {
+    unsigned_users?: any;
+    outstanding_requests?: any;
+  };
 }
 
 export class QueueLevelMonitorService {
@@ -42,17 +48,20 @@ export class QueueLevelMonitorService {
   };
   
   private lastRegenerations: Map<string, Date> = new Map();
-  private populationService: SeparatedQueuePopulationService;
+  private unsignedGenerator: UnsignedUsersQueueGenerationService;
+  private outstandingGenerator: OutstandingRequestsQueueGenerationService;
   private unsignedService: UnsignedUsersQueueService;
   private outstandingService: OutstandingRequestsQueueService;
   
   constructor() {
-    this.populationService = new SeparatedQueuePopulationService();
+    // Initialize generation services
+    this.unsignedGenerator = new UnsignedUsersQueueGenerationService();
+    this.outstandingGenerator = new OutstandingRequestsQueueGenerationService();
     
-    // Initialize with minimal dependencies for stats methods
-    const mockDependencies = {
-      prisma: {} as any,
-      replicaDb: {} as any,
+    // Initialize queue services with proper dependencies
+    const dependencies = {
+      prisma: prisma,
+      replicaDb: null, // Not needed for stats
       logger: { 
         info: console.log, 
         warn: console.warn, 
@@ -60,8 +69,8 @@ export class QueueLevelMonitorService {
       }
     };
     
-    this.unsignedService = new UnsignedUsersQueueService(mockDependencies);
-    this.outstandingService = new OutstandingRequestsQueueService(mockDependencies);
+    this.unsignedService = new UnsignedUsersQueueService(dependencies);
+    this.outstandingService = new OutstandingRequestsQueueService(dependencies);
   }
   
   /**
@@ -74,10 +83,11 @@ export class QueueLevelMonitorService {
     logger.info('🔍 [QUEUE-MONITOR] Checking queue levels...');
     
     try {
-      // Get current queue statistics
-      // Note: Using mock data until tables are created
-      const unsignedStats = { pending: 0, total: 0 }; // Will be: await this.unsignedService.getQueueStats()
-      const outstandingStats = { pending: 0, total: 0 }; // Will be: await this.outstandingService.getQueueStats()
+      // Get current queue statistics from actual services
+      const [unsignedStats, outstandingStats] = await Promise.all([
+        this.unsignedService.getQueueStats(),
+        this.outstandingService.getQueueStats()
+      ]);
       
       // Analyze each queue
       const unsignedStatus = this.analyzeQueueLevel('unsigned_users', unsignedStats.pending);
@@ -85,22 +95,55 @@ export class QueueLevelMonitorService {
       
       logger.info(`📊 [QUEUE-MONITOR] Queue levels: Unsigned=${unsignedStats.pending}, Outstanding=${outstandingStats.pending}`);
       
-      // Determine if regeneration is needed
-      const needsRegeneration = (unsignedStatus.needsRegeneration && unsignedStatus.canRegenerate) ||
-                               (outstandingStatus.needsRegeneration && outstandingStatus.canRegenerate);
-      
       let regenerationTriggered = false;
       let reason = '';
+      let regenerationDetails: any = {};
       
-      if (needsRegeneration && this.config.enableAutoRegeneration) {
-        reason = this.buildRegenerationReason(unsignedStatus, outstandingStatus);
-        logger.info(`🚨 [QUEUE-MONITOR] Would trigger queue regeneration: ${reason}`);
+      if (this.config.enableAutoRegeneration) {
+        // Check and regenerate unsigned users queue
+        if (unsignedStatus.needsRegeneration && unsignedStatus.canRegenerate) {
+          logger.info(`🚨 [QUEUE-MONITOR] Triggering unsigned users queue regeneration (${unsignedStats.pending} < ${this.config.lowThreshold})`);
+          
+          try {
+            const result = await this.unsignedGenerator.populateUnsignedUsersQueue();
+            regenerationDetails.unsigned_users = result;
+            this.updateLastRegeneration('unsigned_users');
+            regenerationTriggered = true;
+            
+            logger.info(`✅ [QUEUE-MONITOR] Unsigned users queue regenerated: ${result.queuePopulated} users`);
+          } catch (error) {
+            logger.error('❌ [QUEUE-MONITOR] Failed to regenerate unsigned users queue:', error);
+            regenerationDetails.unsigned_users = { error: error.message };
+          }
+        }
         
-        // Demo mode - don't actually trigger until tables exist
-        logger.info('📋 [QUEUE-MONITOR] Demo mode: Queue regeneration would be triggered here');
-        regenerationTriggered = true; // Simulate triggering
-        this.updateLastRegeneration('unsigned_users');
-        this.updateLastRegeneration('outstanding_requests');
+        // Check and regenerate outstanding requests queue
+        if (outstandingStatus.needsRegeneration && outstandingStatus.canRegenerate) {
+          logger.info(`🚨 [QUEUE-MONITOR] Triggering outstanding requests queue regeneration (${outstandingStats.pending} < ${this.config.lowThreshold})`);
+          
+          try {
+            const result = await this.outstandingGenerator.populateOutstandingRequestsQueue();
+            regenerationDetails.outstanding_requests = result;
+            this.updateLastRegeneration('outstanding_requests');
+            regenerationTriggered = true;
+            
+            logger.info(`✅ [QUEUE-MONITOR] Outstanding requests queue regenerated: ${result.queuePopulated} users`);
+          } catch (error) {
+            logger.error('❌ [QUEUE-MONITOR] Failed to regenerate outstanding requests queue:', error);
+            regenerationDetails.outstanding_requests = { error: error.message };
+          }
+        }
+        
+        // Build regeneration reason
+        if (regenerationTriggered) {
+          reason = this.buildRegenerationReason(unsignedStatus, outstandingStatus);
+        }
+      }
+      
+      if (regenerationTriggered) {
+        logger.info(`🚨 [QUEUE-MONITOR] Queue regeneration completed: ${reason}`);
+      } else {
+        logger.info(`✅ [QUEUE-MONITOR] Queue levels adequate or regeneration not needed`);
       }
       
       return {
@@ -108,7 +151,8 @@ export class QueueLevelMonitorService {
         unsigned_users: unsignedStatus,
         outstanding_requests: outstandingStatus,
         regenerationTriggered,
-        reason: reason || undefined
+        reason: reason || undefined,
+        regenerationDetails: Object.keys(regenerationDetails).length > 0 ? regenerationDetails : undefined
       };
       
     } catch (error) {

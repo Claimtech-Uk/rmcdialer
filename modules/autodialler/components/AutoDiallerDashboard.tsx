@@ -455,7 +455,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                     onClick={loadNextUser}
                     variant="outline"
                     size="default"
-                    className="px-6 py-3 text-slate-700 bg-slate-100 hover:text-white hover:bg-slate-700 rounded-xl font-semibold transition-all duration-200 border-2 border-slate-400 hover:border-slate-700 shadow-md hover:shadow-lg"
+                    className="px-6 py-3 text-slate-800 bg-white hover:text-white hover:bg-slate-700 rounded-xl font-bold transition-all duration-200 border-3 border-slate-600 hover:border-slate-700 shadow-lg hover:shadow-xl"
                   >
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Load Next User
@@ -464,7 +464,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                     onClick={pauseSession}
                     variant="outline"
                     size="default"
-                    className="px-6 py-3 text-slate-700 bg-slate-100 hover:text-white hover:bg-slate-700 rounded-xl font-semibold transition-all duration-200 border-2 border-slate-400 hover:border-slate-700 shadow-md hover:shadow-lg"
+                    className="px-6 py-3 text-slate-800 bg-white hover:text-white hover:bg-slate-700 rounded-xl font-bold transition-all duration-200 border-3 border-slate-600 hover:border-slate-700 shadow-lg hover:shadow-xl"
                   >
                     <Pause className="w-4 h-4 mr-2" />
                     Pause Session

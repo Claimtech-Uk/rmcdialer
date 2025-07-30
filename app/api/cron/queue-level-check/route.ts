@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       duration,
       timestamp: new Date().toISOString(),
       
-      // Summary for monitoring dashboards
+      // Enhanced summary for monitoring dashboards
       summary: {
         regenerationTriggered: report.regenerationTriggered,
         reason: report.reason,
@@ -41,7 +41,21 @@ export async function GET(request: NextRequest) {
         thresholds: {
           unsigned: report.unsigned_users.threshold,
           outstanding: report.outstanding_requests.threshold
-        }
+        },
+        regenerationDetails: report.regenerationDetails ? {
+          unsigned_users: report.regenerationDetails.unsigned_users ? {
+            success: !report.regenerationDetails.unsigned_users.error,
+            queuePopulated: report.regenerationDetails.unsigned_users.queuePopulated || 0,
+            totalEligible: report.regenerationDetails.unsigned_users.totalEligible || 0,
+            error: report.regenerationDetails.unsigned_users.error
+          } : null,
+          outstanding_requests: report.regenerationDetails.outstanding_requests ? {
+            success: !report.regenerationDetails.outstanding_requests.error,
+            queuePopulated: report.regenerationDetails.outstanding_requests.queuePopulated || 0,
+            totalEligible: report.regenerationDetails.outstanding_requests.totalEligible || 0,
+            error: report.regenerationDetails.outstanding_requests.error
+          } : null
+        } : null
       }
     });
 
