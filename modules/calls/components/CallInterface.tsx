@@ -495,20 +495,26 @@ export function CallInterface({
       // NOW create database session (only when call is actually connected)
       if (!callSessionId) {
         console.log('📋 Call is active - creating database session to track it');
+        
         toast({
           title: "Call Connected",
           description: "Creating call tracking record...",
         });
         
-        // Determine call direction and user ID
+        // For inbound calls, try to use webhook-created session by including CallSid
+        // This allows the backend to match or create appropriately
         const direction = incomingCallInfo ? 'inbound' : 'outbound';
         const userId = incomingCallInfo ? 999999 : userContext.userId; // Unknown caller for inbound
         const phoneNumber = incomingCallInfo ? incomingCallInfo.from : userContext.phoneNumber;
+        const twilioCallSid = callStatus?.callSid; // Include CallSid for webhook session matching
+        
+        console.log(`📋 Creating session - Direction: ${direction}, CallSid: ${twilioCallSid}`);
         
         initiateCallMutation.mutate({
           userId,
           direction,
-          phoneNumber
+          phoneNumber,
+          twilioCallSid // Pass CallSid to help backend find existing session
         });
       }
     }

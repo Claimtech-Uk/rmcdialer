@@ -50,9 +50,45 @@ export class CallService {
    * Initiate a new call session
    */
   async initiateCall(options: CallSessionOptions): Promise<InitiateCallResponse> {
-    const { userId, agentId, queueId, direction = 'outbound', phoneNumber } = options;
+    const { userId, agentId, queueId, direction = 'outbound', phoneNumber, twilioCallSid } = options;
 
     return await this.deps.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // For inbound calls with CallSid, first check if session already exists from webhook
+      if (direction === 'inbound' && twilioCallSid) {
+        console.log(`🔍 Checking for existing session with CallSid: ${twilioCallSid}`);
+        
+        const existingSession = await tx.callSession.findFirst({
+          where: { twilioCallSid }
+        });
+        
+        if (existingSession) {
+          console.log(`✅ Found existing webhook session ${existingSession.id} for CallSid ${twilioCallSid}`);
+          
+          // Update the session with agent if needed
+          const updatedSession = await tx.callSession.update({
+            where: { id: existingSession.id },
+            data: {
+              agentId, // Ensure correct agent is assigned
+              status: 'connected', // Update status to connected
+              connectedAt: new Date()
+            }
+          });
+          
+          this.deps.logger.info('Using existing webhook session for inbound call', {
+            sessionId: existingSession.id,
+            twilioCallSid,
+            userId,
+            agentId
+          });
+          
+          return {
+            callSession: this.mapToCallSession(updatedSession),
+            userContext: await this.getUserCallContext(userId)
+          };
+        } else {
+          console.log(`⚠️ No existing session found for CallSid ${twilioCallSid}, creating new session`);
+        }
+      }
       // Get user context for the call
       const userContext = await this.getUserCallContext(userId);
 

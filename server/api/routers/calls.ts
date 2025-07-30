@@ -49,7 +49,8 @@ const InitiateCallSchema = z.object({
   userId: z.number().positive(),
   queueId: z.string().uuid().optional(),
   phoneNumber: z.string().optional(),
-  direction: z.enum(['outbound', 'inbound']).default('outbound')
+  direction: z.enum(['outbound', 'inbound']).default('outbound'),
+  twilioCallSid: z.string().optional() // For matching existing webhook sessions
 });
 
 // Enhanced schema with UUID validation
@@ -102,6 +103,10 @@ const CallbackFiltersSchema = z.object({
   status: z.enum(['pending', 'completed', 'cancelled']).optional(),
   scheduledFrom: z.date().optional(),
   scheduledTo: z.date().optional()
+});
+
+const FindSessionByCallSidSchema = z.object({
+  callSid: z.string().min(1, 'CallSid is required')
 });
 
 const TwilioWebhookSchema = z.object({
@@ -237,6 +242,50 @@ export const callsRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: `Failed to record call outcome: ${error.message}`,
+        });
+      }
+    }),
+
+  // Find call session by Twilio CallSid
+  findSessionByCallSid: protectedProcedure
+    .input(FindSessionByCallSidSchema)
+    .query(async ({ input, ctx }) => {
+      try {
+        console.log(`🔍 Looking up session by CallSid: ${input.callSid}`);
+        
+        const session = await prisma.callSession.findFirst({
+          where: {
+            twilioCallSid: input.callSid
+          },
+          select: {
+            id: true,
+            userId: true,
+            agentId: true,
+            direction: true,
+            status: true,
+            startedAt: true
+          }
+        });
+
+        if (!session) {
+          console.log(`⚠️ No session found for CallSid: ${input.callSid}`);
+          return { sessionId: null };
+        }
+
+        console.log(`✅ Found session ${session.id} for CallSid: ${input.callSid}`);
+        return { 
+          sessionId: session.id,
+          userId: Number(session.userId),
+          agentId: session.agentId,
+          direction: session.direction,
+          status: session.status
+        };
+        
+      } catch (error: any) {
+        console.error(`❌ Error finding session by CallSid:`, error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Failed to find session: ${error.message}`,
         });
       }
     }),

@@ -49,6 +49,7 @@ export interface CallSessionOptions {
   queueId?: string;
   direction?: 'outbound' | 'inbound';
   phoneNumber?: string;
+  twilioCallSid?: string; // For matching existing webhook sessions
 }
 
 export interface CallUpdateOptions {
