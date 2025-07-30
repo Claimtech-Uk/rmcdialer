@@ -20,7 +20,7 @@ interface QueueGenerationResult {
 
 export class OutstandingRequestsQueueGenerationService {
   
-  private readonly QUEUE_SIZE_LIMIT = 100;
+  private readonly QUEUE_SIZE_LIMIT = 200;
   
   /**
    * Generate fresh outstanding requests queue from user_call_scores

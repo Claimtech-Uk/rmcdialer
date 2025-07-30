@@ -6,11 +6,8 @@
  */
 
 import { logger } from '../../core/utils/logger.utils';
-import { prisma } from '../../../lib/db';
 import { UnsignedUsersQueueGenerationService } from './unsigned-users-queue-generation.service';
 import { OutstandingRequestsQueueGenerationService } from './outstanding-requests-queue-generation.service';
-import { UnsignedUsersQueueService } from './unsigned-users-queue.service';
-import { OutstandingRequestsQueueService } from './outstanding-requests-queue.service';
 
 interface QueueLevelConfig {
   lowThreshold: number;           // Trigger regeneration when queue drops below this
@@ -50,27 +47,11 @@ export class QueueLevelMonitorService {
   private lastRegenerations: Map<string, Date> = new Map();
   private unsignedGenerator: UnsignedUsersQueueGenerationService;
   private outstandingGenerator: OutstandingRequestsQueueGenerationService;
-  private unsignedService: UnsignedUsersQueueService;
-  private outstandingService: OutstandingRequestsQueueService;
   
   constructor() {
-    // Initialize generation services
+    // Initialize generation services (they have the correct queue table stats methods)
     this.unsignedGenerator = new UnsignedUsersQueueGenerationService();
     this.outstandingGenerator = new OutstandingRequestsQueueGenerationService();
-    
-    // Initialize queue services with proper dependencies
-    const dependencies = {
-      prisma: prisma,
-      replicaDb: null, // Not needed for stats
-      logger: { 
-        info: console.log, 
-        warn: console.warn, 
-        error: console.error 
-      }
-    };
-    
-    this.unsignedService = new UnsignedUsersQueueService(dependencies);
-    this.outstandingService = new OutstandingRequestsQueueService(dependencies);
   }
   
   /**
@@ -80,20 +61,20 @@ export class QueueLevelMonitorService {
   async checkAndRegenerateQueues(): Promise<QueueLevelReport> {
     const timestamp = new Date().toISOString();
     
-    logger.info('🔍 [QUEUE-MONITOR] Checking queue levels...');
+    logger.info('🔍 [QUEUE-MONITOR] Checking actual queue table levels...');
     
     try {
-      // Get current queue statistics from actual services
+      // Get current queue statistics from actual queue tables (not user_call_scores)
       const [unsignedStats, outstandingStats] = await Promise.all([
-        this.unsignedService.getQueueStats(),
-        this.outstandingService.getQueueStats()
+        this.unsignedGenerator.getQueueStats(),
+        this.outstandingGenerator.getQueueStats()
       ]);
       
       // Analyze each queue
       const unsignedStatus = this.analyzeQueueLevel('unsigned_users', unsignedStats.pending);
       const outstandingStatus = this.analyzeQueueLevel('outstanding_requests', outstandingStats.pending);
       
-      logger.info(`📊 [QUEUE-MONITOR] Queue levels: Unsigned=${unsignedStats.pending}, Outstanding=${outstandingStats.pending}`);
+      logger.info(`📊 [QUEUE-MONITOR] Queue table levels: Unsigned=${unsignedStats.pending}, Outstanding=${outstandingStats.pending}`);
       
       let regenerationTriggered = false;
       let reason = '';
@@ -110,7 +91,7 @@ export class QueueLevelMonitorService {
             this.updateLastRegeneration('unsigned_users');
             regenerationTriggered = true;
             
-            logger.info(`✅ [QUEUE-MONITOR] Unsigned users queue regenerated: ${result.queuePopulated} users`);
+            logger.info(`✅ [QUEUE-MONITOR] Unsigned users queue regenerated: ${result.queuePopulated} users (up to 200 highest priority)`);
           } catch (error) {
             logger.error('❌ [QUEUE-MONITOR] Failed to regenerate unsigned users queue:', error);
             regenerationDetails.unsigned_users = { error: error instanceof Error ? error.message : String(error) };
@@ -127,7 +108,7 @@ export class QueueLevelMonitorService {
             this.updateLastRegeneration('outstanding_requests');
             regenerationTriggered = true;
             
-            logger.info(`✅ [QUEUE-MONITOR] Outstanding requests queue regenerated: ${result.queuePopulated} users`);
+            logger.info(`✅ [QUEUE-MONITOR] Outstanding requests queue regenerated: ${result.queuePopulated} users (up to 200 highest priority)`);
           } catch (error) {
             logger.error('❌ [QUEUE-MONITOR] Failed to regenerate outstanding requests queue:', error);
             regenerationDetails.outstanding_requests = { error: error instanceof Error ? error.message : String(error) };
@@ -143,7 +124,7 @@ export class QueueLevelMonitorService {
       if (regenerationTriggered) {
         logger.info(`🚨 [QUEUE-MONITOR] Queue regeneration completed: ${reason}`);
       } else {
-        logger.info(`✅ [QUEUE-MONITOR] Queue levels adequate or regeneration not needed`);
+        logger.info(`✅ [QUEUE-MONITOR] Queue table levels adequate or regeneration not needed`);
       }
       
       return {

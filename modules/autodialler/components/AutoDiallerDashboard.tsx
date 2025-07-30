@@ -431,7 +431,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                       console.log('Activating call interface for:', currentUser.firstName, currentUser.lastName);
                       setIsCallInterfaceActive(true);
                     }}
-                    className={`px-12 py-6 text-lg font-bold ${teamConfig.color.gradient} text-white hover:shadow-2xl transform hover:scale-105 transition-all duration-300 border-0 rounded-2xl shadow-lg`}
+                    className={`px-12 py-6 text-lg font-bold bg-gradient-to-r ${teamConfig.color.gradient} text-white hover:shadow-2xl transform hover:scale-105 transition-all duration-300 border-0 rounded-2xl shadow-lg`}
                     size="lg"
                   >
                     <Phone className="w-6 h-6 mr-3" />
