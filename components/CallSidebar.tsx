@@ -459,6 +459,21 @@ function ConnectedCallContent({
         )}
       </Card>
 
+      {/* Send Portal Link */}
+      {userContext && userDetails?.userId && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-medium text-gray-900">Portal Access</h4>
+          </div>
+          <SendPortalLinkButton 
+            userId={userDetails.userId}
+            userName={userContext.callerName || 'Customer'}
+            phoneNumber={userContext.phoneNumber}
+            callSessionId={userDetails.id}
+          />
+        </Card>
+      )}
+
       {/* Claims Information */}
       {userContext?.claims && userContext.claims.length > 0 && (
         <Card className="p-4">
@@ -615,109 +630,7 @@ function ConnectedCallContent({
         </div>
       </Card>
 
-      {/* Quick Actions */}
-      <Card className="p-4">
-        <h4 className="font-medium text-gray-900 mb-4">Quick Actions</h4>
-        <div className="space-y-3">
-          <Button 
-            variant="outline" 
-            size="default"
-            className="w-full h-auto min-h-[60px] justify-start px-4 py-3 text-left hover:bg-blue-50 hover:border-blue-300 transition-colors border border-gray-200"
-            onClick={() => {
-              // TODO: Implement schedule callback functionality
-              if (userDetails?.userId) {
-                alert(`Scheduling callback for user ${userDetails.userId}`);
-              }
-            }}
-            disabled={!userDetails?.userId}
-          >
-            <span className="mr-3 text-lg flex-shrink-0">📅</span>
-            <div className="flex flex-col items-start text-left w-full">
-              <span className="font-medium text-sm">Schedule Callback</span>
-              <span className="text-xs text-gray-500 mt-1">Set up follow-up call</span>
-            </div>
-          </Button>
-          
-          <Button 
-            variant="outline" 
-            size="default"
-            className="w-full h-auto min-h-[60px] justify-start px-4 py-3 text-left hover:bg-green-50 hover:border-green-300 transition-colors border border-gray-200"
-            onClick={() => {
-              // TODO: Implement SMS functionality
-              if (userDetails?.userId) {
-                window.open(`/sms?userId=${userDetails.userId}`, '_blank');
-              }
-            }}
-            disabled={!userDetails?.userId}
-          >
-            <span className="mr-3 text-lg flex-shrink-0">💬</span>
-            <div className="flex flex-col items-start text-left w-full">
-              <span className="font-medium text-sm">Send SMS</span>
-              <span className="text-xs text-gray-500 mt-1">Send text message</span>
-            </div>
-          </Button>
-          
-          <Button 
-            variant="outline" 
-            size="default"
-            className="w-full h-auto min-h-[60px] justify-start px-4 py-3 text-left hover:bg-purple-50 hover:border-purple-300 transition-colors border border-gray-200"
-            onClick={() => {
-              if (userDetails?.userId) {
-                window.open(`/users/${userDetails.userId}`, '_blank');
-              }
-            }}
-            disabled={!userDetails?.userId}
-          >
-            <span className="mr-3 text-lg flex-shrink-0">👤</span>
-            <div className="flex flex-col items-start text-left w-full">
-              <span className="font-medium text-sm">View Full Profile</span>
-              <span className="text-xs text-gray-500 mt-1">Complete user details</span>
-            </div>
-          </Button>
-          
-          {userContext?.claims && userContext.claims.length > 0 && (
-            <Button 
-              variant="outline" 
-              size="default"
-              className="w-full h-auto min-h-[60px] justify-start px-4 py-3 text-left hover:bg-orange-50 hover:border-orange-300 transition-colors border border-gray-200"
-              onClick={() => {
-                if (userDetails?.userId) {
-                  window.open(`/claims?userId=${userDetails.userId}`, '_blank');
-                }
-              }}
-              disabled={!userDetails?.userId}
-            >
-              <span className="mr-3 text-lg flex-shrink-0">📋</span>
-              <div className="flex flex-col items-start text-left w-full">
-                <span className="font-medium text-sm">View Claims ({userContext.claims.length})</span>
-                <span className="text-xs text-gray-500 mt-1">Active claims & documents</span>
-              </div>
-            </Button>
-          )}
-          
-          {userContext?.requirements && userContext.requirements.filter((req: any) => req.status !== 'completed').length > 0 && (
-            <Button 
-              variant="outline" 
-              size="default"
-              className="w-full h-auto min-h-[60px] justify-start px-4 py-3 text-left hover:bg-red-50 hover:border-red-300 transition-colors border border-gray-200"
-              onClick={() => {
-                if (userDetails?.userId) {
-                  window.open(`/queue/requirements?userId=${userDetails.userId}`, '_blank');
-                }
-              }}
-              disabled={!userDetails?.userId}
-            >
-              <span className="mr-3 text-lg flex-shrink-0">⚠️</span>
-              <div className="flex flex-col items-start text-left w-full">
-                <span className="font-medium text-sm">Review Requirements</span>
-                <span className="text-xs text-gray-500 mt-1">
-                  {userContext.requirements.filter((req: any) => req.status !== 'completed').length} outstanding items
-                </span>
-              </div>
-            </Button>
-          )}
-        </div>
-      </Card>
+
     </div>
   );
 }
@@ -980,5 +893,74 @@ function PostCallContent({
         />
       )}
     </div>
+  );
+}
+
+// Send Portal Link Button Component
+function SendPortalLinkButton({ 
+  userId, 
+  userName, 
+  phoneNumber, 
+  callSessionId 
+}: {
+  userId: number;
+  userName: string;
+  phoneNumber: string;
+  callSessionId: string;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Magic link send mutation
+  const sendMagicLinkMutation = api.communications.magicLinks.send.useMutation({
+    onSuccess: (result) => {
+      console.log('✅ Portal link sent successfully:', result);
+      // Could add a toast notification here
+      alert(`Portal link sent successfully to ${phoneNumber}!`);
+    },
+    onError: (error) => {
+      console.error('❌ Failed to send portal link:', error);
+      alert(`Failed to send portal link: ${error.message}`);
+    },
+    onSettled: () => {
+      setIsLoading(false);
+    }
+  });
+
+  const handleSendPortalLink = async () => {
+    if (!phoneNumber) {
+      alert('Phone number is required to send portal link');
+      return;
+    }
+
+    setIsLoading(true);
+    
+    sendMagicLinkMutation.mutate({
+      userId,
+      linkType: 'claimPortal',
+      deliveryMethod: 'sms',
+      phoneNumber,
+      userName,
+      callSessionId
+    });
+  };
+
+  return (
+    <Button 
+      onClick={handleSendPortalLink}
+      disabled={isLoading || !phoneNumber}
+      className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white"
+    >
+      {isLoading ? (
+        <div className="flex items-center justify-center space-x-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+          <span>Sending...</span>
+        </div>
+      ) : (
+        <>
+          <span className="mr-2">🔗</span>
+          Send Portal Link
+        </>
+      )}
+    </Button>
   );
 } 
