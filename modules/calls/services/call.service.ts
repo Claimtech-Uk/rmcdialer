@@ -812,7 +812,10 @@ export class CallService {
         previousQueueType: undefined, // Would need to track this separately
         lastOutcome: outcomeType,
         totalAttempts: userScore?.totalAttempts || 0,
-        lastCallAt: new Date()
+        lastCallAt: new Date(),
+        // ADDED: Whether this user has an existing scoring record
+        hasExistingRecord: !!userScore,
+        currentScore: userScore?.currentScore || 0
       };
 
       // Calculate new score using enhanced scoring service
@@ -867,7 +870,8 @@ export class CallService {
             currentScore: newPriorityScore.finalScore,
             isActive: true,
             currentQueueType: currentQueueType,
-            lastResetDate: needsReset ? new Date() : userScore?.lastResetDate,
+            // FIXED: Set lastResetDate for existing users who don't have it (prevents future fresh start treatment)
+            lastResetDate: needsReset ? new Date() : (userScore?.lastResetDate || new Date()),
             lastOutcome: outcomeType,
             lastCallAt: new Date(),
             totalAttempts: scoringContext.totalAttempts,

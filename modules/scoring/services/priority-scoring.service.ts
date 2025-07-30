@@ -95,19 +95,20 @@ export class PriorityScoringService {
    */
   private checkForFreshStart(context: ScoringContext): { isFreshStart: boolean; factor: ScoreFactor } {
     // Fresh start conditions:
-    // 1. New user (no previous scoring record)
-    // 2. Queue type changed (moved from unsigned_users to outstanding_requests, etc.)
+    // 1. Truly new user (no user_call_score record at all)
+    // 2. Queue type changed (moved from unsigned_users to outstanding_requests, etc.)  
     // 3. Completed everything and now has new requirements
     
-    const isNewUser = !context.lastResetDate
+    // FIXED: Only treat as new if they have no record at all, not just missing lastResetDate
+    const isTrulyNewUser = context.hasExistingRecord === false
     const queueTypeChanged = context.currentQueueType !== context.previousQueueType
     const hasNewRequirements = context.requirementsChangedDate && 
       context.requirementsChangedDate > (context.lastResetDate || context.userCreatedAt)
 
-    const isFreshStart = isNewUser || queueTypeChanged || hasNewRequirements || false;
+    const isFreshStart = isTrulyNewUser || queueTypeChanged || hasNewRequirements || false;
 
     let reason = 'Continuing with existing score'
-    if (isNewUser) reason = 'New user - starting fresh'
+    if (isTrulyNewUser) reason = 'New user - starting fresh'
     else if (queueTypeChanged) reason = `Queue changed from ${context.previousQueueType} to ${context.currentQueueType}`
     else if (hasNewRequirements) reason = 'New requirements detected - fresh start'
 

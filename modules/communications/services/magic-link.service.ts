@@ -520,10 +520,10 @@ export class MagicLinkService {
   }
 
   private buildMessage(linkType: MagicLinkType, url: string, userName?: string): string {
-    const name = userName ? ` ${userName}` : '';
+    const name = userName || 'there';
     
-    // Standard message for all magic links since they all go to /claims
-    return `Hi${name}, view your claim: ${url}`;
+    // Updated message format as requested
+    return `Hi ${name},\n\nAccess your secure claim portal here:\n\n${url}`;
   }
 
   // private async generateShortUrl(originalUrl: string): Promise<string | null> {

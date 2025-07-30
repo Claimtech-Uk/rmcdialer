@@ -18,6 +18,9 @@ export interface ScoringContext {
   totalAttempts?: number
   requirementsChangedDate?: Date
   lastCallAt?: Date
+  
+  // NEW: To distinguish truly new users from existing users with null lastResetDate
+  hasExistingRecord?: boolean
 }
 
 // Result of priority calculation
