@@ -197,26 +197,11 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         } catch (fallbackError) {
           console.error(`❌ Hume TTS fallback also failed:`, fallbackError);
           
-          // Final fallback - still try basic Hume TTS
-          try {
-            const basicHumeTTSService = new SimpleHumeTTSService();
-            const basicAudio = await basicHumeTTSService.generateOutOfHoursGreeting(); // Basic version
-            
-            return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+          // Final fallback - simple text (no voice attribute)
+          const fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. Unfortunately, you've caught us outside of our normal working hours. We will call you back as soon as possible. Thank you for your patience.`;
+          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Play>${basicAudio}</Play>
-    <Hangup/>
-</Response>`, {
-              status: 200,
-              headers: { 'Content-Type': 'application/xml' }
-            });
-          } catch (finalError) {
-            console.error(`❌ All Hume TTS attempts failed:`, finalError);
-            
-            // Absolute final fallback - emergency message
-            return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Pause length="1"/>
+    <Say>${fallbackMessage}</Say>
     <Hangup/>
 </Response>`, {
             status: 200,
@@ -810,26 +795,11 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
         } catch (fallbackError) {
           console.error(`❌ Hume TTS fallback also failed:`, fallbackError);
           
-          // Final fallback - still try basic Hume TTS  
-          try {
-            const basicHumeTTSService = new SimpleHumeTTSService();
-            const basicAudio = await basicHumeTTSService.generateBusyGreeting(); // Basic version
-            
-            return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+          // Final fallback - simple text (no voice attribute)
+          const fallbackMessage = `Thank you for calling Resolve My Claim${firstName ? ', ' + firstName : ''}. All our agents are currently busy helping other customers. We'll have someone call you back shortly. Thank you for your patience.`;
+          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Play>${basicAudio}</Play>
-    <Hangup/>
-</Response>`, {
-              status: 200,
-              headers: { 'Content-Type': 'application/xml' }
-            });
-          } catch (finalError) {
-            console.error(`❌ All Hume TTS attempts failed:`, finalError);
-            
-            // Absolute final fallback - emergency message
-            return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Pause length="1"/>
+    <Say>${fallbackMessage}</Say>
     <Hangup/>
 </Response>`, {
           status: 200,
@@ -843,26 +813,9 @@ async function handleInboundCall(callSid: string, from: string, to: string, webh
   } catch (error) {
     console.error('❌ Error handling inbound call:', error);
     
-    // Try to use Hume TTS even for error messages
-    try {
-      const errorHumeTTSService = new SimpleHumeTTSService();
-      const errorAudio = await errorHumeTTSService.generateBusyGreeting(); // Reuse busy greeting for errors
-      
-      return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+    return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Play>${errorAudio}</Play>
-    <Hangup/>
-</Response>`, {
-        status: 200,
-        headers: { 'Content-Type': 'application/xml' }
-      });
-    } catch (errorTTSError) {
-      console.error(`❌ Error message Hume TTS failed:`, errorTTSError);
-      
-      // Absolute emergency fallback
-      return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Pause length="2"/>
+    <Say>I'm sorry, there was an error processing your call. Please try again later.</Say>
     <Hangup/>
 </Response>`, {
       status: 200,
