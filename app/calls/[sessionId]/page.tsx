@@ -391,13 +391,15 @@ export default function CallSessionPage() {
 
   // Transform the user context to match CallInterface expectations
   // Handle different data structures from getUserContext vs getCallSession
-  const userData = (userContextData as any).user || userContextData; // Type assertion to handle union types
-  const userContext = {
+    const userData = (userContextData as any).user || userContextData; // Type assertion to handle union types
+const userContext = {
     userId: userData.id || userData.userId,
     firstName: userData.firstName || 'Unknown',
     lastName: userData.lastName || 'User',
     email: userData.email || `user${userData.id || userData.userId}@unknown.com`,
     phoneNumber: userData.phoneNumber || phoneNumber || '+44000000000',
+    dateOfBirth: userData.dateOfBirth || userData.date_of_birth || null,
+    createdAt: userData.createdAt || userData.created_at || null,
     address: userData.address ? {
       fullAddress: userData.address.fullAddress || 'Address not available',
       postCode: userData.address.postCode || '',

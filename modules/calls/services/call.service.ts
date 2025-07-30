@@ -952,8 +952,8 @@ export class CallService {
   }
 
   /**
-   * Complete any pending callbacks for this user
-   * Called after any call outcome is recorded to ensure callbacks are marked as complete
+   * Complete the specific callback that originated this call session (if any)
+   * Only completes callbacks that are directly related to the current call session
    */
   private async completeCallbacksForUser(
     tx: Prisma.TransactionClient,
@@ -961,42 +961,53 @@ export class CallService {
     completedCallSessionId: string
   ): Promise<void> {
     try {
-      // Find all pending callbacks for this user
-      const pendingCallbacks = await tx.callback.findMany({
-        where: {
-          userId: BigInt(userId),
-          status: { in: ['pending', 'accepted'] }
+      // Get the call session to find the originating queue entry
+      const callSession = await tx.callSession.findUnique({
+        where: { id: completedCallSessionId },
+        include: {
+          callQueue: {
+            include: {
+              callback: true
+            }
+          }
         }
       });
 
-      if (pendingCallbacks.length === 0) {
-        return; // No callbacks to complete
+      if (!callSession?.callQueue?.callback) {
+        // No callback associated with this call session - nothing to complete
+        console.log(`📞 No callback associated with call session ${completedCallSessionId}`);
+        return;
       }
 
-      // Mark all pending callbacks as completed
-      const updatedCallbacks = await tx.callback.updateMany({
-        where: {
-          userId: BigInt(userId),
-          status: { in: ['pending', 'accepted'] }
-        },
+      const callback = callSession.callQueue.callback;
+      
+      // Only complete if the callback is in a valid state to be completed
+      if (!['pending', 'accepted'].includes(callback.status)) {
+        console.log(`📞 Callback ${callback.id} is already in status '${callback.status}', skipping completion`);
+        return;
+      }
+
+      // Complete only this specific callback
+      await tx.callback.update({
+        where: { id: callback.id },
         data: {
           status: 'completed',
           completedCallSessionId: completedCallSessionId
         }
       });
 
-      // Remove any queue entries for these callbacks since they're now completed
+      // Remove any remaining queue entries for this specific callback
       await tx.callQueue.deleteMany({
         where: {
-          userId: BigInt(userId),
-          callbackId: { in: pendingCallbacks.map(cb => cb.id) }
+          callbackId: callback.id,
+          status: { in: ['pending', 'assigned'] }
         }
       });
 
-      console.log(`✅ Completed ${updatedCallbacks.count} callbacks for user ${userId} after call ${completedCallSessionId}`);
+      console.log(`✅ Completed callback ${callback.id} for user ${userId} after call ${completedCallSessionId}`);
 
     } catch (error) {
-      console.error(`⚠️ Failed to complete callbacks for user ${userId}:`, error);
+      console.error(`⚠️ Failed to complete callback for call session ${completedCallSessionId}:`, error);
       // Don't throw - we don't want call outcome recording to fail due to callback completion issues
     }
   }

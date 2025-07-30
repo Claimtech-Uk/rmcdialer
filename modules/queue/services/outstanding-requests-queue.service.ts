@@ -158,16 +158,31 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
   }
 
   /**
-   * Mark user as inactive in user_call_scores to prevent future pickup
+   * Mark user as inactive in user_call_scores AND remove from queue to prevent future pickup
    */
   private async markUserInactive(userId: bigint, reason: string): Promise<void> {
     try {
+      // Update user_call_scores
       await this.prisma.userCallScore.updateMany({
-        where: { userId },
+        where: { userId: userId },
         data: {
           isActive: false,
           currentQueueType: null,
           lastOutcome: reason
+        }
+      });
+
+      // CRITICAL FIX: Also update the queue entry status to remove from future queries
+      await this.prisma.outstandingRequestsQueue.updateMany({
+        where: { 
+          userId: userId,
+          status: 'pending' // Only update pending entries
+        },
+        data: {
+          status: 'inactive',
+          assignedToAgent: null,
+          assignedAt: null,
+          updatedAt: new Date()
         }
       });
       

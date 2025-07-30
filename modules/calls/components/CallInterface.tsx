@@ -770,6 +770,18 @@ export function CallInterface({
                       {userContext.address.fullAddress}
                     </div>
                   )}
+                  {userContext.dateOfBirth && (
+                    <div className="text-slate-600 flex items-center gap-2 mt-1">
+                      <Calendar className="w-4 h-4 flex-shrink-0" />
+                      DOB: {new Date(userContext.dateOfBirth).toLocaleDateString('en-GB')}
+                    </div>
+                  )}
+                  {userContext.createdAt && (
+                    <div className="text-slate-600 flex items-center gap-2 mt-1">
+                      <Calendar className="w-4 h-4 flex-shrink-0" />
+                      Account Created: {new Date(userContext.createdAt).toLocaleDateString('en-GB')}
+                    </div>
+                  )}
                 </div>
                 
                 <div className="space-y-2">

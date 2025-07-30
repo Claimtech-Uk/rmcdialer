@@ -840,6 +840,8 @@ export class UserService {
           introducer: true,
           solicitor: true,
           last_login: true,
+          date_of_birth: true,
+          created_at: true,
           current_signature_file_id: true,
           // Optimized claims - only pending requirements for call context
           claims: {
@@ -1174,6 +1176,8 @@ export class UserService {
         introducer: userData.introducer,
         solicitor: userData.solicitor,
         lastLogin: userData.last_login,
+        dateOfBirth: userData.date_of_birth,
+        createdAt: userData.created_at,
         address: this.buildAddressForUserContext(userData)
       },
       claims: userData.claims.map(claim => ({
@@ -1398,6 +1402,8 @@ export class UserService {
         introducer: 'mcc',
         solicitor: null,
         lastLogin: null,
+        dateOfBirth: null,
+        createdAt: null,
         address: null
       },
       claims: [],

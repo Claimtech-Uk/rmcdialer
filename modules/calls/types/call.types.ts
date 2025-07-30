@@ -77,6 +77,8 @@ export interface UserCallContext {
   lastName: string;
   email: string;
   phoneNumber: string;
+  dateOfBirth?: Date | null;
+  createdAt?: Date | null;
   address?: {
     fullAddress: string;
     postCode: string;

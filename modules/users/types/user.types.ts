@@ -13,6 +13,8 @@ export interface UserCallContext {
     introducer: string | null;
     solicitor: string | null;
     lastLogin: Date | null;
+    dateOfBirth: Date | null;
+    createdAt: Date | null;
     address: UserAddressContext | null;
   };
   claims: ClaimContext[];
