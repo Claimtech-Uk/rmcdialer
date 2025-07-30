@@ -79,7 +79,30 @@ export const queueRouter = createTRPCRouter({
     .mutation(async ({ input, ctx }) => {
       logger.info(`Agent ${ctx.agent.id} requesting next user for ${input.queueType} queue`);
       // Use PreCallValidationService to get user with proper data transformation
-      return await preCallValidationService.getNextValidUserForCall(input.queueType);
+      // Pass agent ID for proper assignment tracking
+      return await preCallValidationService.getNextValidUserForCall(input.queueType, ctx.agent.id);
+    }),
+
+  // Skip current user in queue
+  skipUser: protectedProcedure
+    .input(z.object({ 
+      queueEntryId: z.string(),
+      queueType: QueueTypeSchema 
+    }))
+    .mutation(async ({ input, ctx }) => {
+      logger.info(`Agent ${ctx.agent.id} skipping user in ${input.queueType} queue`);
+      return await queueService.skipUser(input.queueEntryId, input.queueType);
+    }),
+
+  // Mark user as completed
+  markUserCompleted: protectedProcedure
+    .input(z.object({ 
+      queueEntryId: z.string(),
+      queueType: QueueTypeSchema 
+    }))
+    .mutation(async ({ input, ctx }) => {
+      logger.info(`Agent ${ctx.agent.id} marking user as completed in ${input.queueType} queue`);
+      return await queueService.markUserCompleted(input.queueEntryId, input.queueType);
     }),
 
   // Validate a specific user for calling

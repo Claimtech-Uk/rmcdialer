@@ -200,13 +200,13 @@ export class PreCallValidationService {
    * Get the next valid user from queue for calling
    * Uses QueueAdapterService when available, falls back to legacy CallQueue
    */
-  async getNextValidUserForCall(queueType: QueueType): Promise<NextUserForCallResult | null> {
+  async getNextValidUserForCall(queueType: QueueType, agentId?: number): Promise<NextUserForCallResult | null> {
     try {
       console.log(`🔍 Finding next valid user for ${queueType} queue...`);
       
       // Use new queue adapter if available
       if (this.queueAdapter) {
-        return await this.getNextValidUserFromAdapter(queueType);
+        return await this.getNextValidUserFromAdapter(queueType, agentId);
       }
       
       // Fallback to legacy CallQueue method
@@ -221,7 +221,7 @@ export class PreCallValidationService {
   /**
    * Get next valid user using QueueAdapterService (preferred method)
    */
-  private async getNextValidUserFromAdapter(queueType: QueueType): Promise<NextUserForCallResult | null> {
+  private async getNextValidUserFromAdapter(queueType: QueueType, agentId?: number): Promise<NextUserForCallResult | null> {
     console.log(`🔄 Using QueueAdapterService for ${queueType} queue`);
     
     const maxAttempts = 5; // Prevent infinite loops
@@ -230,7 +230,7 @@ export class PreCallValidationService {
       console.log(`🔍 Attempt ${attempt}/${maxAttempts} to find valid user...`);
       
       // 1. Get next user from queue adapter
-      const user = await this.queueAdapter!.getNextUserForCall({ queueType });
+      const user = await this.queueAdapter!.getNextUserForCall({ queueType, agentId });
       if (!user) {
         console.log(`📭 No more users in ${queueType} queue`);
         return null;

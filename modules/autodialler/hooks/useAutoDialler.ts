@@ -33,6 +33,7 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
   const [state, setState] = useState<AutoDiallerState>('ready');
   const [currentUser, setCurrentUser] = useState<UserCallContext | null>(null);
   const [queueContext, setQueueContext] = useState<AutoDiallerQueueContext | null>(null);
+  const [currentQueueEntryId, setCurrentQueueEntryId] = useState<string | null>(null);
   const [sessionStats, setSessionStats] = useState<AutoDiallerSessionStats>({
     callsCompleted: 0,
     successfulContacts: 0,
@@ -65,6 +66,8 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
 
   // Queue operations
   const getNextUserMutation = api.queue.getNextUserForCall.useMutation();
+  const skipUserMutation = api.queue.skipUser.useMutation();
+  const markUserCompletedMutation = api.queue.markUserCompleted.useMutation();
   const startSessionMutation = api.autoDialer.startSession.useMutation();
   const endSessionMutation = api.autoDialer.endSession.useMutation();
   const updateSettingsMutation = api.autoDialer.updateSettings.useMutation();
@@ -110,6 +113,7 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
       
       if (result) {
         setCurrentUser(result.userContext);
+        setCurrentQueueEntryId(result.queueEntryId); // Store queue entry ID for skip/complete operations
         
                  // Generate queue context
          const context = autoDiallerService.generateQueueContext(
@@ -138,6 +142,7 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
         // No users available
         transitionTo('paused', 'No more users in queue');
         setCurrentUser(null);
+        setCurrentQueueEntryId(null);
         setQueueContext(null);
         
         toast({
@@ -159,25 +164,40 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
       
       autoDiallerService.logError('Failed to load next user', session?.agent?.id || 0, teamType, err);
     }
-  }, [teamConfig, queueStats, session, isActive, teamType, getNextUserMutation, transitionTo, onUserLoaded, onError, toast]);
+  }, [transitionTo, getNextUserMutation, teamConfig, teamType, queueStats, autoDiallerService, onUserLoaded, isActive, session, onError, toast]);
 
   // Skip current user and load next
   const skipUser = useCallback(async () => {
-    if (currentUser) {
-      autoDiallerService.logActivity('User skipped', session?.agent?.id || 0, teamType, {
-        userId: currentUser.userId,
-        userName: `${currentUser.firstName} ${currentUser.lastName}`
-      });
-      
-      toast({
-        title: "User Skipped",
-        description: `Skipped ${currentUser.firstName} ${currentUser.lastName}`,
-      });
+    if (currentUser && currentQueueEntryId) {
+      // Mark current user as skipped in queue
+      try {
+        await skipUserMutation.mutateAsync({
+          queueEntryId: currentQueueEntryId,
+          queueType: teamConfig.queueType
+        });
+
+        autoDiallerService.logActivity('User skipped', session?.agent?.id || 0, teamType, {
+          userId: currentUser.userId,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`
+        });
+        
+        toast({
+          title: "User Skipped",
+          description: `Skipped ${currentUser.firstName} ${currentUser.lastName}`,
+        });
+      } catch (err: any) {
+        toast({
+          title: "Error Skipping User",
+          description: err.message,
+          variant: "destructive"
+        });
+      }
     }
     
     setCurrentUser(null);
+    setCurrentQueueEntryId(null);
     await loadNextUser();
-  }, [currentUser, session, teamType, loadNextUser, toast]);
+  }, [currentUser, currentQueueEntryId, teamConfig, session, teamType, loadNextUser, toast, autoDiallerService, skipUserMutation]);
 
   // Handle call completion
   const handleCallComplete = useCallback(async (outcome: CallOutcomeOptions) => {
@@ -212,8 +232,25 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
     // Call the completion callback
     onCallComplete?.(outcome);
 
+    // Mark user as completed in queue
+    if (currentQueueEntryId) {
+      try {
+        await markUserCompletedMutation.mutateAsync({
+          queueEntryId: currentQueueEntryId,
+          queueType: teamConfig.queueType
+        });
+        autoDiallerService.logActivity('User marked as completed in queue', session?.agent?.id || 0, teamType, {
+          queueEntryId: currentQueueEntryId,
+          outcome: outcome.outcomeType
+        });
+      } catch (err: any) {
+        logger.warn('Failed to mark user as completed in queue', err);
+      }
+    }
+
     // Clear current user
     setCurrentUser(null);
+    setCurrentQueueEntryId(null);
 
          // Check session limits
      if (!settings) {
@@ -245,7 +282,7 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
       title: "Call Completed",
       description: `Outcome: ${outcome.outcomeType.replace('_', ' ').toUpperCase()}`,
     });
-  }, [currentUser, session, teamType, settings, updateStats, updateSessionStatsMutation, onCallComplete, onSessionEnd, transitionTo, toast]);
+  }, [currentUser, session, teamType, settings, updateStats, updateSessionStatsMutation, onCallComplete, onSessionEnd, transitionTo, toast, currentQueueEntryId, teamConfig, markUserCompletedMutation, loadNextUser]);
 
   // Countdown logic removed - agent controls pacing manually
 

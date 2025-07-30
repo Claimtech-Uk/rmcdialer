@@ -84,17 +84,18 @@ export class QueueAdapterService {
    * Get next user for call - routes to appropriate queue with validation
    * Now uses queue-specific validation methods
    */
-  async getNextUserForCall(options?: { queueType?: QueueType }): Promise<NextUserForCallResult | null> {
+  async getNextUserForCall(options?: { queueType?: QueueType; agentId?: number }): Promise<NextUserForCallResult | null> {
     this.logger.info('🎯 Getting next user for call with validation');
 
     if (this.config.useNewQueues && this.unsignedService && this.outstandingService) {
       this.logger.info('🔄 Using new queue services with validation');
       
       const requestedQueueType = options?.queueType;
+      const agentId = options?.agentId;
       
       if (requestedQueueType === 'unsigned_users') {
         // Specific queue requested - use validated method
-        const user = await this.unsignedService.getNextValidUser();
+        const user = await this.unsignedService.getNextValidUser(agentId);
         if (user) {
           this.logger.info(`✅ Found validated user ${user.userId} from unsigned users queue`);
           return {
@@ -107,7 +108,7 @@ export class QueueAdapterService {
         }
       } else if (requestedQueueType === 'outstanding_requests') {
         // Specific queue requested - use validated method
-        const user = await this.outstandingService.getNextValidUser();
+        const user = await this.outstandingService.getNextValidUser(agentId);
         if (user) {
           this.logger.info(`✅ Found validated user ${user.userId} from outstanding requests queue`);
           return {
@@ -123,7 +124,7 @@ export class QueueAdapterService {
         this.logger.info('🔄 Checking both queues for validated users...');
         
         // 1. Try unsigned users first (highest priority)
-        const unsignedUser = await this.unsignedService.getNextValidUser();
+        const unsignedUser = await this.unsignedService.getNextValidUser(agentId);
         if (unsignedUser) {
           this.logger.info(`✅ Found validated user ${unsignedUser.userId} from unsigned users queue`);
           return {
@@ -136,7 +137,7 @@ export class QueueAdapterService {
         }
         
         // 2. Try outstanding requests second
-        const outstandingUser = await this.outstandingService.getNextValidUser();
+        const outstandingUser = await this.outstandingService.getNextValidUser(agentId);
         if (outstandingUser) {
           this.logger.info(`✅ Found validated user ${outstandingUser.userId} from outstanding requests queue`);
           return {
@@ -155,12 +156,58 @@ export class QueueAdapterService {
 
     // Fallback to legacy service
     if (this.legacyService) {
-      this.logger.info('🔄 Falling back to legacy queue service');
-      return await this.legacyService.getNextUserForCall(options);
+      this.logger.info('🔄 Falling back to legacy service for queue assignment');
+      return await this.legacyService.getNextUserForCall();
     }
 
     this.logger.warn('⚠️ No queue services available');
     return null;
+  }
+
+  /**
+   * Skip user in queue - routes to appropriate queue service
+   */
+  async skipUser(queueEntryId: string, queueType: QueueType): Promise<{ success: boolean; message: string }> {
+    this.logger.info(`⏭️ Skipping user ${queueEntryId} in ${queueType} queue`);
+
+    try {
+      if (queueType === 'unsigned_users' && this.unsignedService) {
+        await this.unsignedService.markUserSkipped(queueEntryId);
+        return { success: true, message: 'User skipped successfully' };
+      } else if (queueType === 'outstanding_requests' && this.outstandingService) {
+        await this.outstandingService.markUserSkipped(queueEntryId);
+        return { success: true, message: 'User skipped successfully' };
+      }
+
+      throw new Error(`No service available for queue type: ${queueType}`);
+      
+    } catch (error) {
+      this.logger.error(`❌ Failed to skip user ${queueEntryId}:`, error);
+      return { success: false, message: `Failed to skip user: ${(error as Error).message}` };
+    }
+  }
+
+  /**
+   * Mark user as completed in queue - routes to appropriate queue service  
+   */
+  async markUserCompleted(queueEntryId: string, queueType: QueueType): Promise<{ success: boolean; message: string }> {
+    this.logger.info(`✅ Marking user ${queueEntryId} as completed in ${queueType} queue`);
+
+    try {
+      if (queueType === 'unsigned_users' && this.unsignedService) {
+        await this.unsignedService.markUserCompleted(queueEntryId);
+        return { success: true, message: 'User marked as completed successfully' };
+      } else if (queueType === 'outstanding_requests' && this.outstandingService) {
+        await this.outstandingService.markUserCompleted(queueEntryId);
+        return { success: true, message: 'User marked as completed successfully' };
+      }
+
+      throw new Error(`No service available for queue type: ${queueType}`);
+      
+    } catch (error) {
+      this.logger.error(`❌ Failed to mark user ${queueEntryId} as completed:`, error);
+      return { success: false, message: `Failed to mark user as completed: ${(error as Error).message}` };
+    }
   }
 
   // ============================================================================
@@ -192,7 +239,7 @@ export class QueueAdapterService {
    * tRPC Router compatibility - uses new getNextUserForCall method
    */
   async assignCall(agentId: number, queueType?: QueueType): Promise<NextUserForCallResult | null> {
-    return await this.getNextUserForCall({ queueType });
+    return await this.getNextUserForCall({ queueType, agentId });
   }
 
   /**

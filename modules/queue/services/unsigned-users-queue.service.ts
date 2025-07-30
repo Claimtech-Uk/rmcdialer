@@ -36,8 +36,9 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
   /**
    * Get next VALID user - includes queue-specific validation
    * Validates against replica DB and updates user_call_scores if invalid
+   * Assigns user to agent when found
    */
-  async getNextValidUser(): Promise<UnsignedUsersQueueEntry | null> {
+  async getNextValidUser(agentId?: number): Promise<UnsignedUsersQueueEntry | null> {
     this.logger.info('🎯 Getting next VALID user from unsigned users queue');
 
     const maxAttempts = 10; // Prevent infinite loops
@@ -57,6 +58,13 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
       
       if (isValid) {
         this.logger.info(`✅ User ${user.userId} is valid for unsigned queue`);
+        
+        // 3. Assign user to agent if agent ID provided
+        if (agentId && user.id) {
+          await this.assignUserToAgent(user.id, agentId);
+          this.logger.info(`👤 Assigned user ${user.userId} to agent ${agentId}`);
+        }
+        
         return user;
       }
       
@@ -131,6 +139,70 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
     } catch (error) {
       this.logger.error(`❌ Failed to mark user ${userId} as inactive:`, error);
       // Don't throw - this is cleanup, continue with next user
+    }
+  }
+
+  /**
+   * Assign user to agent in the queue
+   */
+  private async assignUserToAgent(queueEntryId: string, agentId: number): Promise<void> {
+    try {
+      await this.prisma.unsignedUsersQueue.update({
+        where: { id: queueEntryId },
+        data: {
+          assignedToAgent: agentId,
+          assignedAt: new Date(),
+          status: 'assigned'
+        }
+      });
+      
+      this.logger.info(`👤 Successfully assigned queue entry ${queueEntryId} to agent ${agentId}`);
+      
+    } catch (error) {
+      this.logger.error(`❌ Failed to assign user to agent:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark user as skipped
+   */
+  async markUserSkipped(queueEntryId: string): Promise<void> {
+    try {
+      await this.prisma.unsignedUsersQueue.update({
+        where: { id: queueEntryId },
+        data: {
+          status: 'skipped',
+          assignedToAgent: null,
+          assignedAt: null
+        }
+      });
+      
+      this.logger.info(`⏭️ Marked queue entry ${queueEntryId} as skipped`);
+      
+    } catch (error) {
+      this.logger.error(`❌ Failed to mark user as skipped:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark user as completed
+   */
+  async markUserCompleted(queueEntryId: string): Promise<void> {
+    try {
+      await this.prisma.unsignedUsersQueue.update({
+        where: { id: queueEntryId },
+        data: {
+          status: 'completed'
+        }
+      });
+      
+      this.logger.info(`✅ Marked queue entry ${queueEntryId} as completed`);
+      
+    } catch (error) {
+      this.logger.error(`❌ Failed to mark user as completed:`, error);
+      throw error;
     }
   }
 
