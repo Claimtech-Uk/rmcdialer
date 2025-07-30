@@ -261,7 +261,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
           <div className="max-w-5xl mx-auto space-y-6">
             {/* User Header Card */}
             <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm">
-              <CardHeader className={`${teamConfig.color.gradient} text-white py-10 border-b-2 border-white/20 relative overflow-hidden`}>
+              <CardHeader className={`bg-gradient-to-r ${teamConfig.color.gradient} text-white py-10 border-b-2 border-white/20 relative overflow-hidden`}>
                 {/* Enhanced background overlay for better contrast */}
                 <div className="absolute inset-0 bg-black/20 backdrop-blur-sm"></div>
                 <div className="relative z-10 flex items-center justify-between">
