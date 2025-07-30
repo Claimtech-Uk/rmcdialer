@@ -672,6 +672,22 @@ export function CallHistoryTable({
                         </div>
                         <div className="text-sm font-medium">{call.agentName}</div>
                       </div>
+                      
+                      {/* Last Outcome Notes */}
+                      {call.outcomeNotes && (
+                        <div className="max-w-xs">
+                          <div className="text-xs text-gray-500 mb-1">Last Notes:</div>
+                          <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded text-left break-words overflow-hidden" 
+                               style={{ 
+                                 display: '-webkit-box',
+                                 WebkitLineClamp: 2,
+                                 WebkitBoxOrient: 'vertical' as any,
+                                 maxHeight: '2.5rem'
+                               }}>
+                            {call.outcomeNotes}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-4">

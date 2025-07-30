@@ -36,25 +36,26 @@ export class PriorityScoringService {
 
       // 1. Check if this is a fresh start (queue transition or new user)
       const freshStartCheck = this.checkForFreshStart(context)
+      factors.push(freshStartCheck.factor)
+      
+      // 2. Set base score: 0 for fresh starts, current score for continuing users
       if (freshStartCheck.isFreshStart) {
-        factors.push(freshStartCheck.factor)
-        finalScore = 0 // Fresh starts always get score 0
+        finalScore = 0 // Fresh starts get base score of 0
       } else {
-        // 2. Start with current score and apply event-based adjustments
-        finalScore = context.currentScore || 0
-        
-        // 3. Apply outcome-based adjustments using CallOutcomeManager
-        if (context.lastOutcome) {
-          const outcomeFactor = this.calculateOutcomeAdjustment(context.lastOutcome)
-          factors.push(outcomeFactor)
-          finalScore += outcomeFactor.value
-        }
-
-        // 4. Apply call attempt penalty
-        const attemptFactor = this.calculateAttemptPenalty(context)
-        factors.push(attemptFactor)
-        finalScore += attemptFactor.value
+        finalScore = context.currentScore || 0 // Continue with existing score
       }
+      
+      // 3. Apply outcome-based adjustments (for ALL users, including fresh starts)
+      if (context.lastOutcome) {
+        const outcomeFactor = this.calculateOutcomeAdjustment(context.lastOutcome)
+        factors.push(outcomeFactor)
+        finalScore += outcomeFactor.value
+      }
+
+      // 4. Apply call attempt penalty (for ALL users, including fresh starts)
+      const attemptFactor = this.calculateAttemptPenalty(context)
+      factors.push(attemptFactor)
+      finalScore += attemptFactor.value
 
       // 5. Enforce score bounds (0-200)
       finalScore = Math.max(0, Math.min(finalScore, 200))
