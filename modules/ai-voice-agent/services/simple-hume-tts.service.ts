@@ -160,6 +160,85 @@ Thank you for calling!`;
   }
 
   /**
+   * Generate emergency fallback message for technical difficulties
+   * Returns either R2 URL or data URI depending on configuration
+   */
+  async generateEmergencyMessage(): Promise<string> {
+    try {
+      console.log('🎵 Generating Hume TTS emergency message...');
+      
+      const message = `Thank you for calling Resolve My Claim. We're experiencing technical difficulties. We'll have someone call you back as soon as possible.`;
+
+      const audioBase64 = await this.synthesizeText(message);
+
+      // If R2 is configured, upload and return URL
+      if (this.r2Service) {
+        try {
+          const audioUrl = await this.r2Service.uploadAudioFile(audioBase64, 'emergency', 'emergency');
+          console.log('✅ Emergency message uploaded to R2:', audioUrl);
+          return audioUrl;
+        } catch (r2Error) {
+          console.warn('⚠️ R2 upload failed, falling back to data URI:', r2Error);
+          return this.convertToDataUri(audioBase64);
+        }
+      }
+
+      // Fallback to data URI
+      return this.convertToDataUri(audioBase64);
+    } catch (error) {
+      console.error('❌ Hume TTS emergency message failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Safe Hume TTS generation with multiple fallback attempts
+   * Returns null if all attempts fail
+   */
+  async generateSafeMessage(
+    messageType: 'out_of_hours' | 'busy' | 'connecting' | 'emergency',
+    callerName?: string
+  ): Promise<string | null> {
+    try {
+      console.log(`🎵 Generating safe Hume TTS for: ${messageType}`);
+      
+      switch (messageType) {
+        case 'out_of_hours':
+          return await this.generateOutOfHoursGreeting(callerName);
+        case 'busy':
+          return await this.generateBusyGreeting(callerName);
+        case 'connecting':
+          return await this.generateConnectingGreeting(callerName);
+        case 'emergency':
+          return await this.generateEmergencyMessage();
+        default:
+          throw new Error(`Unknown message type: ${messageType}`);
+      }
+    } catch (error) {
+      console.warn(`⚠️ First attempt failed for ${messageType}, trying without personalization:`, error);
+      
+      // Second attempt without personalization
+      try {
+        switch (messageType) {
+          case 'out_of_hours':
+            return await this.generateOutOfHoursGreeting();
+          case 'busy':
+            return await this.generateBusyGreeting();
+          case 'connecting':
+            return await this.generateConnectingGreeting();
+          case 'emergency':
+            return await this.generateEmergencyMessage();
+          default:
+            return null;
+        }
+      } catch (fallbackError) {
+        console.error(`❌ All Hume TTS attempts failed for ${messageType}:`, fallbackError);
+        return null;
+      }
+    }
+  }
+
+  /**
    * Core text synthesis method using your exact working format
    */
   private async synthesizeText(text: string): Promise<string> {

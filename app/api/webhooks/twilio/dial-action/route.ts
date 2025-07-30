@@ -59,33 +59,44 @@ export async function POST(request: NextRequest) {
           headers: { 'Content-Type': 'application/xml' }
         });
       } catch (error) {
-        console.warn(`⚠️ Hume TTS agent unavailable message failed, using fallback:`, error instanceof Error ? error.message : String(error));
+        console.warn(`⚠️ Hume TTS agent unavailable message failed, trying fallback:`, error instanceof Error ? error.message : String(error));
         
-        // Fallback - but still avoid alice, use simple message
-        const fallbackMessage = dialCallStatus === 'busy' 
-          ? "Our agent is currently on another call. We'll have someone call you back as soon as possible."
-          : dialCallStatus === 'no-answer'
-          ? "Our agent is not available right now. We'll have someone call you back as soon as possible."
-          : "We're unable to connect you to an agent at this time. We'll have someone call you back as soon as possible.";
-
-        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+        // Second attempt with basic Hume TTS
+        try {
+          const fallbackHumeTTSService = new SimpleHumeTTSService();
+          const fallbackAudio = await fallbackHumeTTSService.generateBusyGreeting();
+          
+          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say>${fallbackMessage} Thank you for calling Resolve My Claim.</Say>
+    <Play>${fallbackAudio}</Play>
     <Hangup/>
 </Response>`, {
-          status: 200,
-          headers: { 'Content-Type': 'application/xml' }
-        });
+            status: 200,
+            headers: { 'Content-Type': 'application/xml' }
+          });
+        } catch (fallbackError) {
+          console.error(`❌ All Hume TTS attempts failed for dial action:`, fallbackError);
+          
+          // Emergency fallback - minimal response without voice
+          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Pause length="2"/>
+    <Hangup/>
+</Response>`, {
+            status: 200,
+            headers: { 'Content-Type': 'application/xml' }
+          });
+        }
       }
     }
 
   } catch (error) {
     console.error('❌ Dial action webhook error:', error);
     
-    // Provide safe fallback TwiML even on error (no alice voice)
+    // Emergency fallback TwiML
     return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say>We're experiencing technical difficulties. We'll have someone call you back shortly. Thank you.</Say>
+    <Pause length="1"/>
     <Hangup/>
 </Response>`, {
       status: 200,
