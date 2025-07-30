@@ -347,10 +347,11 @@ export default function AgentManagementPage() {
               </Button>
             </DialogTrigger>
             
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md bg-red-500 border-4 border-black shadow-2xl p-6 rounded-lg z-[9999]">
               <DialogHeader>
                 <DialogTitle>Create New Agent</DialogTitle>
               </DialogHeader>
+              {console.log('🔴 MODAL CONTENT IS RENDERING!', { isCreateModalOpen })}
               <form onSubmit={handleCreateSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
