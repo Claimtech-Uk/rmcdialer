@@ -444,7 +444,16 @@ export default function AgentManagementPage() {
             }}
           >
             Manual Open
-          </Button>
+          
+          {/* Simple Test Button */}
+          <Button
+            variant="destructive"
+            onClick={() => {
+              alert("Basic button click works!");
+            }}
+          >
+            Test Click
+          </Button>          </Button>
         </div>
         
         {debugInfo?.isAdmin ? null : (
