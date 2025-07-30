@@ -147,8 +147,11 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
    */
   private async assignUserToAgent(queueEntryId: string, agentId: number): Promise<void> {
     try {
+      // Extract raw ID if it's prefixed with 'queue-'
+      const rawId = queueEntryId.startsWith('queue-') ? queueEntryId.replace('queue-', '') : queueEntryId;
+      
       await this.prisma.unsignedUsersQueue.update({
-        where: { id: queueEntryId },
+        where: { id: rawId }, // Use the raw UUID, not the prefixed ID
         data: {
           assignedToAgent: agentId,
           assignedAt: new Date(),
@@ -169,8 +172,11 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
    */
   async markUserSkipped(queueEntryId: string): Promise<void> {
     try {
+      // Extract raw ID if it's prefixed with 'queue-'
+      const rawId = queueEntryId.startsWith('queue-') ? queueEntryId.replace('queue-', '') : queueEntryId;
+      
       await this.prisma.unsignedUsersQueue.update({
-        where: { id: queueEntryId },
+        where: { id: rawId }, // Use the raw UUID, not the prefixed ID
         data: {
           status: 'skipped',
           assignedToAgent: null,
@@ -191,8 +197,11 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
    */
   async markUserCompleted(queueEntryId: string): Promise<void> {
     try {
+      // Extract raw ID if it's prefixed with 'queue-'
+      const rawId = queueEntryId.startsWith('queue-') ? queueEntryId.replace('queue-', '') : queueEntryId;
+      
       await this.prisma.unsignedUsersQueue.update({
-        where: { id: queueEntryId },
+        where: { id: rawId }, // Use the raw UUID, not the prefixed ID
         data: {
           status: 'completed'
         }
