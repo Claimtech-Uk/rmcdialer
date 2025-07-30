@@ -218,7 +218,7 @@ export function CallOutcomeModal({
           {/* Disposition Selection */}
           <div>
             <Label className="text-base font-semibold mb-3 block">Disposition *</Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="call-outcome-grid">
               {OUTCOME_TYPES.map((outcome) => {
                 const Icon = outcome.icon;
                 const isSelected = selectedOutcome === outcome.type;
