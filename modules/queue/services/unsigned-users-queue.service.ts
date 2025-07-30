@@ -146,15 +146,14 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
         return this.formatCallbackAsQueueEntry(callback);
       }
 
-      // 2. Get from call_queue table ordered by queue_position (proper queue ordering)
-      const queueEntry = await this.prisma.callQueue.findFirst({
+      // 2. Get from UnsignedUsersQueue table (the CORRECT new queue table)
+      const queueEntry = await this.prisma.unsigned_users_queue.findFirst({
         where: {
-          queueType: this.queueType,
           status: 'pending',
-          assignedToAgentId: null  // Not yet assigned to any agent
+          assigned_to_agent: null  // Not yet assigned to any agent
         },
         orderBy: {
-          queuePosition: 'asc'  // ✅ Use proper queue ordering (lowest position = highest priority)
+          queue_position: 'asc'  // ✅ Use proper queue ordering (lowest position = highest priority)
         }
       });
 
@@ -162,7 +161,7 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
         return null;
       }
 
-      return this.formatQueueEntryAsUnsignedEntry(queueEntry);
+      return this.formatUnsignedQueueEntryAsEntry(queueEntry);
 
     } catch (error) {
       this.logger.error('❌ Failed to get next user from unsigned queue:', error);
@@ -382,24 +381,24 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
   }
 
   /**
-   * Format call_queue entry as UnsignedUsersQueueEntry
+   * Format UnsignedUsersQueue entry as UnsignedUsersQueueEntry
    */
-  private formatQueueEntryAsUnsignedEntry(queueEntry: any): UnsignedUsersQueueEntry {
+  private formatUnsignedQueueEntryAsEntry(queueEntry: any): UnsignedUsersQueueEntry {
     return {
-      id: `queue-${queueEntry.id}`, // Use actual ID from call_queue
+      id: `queue-${queueEntry.id}`, // Use actual ID from UnsignedUsersQueue
       userId: queueEntry.userId,
       claimId: queueEntry.claimId,
-      priorityScore: 0, // Call_queue entries don't have a direct priorityScore
+      priorityScore: 0, // UnsignedUsersQueue entries don't have a direct priorityScore
       queuePosition: queueEntry.queuePosition,
       status: queueEntry.status,
       queueReason: queueEntry.queueReason,
       assignedToAgentId: queueEntry.assignedToAgent,
       assignedAt: queueEntry.assignedAt,
-      callbackId: null, // Call_queue entries don't have a direct callbackId
+      callbackId: null, // UnsignedUsersQueue entries don't have a direct callbackId
       availableFrom: queueEntry.availableFrom,
       createdAt: queueEntry.createdAt,
       updatedAt: queueEntry.updatedAt,
-      signatureMissingSince: null, // No direct signatureMissingSince in call_queue
+      signatureMissingSince: null, // No direct signatureMissingSince in UnsignedUsersQueue
       signatureType: 'initial'
     };
   }
