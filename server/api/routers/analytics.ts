@@ -3,6 +3,7 @@ import { createTRPCRouter, protectedProcedure } from '@/lib/trpc/server';
 import { TRPCError } from '@trpc/server';
 import { AgentPerformanceAnalyticsService } from '@/modules/analytics';
 import { prisma } from '@/lib/db';
+import { replicaDb } from '@/lib/mysql';
 
 // Create logger instance
 const logger = {
@@ -160,6 +161,92 @@ export const analyticsRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to retrieve daily metrics'
+        });
+      }
+    }),
+
+  // Get today's conversions for analytics dashboard
+  getTodayConversions: protectedProcedure
+    .query(async ({ input, ctx }) => {
+      try {
+        // Only supervisors and admins can see all conversions
+        if (ctx.agent.role === 'agent') {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Insufficient permissions to view conversions'
+          });
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(today);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const conversions = await prisma.conversion.findMany({
+          where: {
+            convertedAt: {
+              gte: today,
+              lte: endOfDay
+            }
+          },
+          include: {
+            primaryAgent: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true
+              }
+            }
+          },
+          orderBy: {
+            convertedAt: 'desc'
+          }
+        });
+
+        // Get user details for each conversion
+        const conversionsWithUserData = await Promise.all(
+          conversions.map(async (conversion) => {
+            const user = await replicaDb.user.findUnique({
+              where: { id: Number(conversion.userId) },
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                email_address: true
+              }
+            });
+
+            return {
+              id: conversion.id,
+              convertedAt: conversion.convertedAt,
+              conversionType: conversion.conversionType,
+              claimValue: conversion.claimValue,
+              user: user ? {
+                id: user.id,
+                name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown User',
+                email: user.email_address
+              } : {
+                id: Number(conversion.userId),
+                name: 'Unknown User',
+                email: null
+              },
+              agent: conversion.primaryAgent ? {
+                id: conversion.primaryAgent.id,
+                name: `${conversion.primaryAgent.firstName} ${conversion.primaryAgent.lastName}`
+              } : {
+                id: null,
+                name: 'System Generated'
+              }
+            };
+          })
+        );
+
+        return conversionsWithUserData;
+      } catch (error) {
+        logger.error('Failed to get today conversions', { error });
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to retrieve conversions'
         });
       }
     }),

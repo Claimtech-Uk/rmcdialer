@@ -36,7 +36,9 @@ import {
   Zap,
   Activity,
   Eye,
-  RotateCcw
+  RotateCcw,
+  ExternalLink,
+  DollarSign
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card'
 import { Button } from '@/modules/core/components/ui/button'
@@ -307,6 +309,132 @@ function AgentAnalyticsTable({
   );
 }
 
+// Conversions Table Component
+function ConversionsTable({ 
+  conversions, 
+  isLoading, 
+  onRefresh 
+}: {
+  conversions: any[];
+  isLoading: boolean;
+  onRefresh: () => void;
+}) {
+  const formatTime = (date: Date) => {
+    return new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    }).format(new Date(date));
+  };
+
+  const formatCurrency = (amount: any) => {
+    if (!amount) return '-';
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP'
+    }).format(Number(amount));
+  };
+
+  const getConversionTypeColor = (type: string) => {
+    switch (type) {
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'signed': return 'bg-blue-100 text-blue-800';
+      case 'opted_out': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-xl font-bold">Today's Conversions</CardTitle>
+            <p className="text-sm text-slate-600 mt-1">
+              Real-time conversion tracking with user and agent details
+            </p>
+          </div>
+          <Button
+            onClick={onRefresh}
+            variant="outline"
+            size="sm"
+            disabled={isLoading}
+            className="flex items-center space-x-2"
+          >
+            <RotateCcw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="text-slate-500">Loading conversions...</div>
+          </div>
+        ) : conversions && conversions.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left py-3 px-4 font-medium text-slate-600">Time</th>
+                  <th className="text-left py-3 px-4 font-medium text-slate-600">User</th>
+                  <th className="text-left py-3 px-4 font-medium text-slate-600">Agent</th>
+                  <th className="text-left py-3 px-4 font-medium text-slate-600">Type</th>
+                  <th className="text-left py-3 px-4 font-medium text-slate-600">Value</th>
+                  <th className="text-left py-3 px-4 font-medium text-slate-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conversions.map((conversion) => (
+                  <tr key={conversion.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="py-3 px-4">
+                      <div className="text-sm font-medium">{formatTime(conversion.convertedAt)}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="text-sm font-medium">{conversion.user.name}</div>
+                      {conversion.user.email && (
+                        <div className="text-xs text-slate-500">{conversion.user.email}</div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="text-sm font-medium">{conversion.agent.name}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <Badge className={`${getConversionTypeColor(conversion.conversionType)} border-0`}>
+                        {conversion.conversionType}
+                      </Badge>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="text-sm font-medium">
+                        {formatCurrency(conversion.claimValue)}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <Link
+                        href={`/users/${conversion.user.id}`}
+                        className="inline-flex items-center space-x-1 text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>View User</span>
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <DollarSign className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500">No conversions today</p>
+            <p className="text-sm text-slate-400 mt-1">Conversions will appear here as they happen</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
   // State for analytics controls
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
@@ -384,6 +512,16 @@ export default function DashboardPage() {
       console.warn('Team report failed:', error.message);
     }
   });
+
+  // Get today's conversions
+  const { data: todayConversions, isLoading: conversionsLoading, refetch: refetchConversions } = 
+    api.analytics.getTodayConversions.useQuery(undefined, {
+      retry: false,
+      refetchInterval: 30000,
+      onError: (error) => {
+        console.warn('Conversions failed:', error.message);
+      }
+    });
 
   // Loading state
   const isLoading = callsLoading || queueLoading || agentsLoading;
@@ -506,6 +644,13 @@ export default function DashboardPage() {
               className="flex-1"
             >
               Performance Reports
+            </Button>
+            <Button
+              variant={activeTab === 'conversions' ? 'default' : 'ghost'}
+              onClick={() => setActiveTab('conversions')}
+              className="flex-1"
+            >
+              Conversions
             </Button>
           </div>
 
@@ -664,10 +809,21 @@ export default function DashboardPage() {
                   </div>
                                  )}
                </CardContent>
-             </Card>
-             </div>
-           )}
-         </div>
+                         </Card>
+            </div>
+          )}
+
+          {/* Conversions Tab */}
+          {activeTab === 'conversions' && (
+            <div className="space-y-6">
+              <ConversionsTable
+                conversions={todayConversions || []}
+                isLoading={conversionsLoading}
+                onRefresh={refetchConversions}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
