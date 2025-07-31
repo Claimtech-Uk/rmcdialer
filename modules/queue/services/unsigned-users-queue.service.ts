@@ -162,6 +162,12 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
    */
   private async assignUserToAgent(queueEntryId: string, agentId: number): Promise<void> {
     try {
+      // Check if this is a temporary ID from user_call_scores
+      if (queueEntryId.startsWith('score-')) {
+        this.logger.info(`⚠️ Skipping assignment for temporary queue entry ${queueEntryId} - user will be processed without assignment tracking`);
+        return; // Skip assignment for temporary entries from user_call_scores
+      }
+
       // Extract raw ID if it's prefixed with 'queue-'
       const rawId = queueEntryId.startsWith('queue-') ? queueEntryId.replace('queue-', '') : queueEntryId;
       
@@ -187,6 +193,12 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
    */
   async markUserSkipped(queueEntryId: string): Promise<void> {
     try {
+      // Check if this is a temporary ID from user_call_scores
+      if (queueEntryId.startsWith('score-')) {
+        this.logger.info(`⚠️ Skipping status update for temporary queue entry ${queueEntryId} - user will be processed without status tracking`);
+        return; // Skip status update for temporary entries from user_call_scores
+      }
+
       // Extract raw ID if it's prefixed with 'queue-'
       const rawId = queueEntryId.startsWith('queue-') ? queueEntryId.replace('queue-', '') : queueEntryId;
       
@@ -212,6 +224,12 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
    */
   async markUserCompleted(queueEntryId: string): Promise<void> {
     try {
+      // Check if this is a temporary ID from user_call_scores
+      if (queueEntryId.startsWith('score-')) {
+        this.logger.info(`⚠️ Skipping status update for temporary queue entry ${queueEntryId} - user will be processed without status tracking`);
+        return; // Skip status update for temporary entries from user_call_scores
+      }
+
       // Extract raw ID if it's prefixed with 'queue-'
       const rawId = queueEntryId.startsWith('queue-') ? queueEntryId.replace('queue-', '') : queueEntryId;
       
