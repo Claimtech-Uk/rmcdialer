@@ -111,6 +111,7 @@ interface AgentAnalyticsRow {
   productivityScore: number;
   conversions: number;
   contactRate: number;
+  positiveCallPercentage: number;
   currentGap?: number; // current gap in minutes
 }
 
@@ -237,6 +238,7 @@ function AgentAnalyticsTable({
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Productivity</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Conversions</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Contact Rate</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Positive Call %</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Current Gap</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
                 </tr>
@@ -282,6 +284,12 @@ function AgentAnalyticsTable({
                     </td>
                     <td className="py-3 px-4">
                       <span className="font-medium">{agent.contactRate}%</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-1">
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                        <span className="font-medium">{agent.positiveCallPercentage}%</span>
+                      </div>
                     </td>
                     <td className="py-3 px-4">
                       {agent.currentGap ? (
@@ -583,7 +591,8 @@ export default function DashboardPage() {
     avgGapTime: Math.round(metric.todayStats.avgGapTimeToday / 60), // convert to minutes
     productivityScore: metric.sessionStats.productivity,
     conversions: metric.todayStats.conversionsToday, // Now using real conversion data
-    contactRate: metric.todayStats.contactRateToday, // Now using real contact rate calculation
+    contactRate: metric.todayStats.contactRateToday, // Now using real contact rate calculation (answered calls)
+    positiveCallPercentage: metric.todayStats.positiveCallPercentageToday, // Positive calls (completed_form + going_to_complete)
     currentGap: metric.todayStats.currentGap ? Math.round(metric.todayStats.currentGap.duration / 60) : undefined
   }));
 

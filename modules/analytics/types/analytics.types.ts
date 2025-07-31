@@ -139,7 +139,8 @@ export interface LiveAgentMetrics {
     talkTimeToday: number;
     avgGapTimeToday: number;
     conversionsToday: number; // Added: Number of conversions today
-    contactRateToday: number; // Added: Contact rate percentage today
+    contactRateToday: number; // Added: Contact rate percentage today (answered calls)
+    positiveCallPercentageToday: number; // Added: Positive call percentage (completed_form + going_to_complete)
     currentGap?: { 
       startedAt: Date; 
       duration: number 

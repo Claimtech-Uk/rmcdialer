@@ -353,9 +353,9 @@ export class AgentPerformanceAnalyticsService {
           }
         });
 
-        // Calculate contact rate for today's calls
-        // Count successful contacts (outcomes that indicate successful engagement)
-        const contactedCalls = await this.deps.prisma.callOutcome.count({
+        // Calculate contact rate for today's calls (answered calls)
+        // Contact rate = calls answered (total - no answers) / total calls
+        const noAnswerCalls = await this.deps.prisma.callOutcome.count({
           where: {
             callSession: {
               agentId: session.agentId,
@@ -363,13 +363,31 @@ export class AgentPerformanceAnalyticsService {
               endedAt: { not: null }
             },
             outcomeType: {
-              in: ['completed_form', 'going_to_complete', 'might_complete', 'call_back']
+              in: ['no_answer', 'missed_call']
             }
           }
         });
         
+        const answeredCalls = todaysCalls.length - noAnswerCalls;
         const contactRateToday = todaysCalls.length > 0 ? 
-          Math.round((contactedCalls / todaysCalls.length) * 100) : 0;
+          Math.round((answeredCalls / todaysCalls.length) * 100) : 0;
+
+        // Calculate positive call percentage (completed_form + going_to_complete)
+        const positiveCalls = await this.deps.prisma.callOutcome.count({
+          where: {
+            callSession: {
+              agentId: session.agentId,
+              startedAt: { gte: today },
+              endedAt: { not: null }
+            },
+            outcomeType: {
+              in: ['completed_form', 'going_to_complete']
+            }
+          }
+        });
+        
+        const positiveCallPercentageToday = todaysCalls.length > 0 ? 
+          Math.round((positiveCalls / todaysCalls.length) * 100) : 0;
         
         // Check for current gap
         let currentGap: { startedAt: Date; duration: number } | undefined;
@@ -402,6 +420,7 @@ export class AgentPerformanceAnalyticsService {
             avgGapTimeToday: gapMetrics.avgGapTime,
             conversionsToday,
             contactRateToday,
+            positiveCallPercentageToday,
             currentGap
           },
           sessionStats: {
