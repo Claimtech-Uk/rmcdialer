@@ -15,7 +15,7 @@ export class NotInterestedOutcome implements CallOutcomeHandler {
   // Scoring: Bad outcome, significantly lower priority
   readonly scoringRules = {
     scoreAdjustment: 100,
-    description: 'Customer not interested - very low priority',
+    description: 'Customer not interested - 4 week delay',
     shouldTriggerConversion: false
   };
   
@@ -76,15 +76,7 @@ export class NotInterestedOutcome implements CallOutcomeHandler {
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    // Long delay for not interested customers
-    const previousNotInterestedCount = context.previousOutcomes?.filter(o => o === 'not_interested').length || 0;
-    
-    if (previousNotInterestedCount >= 2) {
-      return 168; // 1 week (should probably be removed)
-    } else if (previousNotInterestedCount >= 1) {
-      return 72; // 3 days
-    }
-    
-    return 48; // 2 days for first "not interested"
+    // Fixed 4 week delay for not interested customers
+    return 672; // 4 weeks = 28 days * 24 hours
   }
 } 

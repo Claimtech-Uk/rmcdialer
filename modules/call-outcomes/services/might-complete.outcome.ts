@@ -15,7 +15,7 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
   // Scoring: Reset score to baseline - 5 day delay prevents over-calling
   readonly scoringRules = {
     scoreAdjustment: 0,
-    description: 'Customer showed interest - reset score, 5-day callback delay',
+    description: 'Customer showed interest - callback time set by agent',
     shouldTriggerConversion: false
   };
   
@@ -103,7 +103,7 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
   }
 
   getDelayHours(context: CallOutcomeContext, data?: any): number {
-    // Use callback time if provided, otherwise default to 5 days (120 hours)
+    // Use callback time set by the agent if provided
     if (data?.callbackDateTime) {
       const callbackTime = new Date(data.callbackDateTime);
       const now = new Date();
@@ -111,7 +111,7 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
       return Math.round(hoursUntilCallback);
     }
     
-    // Default: 5 days to prevent over-calling users who "might" complete
-    return 120; // 5 days = 120 hours
+    // No default delay - requires agent to set callback time
+    return 0;
   }
 } 

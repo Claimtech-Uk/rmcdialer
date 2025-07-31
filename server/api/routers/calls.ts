@@ -100,6 +100,7 @@ const CallbackFiltersSchema = z.object({
   page: z.number().min(1).default(1),
   limit: z.number().min(1).max(100).default(20),
   agentId: z.number().optional(),
+  createdByAgentId: z.number().optional(),
   status: z.enum(['pending', 'completed', 'cancelled']).optional(),
   scheduledFrom: z.date().optional(),
   scheduledTo: z.date().optional()
@@ -331,10 +332,12 @@ export const callsRouter = createTRPCRouter({
     .input(CallbackFiltersSchema)
     .query(async ({ input, ctx }) => {
       try {
-        // If not admin/supervisor, limit to agent's preferred callbacks
+        // If not admin/supervisor, limit to callbacks created by this agent
         const filters = { ...input };
         if (ctx.agent.role === 'agent') {
-          filters.agentId = ctx.agent.id;
+          // For agents, filter to only show callbacks they created
+          // This will be handled in the service layer by checking originalCallSession.agentId
+          filters.createdByAgentId = ctx.agent.id;
         }
 
         const callbacks = await callService.getCallbacks(filters);

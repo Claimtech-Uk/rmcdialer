@@ -125,27 +125,7 @@ export class MissedCallOutcome implements CallOutcomeHandler {
   }
 
   getDelayHours(context: CallOutcomeContext, data?: any): number {
-    // Dynamic callback timing - immediate if recent, calculated if older
-    if (data?.missedCallTime) {
-      const missedTime = new Date(data.missedCallTime);
-      const now = new Date();
-      const hoursSinceMissed = (now.getTime() - missedTime.getTime()) / (1000 * 60 * 60);
-      
-      // If missed call was very recent (< 1 hour), immediate callback
-      if (hoursSinceMissed < 1) {
-        return 0;
-      }
-      
-      // If missed call was recent (< 4 hours), call back ASAP
-      if (hoursSinceMissed < 4) {
-        return 0.25; // 15 minutes
-      }
-      
-      // If missed call was older, still prioritize but allow brief prep time
-      return 0.5; // 30 minutes
-    }
-    
-    // Fallback - immediate
+    // Always immediate for missed calls
     return 0;
   }
 } 

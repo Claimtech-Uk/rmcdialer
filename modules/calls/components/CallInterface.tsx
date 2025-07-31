@@ -35,6 +35,7 @@ import type { UserCallContext, CallOutcomeOptions } from '../types/call.types';
 
 interface CallInterfaceProps {
   userContext: UserCallContext;
+  onCallStart?: () => void;
   onCallComplete?: (outcome: CallOutcomeOptions) => void;
   // Remove agentId and agentEmail props - get from auth context
 }
@@ -193,6 +194,7 @@ function ConversationDetail({ conversation, expanded = false }: { conversation: 
 
 export function CallInterface({ 
   userContext, 
+  onCallStart,
   onCallComplete
 }: CallInterfaceProps) {
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
@@ -543,6 +545,9 @@ export function CallInterface({
     if (isInCall && !wasInCall) {
       console.log('📞 Call connected - Twilio confirmed active call');
       setWasInCall(true);
+      
+      // Notify autodialler that call has started
+      onCallStart?.();
       
       // NOW create database session (only when call is actually connected)
       if (!callSessionId) {

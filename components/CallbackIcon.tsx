@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Calendar, Clock, User, Phone, CheckCircle, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Bell, Calendar, Clock, User, Phone, CheckCircle, AlertTriangle, ChevronDown, UserCheck } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Badge } from '@/modules/core/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
 import { api } from '@/lib/trpc/client';
 import { useRouter } from 'next/navigation';
+import { formatTimeUntil } from '@/lib/utils/time.utils';
 
 interface CallbackItem {
   id: string;
@@ -16,9 +17,14 @@ interface CallbackItem {
   userName: string;
   userPhone: string;
   status: 'upcoming' | 'due_soon' | 'overdue';
-  minutesUntil?: number;
-  minutesOverdue?: number;
+  timeFormatted: string;
+  isOverdue: boolean;
   isPreferred: boolean;
+  bookingAgent?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+  };
 }
 
 export function CallbackIcon() {
@@ -47,24 +53,10 @@ export function CallbackIcon() {
     }
   );
 
-  // Process callbacks to add status categorization
-  const callbacks: CallbackItem[] = callbacksData?.callbacks ? callbacksData.callbacks.map((cb: any) => {
-    const now = new Date();
+  // Process callbacks to add status categorization and time formatting
+  const allCallbacks: CallbackItem[] = callbacksData?.callbacks ? callbacksData.callbacks.map((cb: any) => {
     const scheduledTime = new Date(cb.scheduledFor);
-    const timeDiff = scheduledTime.getTime() - now.getTime();
-    const minutesUntil = Math.floor(timeDiff / (1000 * 60));
-    
-    let status: 'upcoming' | 'due_soon' | 'overdue';
-    let minutesOverdue: number | undefined;
-    
-    if (timeDiff < 0) {
-      status = 'overdue';
-      minutesOverdue = Math.abs(minutesUntil);
-    } else if (minutesUntil <= 10) {
-      status = 'due_soon';
-    } else {
-      status = 'upcoming';
-    }
+    const timeInfo = formatTimeUntil(scheduledTime);
     
     return {
       id: cb.id,
@@ -73,12 +65,22 @@ export function CallbackIcon() {
       callbackReason: cb.callbackReason,
       userName: `${cb.user.firstName || 'Unknown'} ${cb.user.lastName || 'User'}`.trim(),
       userPhone: cb.user.phoneNumber || 'Unknown',
-      status,
-      minutesUntil: timeDiff >= 0 ? minutesUntil : undefined,
-      minutesOverdue,
-      isPreferred: cb.preferredAgentId === agent?.id
+      status: timeInfo.status,
+      timeFormatted: timeInfo.formatted,
+      isOverdue: timeInfo.isOverdue,
+      isPreferred: cb.preferredAgentId === agent?.id,
+      bookingAgent: cb.bookingAgent ? {
+        id: cb.bookingAgent.id,
+        firstName: cb.bookingAgent.firstName,
+        lastName: cb.bookingAgent.lastName
+      } : undefined
     };
   }) : [];
+
+  // Filter callbacks based on agent role
+  const callbacks = agent?.role === 'agent' 
+    ? allCallbacks.filter(cb => cb.bookingAgent?.id === agent.id)
+    : allCallbacks;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -166,7 +168,9 @@ export function CallbackIcon() {
               <CardTitle className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-blue-600" />
-                  <span className="font-semibold">Your Callbacks</span>
+                  <span className="font-semibold">
+                    {agent?.role === 'admin' ? 'All Callbacks' : 'Your Callbacks'}
+                  </span>
                 </div>
                 <div className="flex gap-1">
                   {overdueCount > 0 && (
@@ -224,11 +228,11 @@ function CallbackDropdownCard({ callback, onAccept, onCallNow, isLoading }: Call
   const getStatusBadge = () => {
     switch (callback.status) {
       case 'overdue':
-        return <Badge variant="destructive" className="text-xs font-semibold">{callback.minutesOverdue}m overdue</Badge>;
+        return <Badge variant="destructive" className="text-xs font-semibold">{callback.timeFormatted} overdue</Badge>;
       case 'due_soon':
-        return <Badge variant="default" className="bg-yellow-600 text-xs font-semibold">Due in {callback.minutesUntil}m</Badge>;
+        return <Badge variant="default" className="bg-yellow-600 text-xs font-semibold">Due in {callback.timeFormatted}</Badge>;
       case 'upcoming':
-        return <Badge variant="outline" className="text-xs font-semibold">In {callback.minutesUntil}m</Badge>;
+        return <Badge variant="outline" className="text-xs font-semibold">In {callback.timeFormatted}</Badge>;
     }
   };
 
@@ -257,6 +261,14 @@ function CallbackDropdownCard({ callback, onAccept, onCallNow, isLoading }: Call
               {new Date(callback.scheduledFor).toLocaleTimeString()}
             </span>
           </div>
+          {callback.bookingAgent && (
+            <div className="flex items-center gap-2">
+              <UserCheck className="w-3 h-3 text-green-600" />
+              <span>
+                Booked by <span className="font-medium">{callback.bookingAgent.firstName} {callback.bookingAgent.lastName}</span>
+              </span>
+            </div>
+          )}
         </div>
 
         {callback.callbackReason && (

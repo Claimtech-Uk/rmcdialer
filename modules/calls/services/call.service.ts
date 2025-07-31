@@ -412,7 +412,7 @@ export class CallService {
             callSessionId: sessionId,
             outcomeType: outcome.outcomeType,
             outcomeNotes: outcomeResult.outcomeNotes || outcome.outcomeNotes,
-            nextCallDelayHours: outcomeResult.nextCallDelayHours || outcome.nextCallDelayHours,
+            nextCallDelayHours: outcomeResult.nextCallDelayHours ?? outcome.nextCallDelayHours,
             magicLinkSent: outcomeResult.magicLinkSent || outcome.magicLinkSent || false,
             smsSent: outcomeResult.smsSent || outcome.smsSent || false,
             documentsRequested: outcomeResult.documentsRequested || outcome.documentsRequested || [],
@@ -473,7 +473,8 @@ export class CallService {
           tx,
           Number(callSession.userId),
           outcome.outcomeType,
-          outcomeResult.scoreAdjustment
+          outcomeResult.scoreAdjustment,
+          outcomeResult.nextCallDelayHours // CRITICAL FIX: Pass delay hours
         );
 
         // 6. Check for pending callbacks for this user and mark them as completed
@@ -620,7 +621,7 @@ export class CallService {
    * Get callbacks with filtering and pagination
    */
   async getCallbacks(options: GetCallbacksOptions): Promise<CallbacksResult> {
-    const { page = 1, limit = 20, agentId, status, scheduledFrom, scheduledTo } = options;
+    const { page = 1, limit = 20, agentId, createdByAgentId, status, scheduledFrom, scheduledTo } = options;
 
     const where: any = {};
     
@@ -630,6 +631,33 @@ export class CallService {
         { preferredAgentId: agentId },  // Callbacks assigned to this agent
         { preferredAgentId: null }     // Unassigned callbacks (any agent can handle)
       ];
+    }
+    
+    // If filtering by creator agent, only show callbacks created by that agent
+    if (createdByAgentId) {
+      // First find call sessions by this agent, then filter callbacks by those session IDs
+      const agentCallSessions = await this.deps.prisma.callSession.findMany({
+        where: { agentId: createdByAgentId },
+        select: { id: true }
+      });
+      
+      if (agentCallSessions.length === 0) {
+        // No call sessions by this agent, return empty result
+        return {
+          callbacks: [],
+          meta: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0
+          }
+        };
+      }
+      
+      // Filter to only include callbacks that originated from this agent's call sessions
+      where.originalCallSessionId = {
+        in: agentCallSessions.map(session => session.id)
+      };
     }
     
     if (status) where.status = status;
@@ -647,6 +675,18 @@ export class CallService {
             select: {
               firstName: true,
               lastName: true
+            }
+          },
+          // Include the original call session to get the booking agent
+          originalCallSession: {
+            select: {
+              agentId: true,
+              agent: {
+                select: {
+                  firstName: true,
+                  lastName: true
+                }
+              }
             }
           }
         },
@@ -668,7 +708,13 @@ export class CallService {
             lastName: userContext.lastName,
             phoneNumber: userContext.phoneNumber
           },
-          preferredAgent: callback.preferredAgent
+          preferredAgent: callback.preferredAgent,
+          // Add the booking agent information
+          bookingAgent: callback.originalCallSession?.agent ? {
+            id: callback.originalCallSession.agentId,
+            firstName: callback.originalCallSession.agent.firstName,
+            lastName: callback.originalCallSession.agent.lastName
+          } : null
         };
       })
     );
@@ -860,7 +906,8 @@ export class CallService {
     tx: Prisma.TransactionClient,
     userId: number,
     outcomeType: string,
-    scoreAdjustment?: number
+    scoreAdjustment?: number,
+    delayHours?: number
   ): Promise<void> {
     try {
       // Get current user call score record 
@@ -876,7 +923,10 @@ export class CallService {
         currentQueueType && 
         userScore.currentQueueType !== currentQueueType;
 
-      // Create enhanced scoring context
+      // Create enhanced scoring context with incremented attempt count
+      const currentAttempts = userScore?.totalAttempts || 0;
+      const newAttemptCount = currentAttempts + 1; // FIXED: Increment for current call
+      
       const scoringContext = {
         userId: Number(userId),
         userCreatedAt: new Date(), // We'll need to get this from user record
@@ -885,7 +935,7 @@ export class CallService {
         currentQueueType: userScore?.currentQueueType || undefined,
         previousQueueType: undefined, // Would need to track this separately
         lastOutcome: outcomeType,
-        totalAttempts: userScore?.totalAttempts || 0,
+        totalAttempts: newAttemptCount, // FIXED: Use incremented count for proper scoring
         lastCallAt: new Date(),
         // ADDED: Whether this user has an existing scoring record
         hasExistingRecord: !!userScore,
@@ -894,6 +944,12 @@ export class CallService {
 
       // Calculate new score using enhanced scoring service
       const newPriorityScore = await this.deps.scoringService.calculatePriority(scoringContext);
+
+      // CRITICAL FIX: Calculate next call time based on outcome delay hours
+      const effectiveDelayHours = delayHours !== undefined ? delayHours : this.getDefaultDelayHours(outcomeType);
+      const nextCallAfter = effectiveDelayHours > 0 
+        ? new Date(Date.now() + (effectiveDelayHours * 60 * 60 * 1000))
+        : null; // null = immediately available
 
       // Check if outcome indicates conversion (score 200+)
       const shouldConvert = newPriorityScore.finalScore >= 200 || 
@@ -909,7 +965,7 @@ export class CallService {
                           outcomeType === 'opted_out' ? 'opted_out' : 'no_longer_eligible',
             conversionReason: `Outcome: ${outcomeType}, Final score: ${newPriorityScore.finalScore}`,
             finalScore: newPriorityScore.finalScore,
-            totalCallAttempts: scoringContext.totalAttempts,
+            totalCallAttempts: newAttemptCount, // FIXED: Use incremented count for consistency
             lastCallAt: new Date(),
             convertedAt: new Date()
           }
@@ -931,7 +987,7 @@ export class CallService {
             lastResetDate: needsReset ? new Date() : new Date(),
         lastOutcome: outcomeType,
         lastCallAt: new Date(),
-            totalAttempts: 1
+            totalAttempts: newAttemptCount // FIXED: Use incremented count (1 for conversions)
           }
         });
 
@@ -948,7 +1004,8 @@ export class CallService {
             lastResetDate: needsReset ? new Date() : (userScore?.lastResetDate || new Date()),
             lastOutcome: outcomeType,
             lastCallAt: new Date(),
-            totalAttempts: scoringContext.totalAttempts,
+            nextCallAfter: nextCallAfter, // CRITICAL FIX: Set next call delay
+            totalAttempts: { increment: 1 }, // FIXED: Properly increment attempts counter
             successfulCalls: ['completed_form', 'going_to_complete', 'call_back'].includes(outcomeType) ? { increment: 1 } : undefined,
             lastQueueCheck: new Date(),
         updatedAt: new Date()
@@ -961,16 +1018,21 @@ export class CallService {
             lastResetDate: new Date(),
         lastOutcome: outcomeType,
         lastCallAt: new Date(),
+        nextCallAfter: nextCallAfter, // CRITICAL FIX: Set next call delay
         totalAttempts: 1,
             successfulCalls: ['completed_form', 'going_to_complete', 'call_back'].includes(outcomeType) ? 1 : 0
           }
         });
 
-        this.deps.logger.info(`Updated score for user ${userId}: ${newPriorityScore.finalScore} (${outcomeType})`);
+        this.deps.logger.info(`Updated score for user ${userId}: ${newPriorityScore.finalScore} (${outcomeType}), next call: ${nextCallAfter || 'immediate'}`);
       }
 
-      // Remove from queue if converted or callback requested
-              if (shouldConvert || outcomeType === 'call_back') {
+      // CRITICAL: Sync call_queue.priority_score with user_call_scores.current_score
+      // This ensures queue ordering reflects actual user scores after call outcomes
+
+      // Update queue: either remove user or sync priority_score with current_score
+      if (shouldConvert || outcomeType === 'call_back') {
+        // Remove from queue if converted or callback requested
         await tx.callQueue.updateMany({
           where: { 
             userId: BigInt(userId),
@@ -979,8 +1041,20 @@ export class CallService {
           data: { 
             status: shouldConvert ? 'converted' : 'completed',
             updatedAt: new Date()
-      }
-    });
+          }
+        });
+      } else {
+        // FIXED: Update priority_score in call_queue to match the new current_score
+        await tx.callQueue.updateMany({
+          where: { 
+            userId: BigInt(userId),
+            status: 'pending'
+          },
+          data: { 
+            priorityScore: newPriorityScore.finalScore, // Sync priority_score with current_score
+            updatedAt: new Date()
+          }
+        });
       }
 
     } catch (error) {

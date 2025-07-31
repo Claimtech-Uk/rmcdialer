@@ -236,6 +236,7 @@ export interface GetCallbacksOptions {
   page?: number;
   limit?: number;
   agentId?: number;
+  createdByAgentId?: number;
   status?: 'pending' | 'completed' | 'cancelled';
   scheduledFrom?: Date;
   scheduledTo?: Date;

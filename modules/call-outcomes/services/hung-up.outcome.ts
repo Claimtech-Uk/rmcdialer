@@ -15,7 +15,7 @@ export class HungUpOutcome implements CallOutcomeHandler {
   // Scoring: Negative outcome, priority decrease
   readonly scoringRules = {
     scoreAdjustment: 25,
-    description: 'Customer hung up - lower priority',
+    description: 'Customer hung up - 24 hour delay',
     shouldTriggerConversion: false
   };
   
@@ -66,7 +66,7 @@ export class HungUpOutcome implements CallOutcomeHandler {
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    // Fixed 2 day delay after hang-ups
-    return 48;
+    // Fixed 1 day delay after hang-ups
+    return 24;
   }
 } 

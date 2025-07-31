@@ -199,6 +199,19 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
     await loadNextUser();
   }, [currentUser, currentQueueEntryId, teamConfig, session, teamType, loadNextUser, toast, autoDiallerService, skipUserMutation]);
 
+  // Handle call start - transition to calling state
+  const handleCallStart = useCallback(() => {
+    if (!transitionTo('calling', 'Call started - transitioning to calling state')) {
+      logger.warn('Failed to transition to calling state when call started');
+      return;
+    }
+    
+    autoDiallerService.logActivity('Call started', session?.agent?.id || 0, teamType, {
+      userId: currentUser?.userId,
+      userName: currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Unknown'
+    });
+  }, [currentUser, session, teamType, transitionTo]);
+
   // Handle call completion
   const handleCallComplete = useCallback(async (outcome: CallOutcomeOptions) => {
     if (!transitionTo('disposing', `Call completed with outcome: ${outcome.outcomeType}`)) return;
@@ -259,18 +272,18 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
      }
      const limits = autoDiallerService.checkSessionLimits(sessionStatsRef.current, settings);
      if (limits.shouldStop) {
-      transitionTo('stopped', limits.reason);
-      setIsActive(false);
-      
-      toast({
-        title: "Session Ended",
-        description: limits.reason,
-        variant: "default"
-      });
-      
-      onSessionEnd?.(sessionStatsRef.current);
-      return;
-    }
+       transitionTo('stopped', limits.reason);
+       setIsActive(false);
+       
+       toast({
+         title: "Session Ended",
+         description: limits.reason,
+         variant: "default"
+       });
+       
+       onSessionEnd?.(sessionStatsRef.current);
+       return;
+     }
 
     // No countdown needed - agent controls pacing with manual "Start Call" button
     transitionTo('loading', 'Loading next user immediately');
@@ -438,6 +451,7 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
     resumeSession,
     loadNextUser,
     skipUser,
+    handleCallStart,
     handleCallComplete,
     
     // Settings

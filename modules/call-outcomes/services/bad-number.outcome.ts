@@ -15,7 +15,7 @@ export class BadNumberOutcome implements CallOutcomeHandler {
   // Scoring: Significant problem, major priority decrease
   readonly scoringRules = {
     scoreAdjustment: 50,
-    description: 'Bad number - incorrect contact info',
+    description: 'Bad number - 4 week delay until contact info updated',
     shouldTriggerConversion: false
   };
   
@@ -75,7 +75,7 @@ export class BadNumberOutcome implements CallOutcomeHandler {
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    // 7 day delay until contact info is updated
-    return 168;
+    // 4 week delay until contact info is updated
+    return 672; // 4 weeks = 28 days * 24 hours
   }
 } 

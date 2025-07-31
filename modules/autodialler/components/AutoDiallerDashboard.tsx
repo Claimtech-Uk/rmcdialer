@@ -50,6 +50,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
     resumeSession,
     loadNextUser,
     skipUser,
+    handleCallStart,
     handleCallComplete,
     settings,
     updateSettings,
@@ -517,13 +518,14 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
              {/* Integrated Call Interface */}
              <Card>
                <CardContent className="p-6">
-                 <CallInterface 
-                   userContext={currentUser}
-                   onCallComplete={(outcome) => {
-                     setIsCallInterfaceActive(false);
-                     handleCallComplete(outcome);
-                   }}
-                 />
+                                 <CallInterface 
+                  userContext={currentUser}
+                  onCallStart={handleCallStart}
+                  onCallComplete={(outcome) => {
+                    setIsCallInterfaceActive(false);
+                    handleCallComplete(outcome);
+                  }}
+                />
                </CardContent>
              </Card>
            </div>
@@ -550,10 +552,11 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
             {/* Integrated Call Interface */}
             <Card>
               <CardContent className="p-6">
-                <CallInterface 
-                  userContext={currentUser}
-                  onCallComplete={handleCallComplete}
-                />
+                            <CallInterface 
+              userContext={currentUser}
+              onCallStart={handleCallStart}
+              onCallComplete={handleCallComplete}
+            />
               </CardContent>
             </Card>
           </div>

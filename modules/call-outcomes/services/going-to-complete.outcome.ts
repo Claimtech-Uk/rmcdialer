@@ -115,7 +115,7 @@ export class GoingToCompleteOutcome implements CallOutcomeHandler {
   }
 
   getDelayHours(context: CallOutcomeContext, data?: any): number {
-    // Use callback time if provided, otherwise default to 12 hours
+    // Use callback time set by the agent if provided
     if (data?.callbackDateTime) {
       const callbackTime = new Date(data.callbackDateTime);
       const now = new Date();
@@ -123,7 +123,7 @@ export class GoingToCompleteOutcome implements CallOutcomeHandler {
       return Math.round(hoursUntilCallback);
     }
     
-    // Default follow-up if no callback scheduled
-    return 12;
+    // No default delay - requires agent to set callback time
+    return 0;
   }
 } 

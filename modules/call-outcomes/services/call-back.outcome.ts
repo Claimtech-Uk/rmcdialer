@@ -47,7 +47,7 @@ export class CallBackOutcome implements CallOutcomeHandler {
       outcomeType: this.type,
       nextActions,
       scoreAdjustment: this.scoringRules.scoreAdjustment,
-      nextCallDelayHours: this.getDelayHours(context),
+      nextCallDelayHours: this.getDelayHours(context, data),
       callbackDateTime: data?.callbackDateTime,
       callbackReason: data?.callbackReason || 'Customer requested callback',
       outcomeNotes: data?.notes || 'Customer requested a callback'
@@ -85,8 +85,16 @@ export class CallBackOutcome implements CallOutcomeHandler {
     return actions;
   }
   
-  getDelayHours(context: CallOutcomeContext): number {
-    // No standard delay - callback happens at requested time
+  getDelayHours(context: CallOutcomeContext, data?: any): number {
+    // Use callback time set by the agent if provided
+    if (data?.callbackDateTime) {
+      const callbackTime = new Date(data.callbackDateTime);
+      const now = new Date();
+      const hoursUntilCallback = Math.max(0, (callbackTime.getTime() - now.getTime()) / (1000 * 60 * 60));
+      return Math.round(hoursUntilCallback);
+    }
+    
+    // No delay if no callback time specified
     return 0;
   }
 } 

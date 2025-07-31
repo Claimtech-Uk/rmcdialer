@@ -208,6 +208,7 @@ model CallSession {
   agent                    Agent               @relation(fields: [agentId], references: [id])
   callQueue                CallQueue           @relation(fields: [callQueueId], references: [id])
   lastOutcomeAgent         Agent?              @relation("CallSessionLastOutcome", fields: [lastOutcomeAgentId], references: [id])
+  originatedCallbacks      Callback[]          @relation("CallbackOrigin")
   magicLinkActivities      MagicLinkActivity[]
 
   @@index([createdAt])
@@ -247,6 +248,7 @@ model Callback {
   createdAt              DateTime               @default(now()) @map("created_at")
   callQueue              CallQueue[]
   preferredAgent         Agent?                 @relation(fields: [preferredAgentId], references: [id])
+  originalCallSession    CallSession            @relation("CallbackOrigin", fields: [originalCallSessionId], references: [id])
   notifications          CallbackNotification[]
 
   @@index([scheduledFor])
