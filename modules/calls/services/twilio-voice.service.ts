@@ -1,4 +1,5 @@
 import { Device, Call } from '@twilio/voice-sdk';
+import { EnhancedAudioConfig } from './enhanced-audio.config';
 
 // PERFORMANCE: Global singleton to prevent multiple Device instances
 let globalTwilioDevice: Device | null = null;
@@ -47,6 +48,11 @@ export class TwilioVoiceService {
   private config: TwilioVoiceConfig;
   private isInitialized = false;
   private accessToken: string | null = null;
+  private audioProfile: {
+    profileUsed: string;
+    constraints: MediaTrackConstraints;
+    warnings: string[];
+  } | null = null;
 
   constructor(config: TwilioVoiceConfig) {
     this.config = config;
@@ -149,39 +155,55 @@ export class TwilioVoiceService {
 
   private async requestMicrophonePermission(): Promise<void> {
     try {
-      console.log('🎤 Requesting microphone permission...');
+      console.log('🎤 Requesting enhanced microphone permission with noise cancellation...');
       
       // Check if media devices are supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Media devices not supported by this browser. Please use a modern browser like Chrome, Firefox, or Safari.');
       }
       
-      // Request microphone access with optimal settings
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 16000, // Twilio recommends 16kHz for optimal quality
-        }
-      });
+      // Use enhanced audio configuration with automatic fallback
+      const audioResult = await EnhancedAudioConfig.requestEnhancedAudio();
+      
+      console.log(`✅ Enhanced audio configured - Profile: ${audioResult.profileUsed}`);
+      
+      // Log any warnings from fallback attempts
+      if (audioResult.warnings.length > 0) {
+        console.warn('⚠️ Audio profile warnings:', audioResult.warnings);
+      }
+      
+      // Validate audio quality
+      const qualityCheck = EnhancedAudioConfig.validateAudioQuality(audioResult.stream);
+      console.log('📊 Audio quality metrics:', qualityCheck.metrics);
+      
+      if (qualityCheck.recommendations.length > 0) {
+        console.info('💡 Audio optimization recommendations:', qualityCheck.recommendations);
+      }
       
       // Verify we got audio tracks
-      const audioTracks = stream.getAudioTracks();
+      const audioTracks = audioResult.stream.getAudioTracks();
       if (audioTracks.length === 0) {
-        stream.getTracks().forEach(track => track.stop());
+        audioResult.stream.getTracks().forEach(track => track.stop());
         throw new Error('No audio tracks available. Please check your microphone settings.');
       }
       
-      console.log('✅ Microphone permission granted with tracks:', audioTracks.map(track => ({
+      console.log('✅ Enhanced microphone permission granted with tracks:', audioTracks.map(track => ({
         label: track.label,
         enabled: track.enabled,
         readyState: track.readyState,
-        kind: track.kind
+        kind: track.kind,
+        settings: track.getSettings() // Include enhanced settings info
       })));
       
+      // Store audio profile info for later use
+      this.audioProfile = {
+        profileUsed: audioResult.profileUsed,
+        constraints: audioResult.constraintsUsed,
+        warnings: audioResult.warnings
+      };
+      
       // Stop the stream immediately after verifying permission
-      stream.getTracks().forEach(track => track.stop());
+      audioResult.stream.getTracks().forEach(track => track.stop());
       
     } catch (error: any) {
       console.error('❌ Microphone permission request failed:', error);

@@ -274,10 +274,11 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
   async getNextUser(): Promise<OutstandingRequestsQueueEntry | null> {
     try {
       // 1. Priority: Check for ready callbacks first
-      const callback = await this.getNextReadyCallback();
-      if (callback) {
-        return this.formatCallbackAsQueueEntry(callback);
-      }
+      // DISABLED: Manual callback system handles callbacks through UI
+      // const callback = await this.getNextReadyCallback();
+      // if (callback) {
+      //   return this.formatCallbackAsQueueEntry(callback);
+      // }
 
       // 2. Get from user_call_scores where currentQueueType = 'outstanding_requests'
       const userScore = await this.prisma.userCallScore.findFirst({

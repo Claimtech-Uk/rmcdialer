@@ -237,10 +237,11 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
   async getNextUser(): Promise<UnsignedUsersQueueEntry | null> {
     try {
       // 1. Priority: Check for ready callbacks first
-      const callback = await this.getNextReadyCallback();
-      if (callback) {
-        return this.formatCallbackAsQueueEntry(callback);
-      }
+      // DISABLED: Manual callback system handles callbacks through UI
+      // const callback = await this.getNextReadyCallback();
+      // if (callback) {
+      //   return this.formatCallbackAsQueueEntry(callback);
+      // }
 
       // 2. Get from UnsignedUsersQueue table (the CORRECT new queue table)
       const queueEntry = await this.prisma.unsignedUsersQueue.findFirst({

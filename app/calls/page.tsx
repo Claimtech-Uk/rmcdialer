@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
 import { Button } from '@/modules/core/components/ui/button';
-import { Phone, Clock, TrendingUp, Users, ArrowRight, BarChart3 } from 'lucide-react';
+import { Phone, Clock, TrendingUp, Users, ArrowRight, BarChart3, User, Mail, MapPin, ExternalLink, Calendar, FileText } from 'lucide-react';
 import { api } from '@/lib/trpc/client';
 
 export default function CallsPage() {
@@ -50,48 +50,122 @@ export default function CallsPage() {
           <Card className="border-0 shadow-xl bg-gradient-to-r from-blue-500 to-cyan-600 text-white">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
-                <Phone className="w-6 h-6" />
+                <Phone className="w-6 h-6 animate-pulse" />
                 Active Call in Progress
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-lg text-white">
-                    {currentCall.userContext?.firstName} {currentCall.userContext?.lastName}
-                  </p>
-                  <p className="text-blue-100 mt-1">
-                    Status: {currentCall.status}
-                  </p>
+            <CardContent className="space-y-4">
+              {/* Customer Information */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <User className="w-5 h-5 text-white" />
+                  <h3 className="text-lg font-semibold text-white">Customer Information</h3>
                 </div>
-                <div className="space-x-3">
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-2xl font-bold text-white">
+                      {currentCall.userContext?.firstName} {currentCall.userContext?.lastName}
+                    </div>
+                    <div className="text-blue-100 flex items-center gap-2 mt-1">
+                      <Phone className="w-4 h-4 flex-shrink-0" />
+                      {currentCall.userContext?.phoneNumber}
+                    </div>
+                    {currentCall.userContext?.email && (
+                      <div className="text-blue-100 flex items-center gap-2 mt-1">
+                        <Mail className="w-4 h-4 flex-shrink-0" />
+                        {currentCall.userContext?.email}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <div className="text-blue-100 mb-2">
+                      <span className="font-medium">Status:</span> {currentCall.status}
+                    </div>
+                    {currentCall.userContext?.address && (
+                      <div className="text-blue-100 flex items-start gap-2">
+                        <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm">
+                          {currentCall.userContext.address.fullAddress}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Claims Summary */}
+                {currentCall.userContext?.claims && currentCall.userContext.claims.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-white/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-4 h-4 text-white" />
+                      <span className="text-white font-medium">Claims ({currentCall.userContext.claims.length})</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {currentCall.userContext.claims.slice(0, 2).map((claim, index) => (
+                        <div key={claim.id || index} className="bg-white/10 rounded px-3 py-2">
+                          <div className="text-sm font-medium text-white">
+                            {claim.type} - {claim.lender}
+                          </div>
+                          <div className="text-xs text-blue-100">
+                            Status: {claim.status}
+                            {claim.requirements && claim.requirements.length > 0 && (
+                              <span> • {claim.requirements.length} requirements</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {currentCall.userContext.claims.length > 2 && (
+                        <div className="text-xs text-blue-100 col-span-full text-center pt-2">
+                          +{currentCall.userContext.claims.length - 2} more claims
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-3">
+                <Button 
+                  onClick={() => {
+                    const urlParams = new URLSearchParams({
+                      userId: currentCall.userContext?.userId?.toString() || '',
+                      phone: currentCall.userContext?.phoneNumber || '',
+                      name: `${currentCall.userContext?.firstName || ''} ${currentCall.userContext?.lastName || ''}`.trim()
+                    });
+                    router.push(`/calls/${currentCall.id}?${urlParams.toString()}`);
+                  }}
+                  className="bg-white text-blue-600 hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-200"
+                >
+                  <ArrowRight className="w-4 h-4 mr-2" />
+                  Manage Call
+                </Button>
+                
+                {currentCall.userContext?.userId && (
                   <Button 
                     onClick={() => {
-                      const urlParams = new URLSearchParams({
-                        userId: currentCall.userContext?.userId?.toString() || '',
-                        phone: currentCall.userContext?.phoneNumber || '',
-                        name: `${currentCall.userContext?.firstName || ''} ${currentCall.userContext?.lastName || ''}`.trim()
-                      });
-                      router.push(`/calls/${currentCall.id}?${urlParams.toString()}`);
+                      window.open(`https://claim.resolvemyclaim.co.uk/admin/users/${currentCall.userContext.userId}`, '_blank');
                     }}
-                    className="bg-white text-blue-600 hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-200"
+                    className="bg-white/20 text-white border border-white/30 hover:bg-white/30 shadow-lg hover:shadow-xl transition-all duration-200"
                   >
-                    <ArrowRight className="w-4 h-4 mr-2" />
-                    Manage Call
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    View Profile
                   </Button>
-                  <Button 
-                    onClick={() => endCallMutation.mutate({
-                      sessionId: currentCall.id,
-                      status: 'completed',
-                      endedAt: new Date()
-                    })}
-                    variant="destructive"
-                    className="bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-                    disabled={endCallMutation.isLoading}
-                  >
-                    {endCallMutation.isLoading ? 'Ending...' : 'End Call'}
-                  </Button>
-                </div>
+                )}
+                
+                <Button 
+                  onClick={() => endCallMutation.mutate({
+                    sessionId: currentCall.id,
+                    status: 'completed',
+                    endedAt: new Date()
+                  })}
+                  variant="destructive"
+                  className="bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+                  disabled={endCallMutation.isLoading}
+                >
+                  {endCallMutation.isLoading ? 'Ending...' : 'End Call'}
+                </Button>
               </div>
             </CardContent>
           </Card>
