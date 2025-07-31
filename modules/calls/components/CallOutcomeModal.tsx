@@ -196,7 +196,7 @@ export function CallOutcomeModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-50">
-      <Card className="w-[95vw] max-w-[1200px] max-h-[90vh] overflow-y-auto bg-white shadow-2xl border-0">
+      <Card className="w-[60vw] max-w-[1200px] max-h-[60vh] overflow-y-auto bg-white shadow-2xl border-0">
         <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
           <CardTitle className="flex items-center gap-3">
             <Phone className="w-6 h-6" />
@@ -218,7 +218,7 @@ export function CallOutcomeModal({
           {/* Disposition Selection */}
           <div>
             <Label className="text-base font-semibold mb-3 block">Disposition *</Label>
-            <div className="call-outcome-grid">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {OUTCOME_TYPES.map((outcome) => {
                 const Icon = outcome.icon;
                 const isSelected = selectedOutcome === outcome.type;
@@ -227,18 +227,20 @@ export function CallOutcomeModal({
                   <button
                     key={outcome.type}
                     onClick={() => handleOutcomeChange(outcome.type)}
-                    className={`p-3 rounded-lg border-2 transition-all text-left ${
+                    className={`p-4 rounded-xl border-2 transition-all duration-200 text-left h-[120px] flex flex-col justify-between hover:shadow-md ${
                       isSelected
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                        ? 'border-blue-500 bg-blue-50 shadow-lg scale-105'
+                        : 'border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50'
                     }`}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className={`w-3 h-3 rounded-full ${outcome.color}`} />
-                      <Icon className="w-4 h-4" />
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-4 h-4 rounded-full ${outcome.color} shadow-sm`} />
+                      <Icon className="w-5 h-5 text-gray-600" />
                     </div>
-                    <div className="font-medium text-sm">{outcome.label}</div>
-                    <div className="text-xs text-gray-500 mt-1">{outcome.description}</div>
+                    <div>
+                      <div className="font-semibold text-sm text-gray-900 mb-1">{outcome.label}</div>
+                      <div className="text-xs text-gray-500 leading-relaxed">{outcome.description}</div>
+                    </div>
                   </button>
                 );
               })}
