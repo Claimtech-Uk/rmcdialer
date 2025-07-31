@@ -42,6 +42,10 @@
       "schedule": "20 * * * *"
     },
     {
+      "path": "/api/cron/conversion-agent-attribution",
+      "schedule": "25 * * * *"
+    },
+    {
       "path": "/api/cron/populate-separated-queues",
       "schedule": "30 * * * *"
     },

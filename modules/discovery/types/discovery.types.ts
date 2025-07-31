@@ -55,6 +55,18 @@ export interface OutstandingRequirementsConversionResult extends BaseDiscoveryRe
   conversions: OutstandingRequirementsConversionData[]
 }
 
+// Conversion Agent Attribution
+export interface ConversionAgentAttributionResult extends BaseDiscoveryResult {
+  totalUnattributedConversions: number
+  conversionsChecked: number
+  conversionsAttributed: number
+  conversionsSkippedNoCallHistory: number
+  batchesProcessed: number
+  processingStrategy: string
+  completed: boolean
+  attributions: ConversionAgentAttributionData[]
+}
+
 // Cron 2: Unsigned Conversion Tracking (Legacy)
 export interface UnsignedConversionResult extends BaseDiscoveryResult {
   usersChecked: number
@@ -98,6 +110,16 @@ export interface OutstandingRequirementsConversionData {
   userId: bigint
   completedAt: Date
   finalPendingRequirements: number
+}
+
+export interface ConversionAgentAttributionData {
+  conversionId: string
+  userId: bigint
+  primaryAgentId: number
+  contributingAgents: number[]
+  totalCallsAnalyzed: number
+  mostRecentCallDate: Date | null
+  attributedAt: Date
 }
 
 export interface ConversionData {

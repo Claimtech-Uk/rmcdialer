@@ -6,6 +6,7 @@ export { NewUsersDiscoveryService } from './services/new-users-discovery.service
 export { NewRequirementsDiscoveryService } from './services/new-requirements-discovery.service'
 export { SignatureConversionCleanupService } from './services/signature-conversion-cleanup.service'
 export { OutstandingRequirementsConversionCleanupService } from './services/outstanding-requirements-conversion-cleanup.service'
+export { ConversionAgentAttributionService } from './services/conversion-agent-attribution.service'
 export { NullQueueBackfillMigrationService } from './services/null-queue-backfill-migration.service'
 // TODO: Add remaining discovery services as they're implemented
 // export { UnsignedConversionService } from './services/unsigned-conversion.service'
@@ -23,6 +24,7 @@ export type {
   NewUsersDiscoveryResult,
   SignatureConversionResult,
   OutstandingRequirementsConversionResult,
+  ConversionAgentAttributionResult,
   UnsignedConversionResult,
   RequirementsConversionResult,
   NewRequirementsDiscoveryResult,
@@ -31,6 +33,7 @@ export type {
   NewUserData,
   SignatureConversionData,
   OutstandingRequirementsConversionData,
+  ConversionAgentAttributionData,
   ConversionData,
   NewRequirementData,
   
