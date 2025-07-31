@@ -354,6 +354,7 @@ export class AgentPerformanceAnalyticsService {
         });
 
         // Calculate contact rate for today's calls
+        // Count successful contacts (outcomes that indicate successful engagement)
         const contactedCalls = await this.deps.prisma.callOutcome.count({
           where: {
             callSession: {
@@ -361,7 +362,9 @@ export class AgentPerformanceAnalyticsService {
               startedAt: { gte: today },
               endedAt: { not: null }
             },
-            outcomeType: 'contacted'
+            outcomeType: {
+              in: ['completed_form', 'going_to_complete', 'might_complete', 'call_back']
+            }
           }
         });
         
@@ -391,6 +394,7 @@ export class AgentPerformanceAnalyticsService {
 
         liveMetrics.push({
           agentId: session.agentId,
+          agentName: session.agent ? `${session.agent.firstName} ${session.agent.lastName}` : `Agent ${session.agentId}`,
           currentStatus: session.status,
           todayStats: {
             callsToday: todaysCalls.length,

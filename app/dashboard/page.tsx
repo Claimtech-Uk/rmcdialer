@@ -438,7 +438,7 @@ export default function DashboardPage() {
   // Transform live metrics data for agent analytics table
   const agentAnalyticsData: AgentAnalyticsRow[] = (liveMetrics || []).map(metric => ({
     agentId: metric.agentId,
-    agentName: `Agent ${metric.agentId}`, // We'll need to get agent names
+    agentName: metric.agentName, // Now using real agent names from database
     status: metric.currentStatus,
     callsToday: metric.todayStats.callsToday,
     talkTime: Math.round(metric.todayStats.talkTimeToday / 60), // convert to minutes

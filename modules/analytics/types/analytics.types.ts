@@ -132,6 +132,7 @@ export interface PerformanceAlert {
 // Real-time Analytics
 export interface LiveAgentMetrics {
   agentId: number;
+  agentName: string; // Added: Real agent name
   currentStatus: string;
   todayStats: {
     callsToday: number;
