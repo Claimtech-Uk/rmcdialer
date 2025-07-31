@@ -46,8 +46,9 @@ export class PriorityScoringService {
       }
       
       // 3. Apply outcome-based adjustments (for ALL users, including fresh starts)
+      let outcomeFactor: ScoreFactor | null = null
       if (context.lastOutcome) {
-        const outcomeFactor = this.calculateOutcomeAdjustment(context.lastOutcome)
+        outcomeFactor = this.calculateOutcomeAdjustment(context.lastOutcome)
         factors.push(outcomeFactor)
         finalScore += outcomeFactor.value
       }
@@ -57,16 +58,32 @@ export class PriorityScoringService {
       factors.push(attemptFactor)
       finalScore += attemptFactor.value
 
-      // 5. Enforce score bounds (0-200)
-      finalScore = Math.max(0, Math.min(finalScore, 200))
-
-      // 6. Add capping explanation if needed
-      if (finalScore >= 200) {
-        factors.push({
-          name: 'score_cap',
-          value: 0,
-          reason: 'Score capped at 200 - user should be marked as conversion'
-        })
+      // 5. Enforce score bounds - conditional capping based on outcome type
+      const handler = context.lastOutcome ? this.outcomeManager.getHandler(context.lastOutcome as any) : null
+      const shouldTriggerConversion = handler?.scoringRules.shouldTriggerConversion || false
+      
+      if (shouldTriggerConversion) {
+        // For conversion outcomes: Cap at 200 (user will be removed from queue anyway)
+        finalScore = Math.max(0, Math.min(finalScore, 200))
+        
+        if (finalScore >= 200) {
+          factors.push({
+            name: 'score_cap',
+            value: 0,
+            reason: 'Score capped at 200 - user should be marked as conversion'
+          })
+        }
+      } else {
+        // For non-conversion outcomes: Only enforce floor at 0, allow scores above 200
+        finalScore = Math.max(0, finalScore)
+        
+        if (finalScore >= 200) {
+          factors.push({
+            name: 'high_score_warning',
+            value: 0,
+            reason: `High score (${finalScore}) - user may need manual review`
+          })
+        }
       }
 
       this.dependencies.logger.info('Event-based priority score calculated', {
