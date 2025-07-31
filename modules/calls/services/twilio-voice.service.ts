@@ -123,11 +123,35 @@ export class TwilioVoiceService {
         globalDeviceAgent = null;
       }
 
-      // Initialize Twilio Device using npm package with minimal configuration for performance
-      this.device = new Device(accessToken, {
+      // Initialize Twilio Device using npm package with enhanced audio configuration
+      const deviceOptions: any = {
         // PERFORMANCE: Reduce debug logging in production to reduce network overhead
         logLevel: development ? 'debug' : 'warn'
-      });
+      };
+
+      // Apply enhanced audio constraints if available
+      if (this.audioProfile?.constraints) {
+        console.log('🎧 Applying enhanced audio constraints to Twilio Device:', this.audioProfile.profileUsed);
+        
+        // Override getUserMedia to use enhanced constraints
+        deviceOptions.getUserMedia = async (constraints: MediaStreamConstraints) => {
+          const audioConstraints = typeof constraints.audio === 'boolean' ? {} : (constraints.audio || {});
+          const enhancedConstraints = {
+            ...constraints,
+            audio: {
+              ...audioConstraints,
+              ...this.audioProfile!.constraints
+            }
+          };
+          
+          console.log('🎤 Using enhanced audio constraints for call:', enhancedConstraints.audio);
+          return navigator.mediaDevices.getUserMedia(enhancedConstraints);
+        };
+      } else {
+        console.warn('⚠️ No enhanced audio profile available - using default Twilio audio');
+      }
+
+      this.device = new Device(accessToken, deviceOptions);
 
       // Store as global singleton
       globalTwilioDevice = this.device;
@@ -343,6 +367,9 @@ export class TwilioVoiceService {
         state: 'connected',
         callSid: call.parameters?.CallSid
       });
+      
+      // Verify enhanced audio settings are applied
+      setTimeout(() => this.logCurrentAudioSettings(), 1000);
     });
 
     // Call disconnected
@@ -380,7 +407,18 @@ export class TwilioVoiceService {
   acceptIncomingCall(): void {
     if (this.currentIncomingCall) {
       console.log('✅ Accepting incoming call');
-      this.currentIncomingCall.accept();
+      
+      // Apply enhanced audio constraints when accepting the call
+      const acceptOptions: any = {};
+      
+      if (this.audioProfile?.constraints) {
+        console.log('🎧 Applying enhanced audio to incoming call acceptance:', this.audioProfile.profileUsed);
+        acceptOptions.rtcConstraints = {
+          audio: this.audioProfile.constraints
+        };
+      }
+      
+      this.currentIncomingCall.accept(acceptOptions);
     } else {
       console.warn('⚠️ No incoming call to accept');
     }
@@ -427,8 +465,18 @@ export class TwilioVoiceService {
         })
       };
 
-      // Make the call
-      this.currentCall = await this.device.connect({ params: callParams });
+      // Enhanced audio constraints for the call
+      const connectOptions: any = { params: callParams };
+      
+      if (this.audioProfile?.constraints) {
+        console.log('🎧 Applying enhanced audio to outgoing call:', this.audioProfile.profileUsed);
+        connectOptions.rtcConstraints = {
+          audio: this.audioProfile.constraints
+        };
+      }
+
+      // Make the call with enhanced audio
+      this.currentCall = await this.device.connect(connectOptions);
       this.setupOutgoingCallEventHandlers(this.currentCall);
 
       this.config.onCallStatusChange?.({ state: 'connecting' });
@@ -451,6 +499,9 @@ export class TwilioVoiceService {
         state: 'connected',
         callSid: call.parameters?.CallSid
       });
+      
+      // Verify enhanced audio settings are applied
+      setTimeout(() => this.logCurrentAudioSettings(), 1000);
     });
 
     // Call disconnected
@@ -660,5 +711,74 @@ export class TwilioVoiceService {
     } catch (error) {
       console.warn('⚠️ AudioContext gesture handling failed:', error);
     }
+  }
+
+  /**
+   * Log current audio settings for debugging
+   */
+  private logCurrentAudioSettings(): void {
+    if (this.device?.audio?.inputDevice) {
+      const inputStream = this.device.audio.inputStream;
+      if (inputStream) {
+        const audioTrack = inputStream.getAudioTracks()[0];
+        if (audioTrack) {
+          const settings = audioTrack.getSettings();
+          console.log('🎤 Current call audio settings:', {
+            sampleRate: settings.sampleRate,
+            channelCount: settings.channelCount,
+            echoCancellation: settings.echoCancellation,
+            noiseSuppression: settings.noiseSuppression,
+            autoGainControl: settings.autoGainControl,
+            deviceId: settings.deviceId
+          });
+          
+          // Compare with stored profile
+          if (this.audioProfile) {
+            console.log('📊 Audio profile comparison:', {
+              expectedProfile: this.audioProfile.profileUsed,
+              expectedConstraints: this.audioProfile.constraints,
+              actualSettings: settings,
+              match: this.audioSettingsMatch(settings)
+            });
+          }
+        }
+      }
+    } else {
+      console.log('🔇 No audio input device currently set');
+    }
+  }
+
+  /**
+   * Check if actual audio settings match expected profile
+   */
+  private audioSettingsMatch(actualSettings: MediaTrackSettings): boolean {
+    if (!this.audioProfile?.constraints) return false;
+    
+    const expected = this.audioProfile.constraints;
+    return (
+      actualSettings.echoCancellation === expected.echoCancellation &&
+      actualSettings.noiseSuppression === expected.noiseSuppression &&
+      actualSettings.autoGainControl === expected.autoGainControl &&
+      actualSettings.sampleRate === expected.sampleRate
+    );
+  }
+
+  /**
+   * Get current audio diagnostics for debugging
+   */
+  getCurrentAudioDiagnostics(): {
+    hasAudioProfile: boolean;
+    profileUsed?: string;
+    deviceHasAudio: boolean;
+    inputDeviceSet: boolean;
+    enhancedAudioApplied: boolean;
+  } {
+    return {
+      hasAudioProfile: !!this.audioProfile,
+      profileUsed: this.audioProfile?.profileUsed,
+      deviceHasAudio: !!this.device?.audio,
+      inputDeviceSet: !!this.device?.audio?.inputDevice,
+      enhancedAudioApplied: !!this.audioProfile?.constraints
+    };
   }
 } 
