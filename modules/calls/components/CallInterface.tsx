@@ -22,7 +22,9 @@ import {
   MessageSquare,
   Activity,
   Check,
-  CheckCheck
+  CheckCheck,
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react';
 import { api } from '@/lib/trpc/client';
 import { useToast } from '@/modules/core/hooks/use-toast';
@@ -269,7 +271,7 @@ export function CallInterface({
   );
 
   // Fetch complete user details to get addresses - CONDITIONAL LOADING
-  const { data: userDetailsResponse, isLoading: userDetailsLoading } = api.users.getCompleteUserDetails.useQuery(
+  const { data: userDetailsResponse, isLoading: userDetailsLoading, refetch: refetchUserDetails } = api.users.getCompleteUserDetails.useQuery(
     { userId: userContext.userId },
     { 
       enabled: loadUserDetails && !!userContext.userId, // LAZY: Only enable when explicitly requested
@@ -297,7 +299,7 @@ export function CallInterface({
   );
 
   // Fetch SMS conversations - CONDITIONAL LOADING
-  const { data: smsConversationsResponse, isLoading: smsLoading } = api.communications.sms.getConversations.useQuery(
+  const { data: smsConversationsResponse, isLoading: smsLoading, refetch: refetchSmsConversations } = api.communications.sms.getConversations.useQuery(
     { userId: userContext.userId },
     {
       enabled: loadSmsConversations && !!userContext.userId, // LAZY: Only enable when SMS section is viewed
@@ -310,7 +312,7 @@ export function CallInterface({
 
   // Fetch magic link history - DISABLED to reduce network requests
   // Only fetch when explicitly needed (when magic link panel is opened)
-  const { data: magicLinkHistoryResponse, isLoading: magicLinkLoading } = api.communications.magicLinks.getUserHistory.useQuery(
+  const { data: magicLinkHistoryResponse, isLoading: magicLinkLoading, refetch: refetchMagicLinkHistory } = api.communications.magicLinks.getUserHistory.useQuery(
     { userId: userContext.userId },
     { 
       enabled: loadMagicLinkHistory && !!userContext.userId, // LAZY: Only enable when magic link section is viewed
@@ -320,6 +322,56 @@ export function CallInterface({
       refetchOnMount: false, // ADDED: Don't refetch on mount
     }
   );
+
+  // Refresh state management
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Comprehensive refresh function for agents to check uploads and signatures in real time
+  const handleRefreshData = async () => {
+    if (isRefreshing) return; // Prevent multiple simultaneous refreshes
+    
+    setIsRefreshing(true);
+    
+    try {
+      toast({
+        title: "🔄 Refreshing Data",
+        description: "Checking for latest uploads and signatures...",
+      });
+
+      // Always refresh user details to get latest signatures and uploads
+      if (loadUserDetails) {
+        await refetchUserDetails();
+      }
+      
+      // Refresh call history to show any new call outcomes
+      await refetchCallHistory();
+      
+      // Refresh SMS conversations if loaded
+      if (loadSmsConversations) {
+        await refetchSmsConversations();
+      }
+      
+      // Refresh magic link history if loaded  
+      if (loadMagicLinkHistory) {
+        await refetchMagicLinkHistory();
+      }
+
+      toast({
+        title: "✅ Data Refreshed",
+        description: "All user data has been updated from the database.",
+      });
+
+    } catch (error: any) {
+      console.error('❌ Failed to refresh data:', error);
+      toast({
+        title: "❌ Refresh Failed",
+        description: "Could not refresh data. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Call outcome recording mutation
   const recordCallOutcomeMutation = api.calls.recordOutcome.useMutation({
@@ -764,6 +816,17 @@ export function CallInterface({
                     <Phone className="w-4 h-4 flex-shrink-0" />
                     {userContext.phoneNumber}
                   </div>
+                  
+                  {/* View Profile Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 text-blue-600 border-blue-200 hover:bg-blue-50"
+                    onClick={() => window.open(`https://claim.resolvemyclaim.co.uk/admin/users/${userContext.userId}`, '_blank')}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    View Profile
+                  </Button>
                   {userContext.address && (
                     <div className="text-slate-600 mt-2">
                       <div className="flex items-center gap-2 mb-1">
@@ -1138,6 +1201,23 @@ export function CallInterface({
                   <p className="text-sm text-slate-500 mb-2">DTMF available via sendDigits() if needed</p>
                 </div>
               )}
+
+              {/* Refresh Data Button - allows agents to check uploads and signatures in real time */}
+              <div className="pt-4 border-t border-slate-200">
+                <Button
+                  onClick={handleRefreshData}
+                  disabled={isRefreshing}
+                  variant="outline"
+                  size="lg"
+                  className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-blue-200 text-blue-700 hover:text-blue-800 shadow-md hover:shadow-lg transition-all duration-200"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+                </Button>
+                <p className="text-xs text-slate-500 text-center mt-2">
+                  Update signatures, uploads & latest data
+                </p>
+              </div>
             </CardContent>
           </Card>
 

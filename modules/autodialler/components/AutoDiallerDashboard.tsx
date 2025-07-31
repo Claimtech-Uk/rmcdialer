@@ -450,21 +450,34 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                 </div>
                 
                 {/* Quick Actions */}
-                <div className="flex justify-center gap-6 mt-8 pt-8 border-t-2 border-slate-300">
+                <div className="flex justify-center gap-4 mt-8 pt-8 border-t-2 border-slate-300">
+                  <Button
+                    onClick={() => {
+                      // Refresh current user data by loading them again
+                      console.log('🔄 Refreshing current user data...');
+                      loadNextUser(); // This will reload the current user with fresh data
+                    }}
+                    variant="outline"
+                    size="default"
+                    className="px-4 py-3 text-blue-700 bg-blue-50 hover:text-white hover:bg-blue-600 rounded-xl font-bold transition-all duration-200 border-2 border-blue-200 hover:border-blue-600 shadow-lg hover:shadow-xl"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh Data
+                  </Button>
                   <Button
                     onClick={loadNextUser}
                     variant="outline"
                     size="default"
-                    className="px-6 py-3 text-slate-800 bg-white hover:text-white hover:bg-slate-700 rounded-xl font-bold transition-all duration-200 border-3 border-slate-600 hover:border-slate-700 shadow-lg hover:shadow-xl"
+                    className="px-4 py-3 text-slate-800 bg-white hover:text-white hover:bg-slate-700 rounded-xl font-bold transition-all duration-200 border-2 border-slate-600 hover:border-slate-700 shadow-lg hover:shadow-xl"
                   >
-                    <RefreshCw className="w-4 h-4 mr-2" />
+                    <SkipForward className="w-4 h-4 mr-2" />
                     Load Next User
                   </Button>
                   <Button
                     onClick={pauseSession}
                     variant="outline"
                     size="default"
-                    className="px-6 py-3 text-slate-800 bg-white hover:text-white hover:bg-slate-700 rounded-xl font-bold transition-all duration-200 border-3 border-slate-600 hover:border-slate-700 shadow-lg hover:shadow-xl"
+                    className="px-4 py-3 text-slate-800 bg-white hover:text-white hover:bg-slate-700 rounded-xl font-bold transition-all duration-200 border-2 border-slate-600 hover:border-slate-700 shadow-lg hover:shadow-xl"
                   >
                     <Pause className="w-4 h-4 mr-2" />
                     Pause Session
