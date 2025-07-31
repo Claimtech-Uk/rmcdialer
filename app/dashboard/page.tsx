@@ -444,8 +444,8 @@ export default function DashboardPage() {
     talkTime: Math.round(metric.todayStats.talkTimeToday / 60), // convert to minutes
     avgGapTime: Math.round(metric.todayStats.avgGapTimeToday / 60), // convert to minutes
     productivityScore: metric.sessionStats.productivity,
-    conversions: 0, // We'll need to add conversion tracking
-    contactRate: 0, // We'll need to calculate this
+    conversions: metric.todayStats.conversionsToday, // Now using real conversion data
+    contactRate: metric.todayStats.contactRateToday, // Now using real contact rate calculation
     currentGap: metric.todayStats.currentGap ? Math.round(metric.todayStats.currentGap.duration / 60) : undefined
   }));
 

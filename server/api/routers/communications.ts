@@ -101,7 +101,7 @@ const SendMagicLinkSchema = z.object({
   deliveryMethod: z.enum(['sms', 'whatsapp', 'email']),
   phoneNumber: z.string().optional(),
   email: z.string().email().optional(),
-  userName: z.string().optional(),
+  firstName: z.string().optional(),
   customMessage: z.string().optional(),
   callSessionId: z.string().optional(),
   claimId: z.number().optional(),
@@ -361,6 +361,30 @@ export const communicationsRouter = createTRPCRouter({
         deliveryMethod: 'sms',
         phoneNumber: input.phoneNumber,
         agentId: ctx.agent.id,
+        callSessionId: input.callSessionId
+      });
+    }),
+
+  /**
+   * Send review request SMS (convenience method)
+   */
+  sendReviewSMS: protectedProcedure
+    .input(z.object({
+      userId: z.number(),
+      phoneNumber: z.string(),
+      callSessionId: z.string().optional()
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const reviewMessage = `Let us know how we did! 
+
+trustpilot.com/evaluate/resolvemyclaim.co.uk`;
+
+      return await smsService.sendSMS({
+        phoneNumber: input.phoneNumber,
+        message: reviewMessage,
+        messageType: 'review_request',
+        agentId: ctx.agent.id,
+        userId: input.userId,
         callSessionId: input.callSessionId
       });
     }),

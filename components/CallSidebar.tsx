@@ -467,7 +467,7 @@ function ConnectedCallContent({
           </div>
           <SendPortalLinkButton 
             userId={userDetails.userId}
-            userName={userContext.callerName || 'Customer'}
+            firstName={(userContext.callerName || 'Customer').split(' ')[0]}
             phoneNumber={userContext.phoneNumber}
             callSessionId={userDetails.id}
           />
@@ -910,12 +910,12 @@ function PostCallContent({
 // Send Portal Link Button Component
 function SendPortalLinkButton({ 
   userId, 
-  userName, 
+  firstName, 
   phoneNumber, 
   callSessionId 
 }: {
   userId: number;
-  userName: string;
+  firstName: string;
   phoneNumber: string;
   callSessionId: string;
 }) {
@@ -950,7 +950,7 @@ function SendPortalLinkButton({
       linkType: 'claimPortal',
       deliveryMethod: 'sms',
       phoneNumber,
-      userName,
+      firstName,
       callSessionId
     });
   };

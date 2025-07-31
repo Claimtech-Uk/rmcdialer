@@ -137,15 +137,17 @@ export interface LiveAgentMetrics {
     callsToday: number;
     talkTimeToday: number;
     avgGapTimeToday: number;
-    currentGap?: {
-      startedAt: Date;
-      duration: number; // current gap duration in seconds
+    conversionsToday: number; // Added: Number of conversions today
+    contactRateToday: number; // Added: Contact rate percentage today
+    currentGap?: { 
+      startedAt: Date; 
+      duration: number 
     };
   };
   sessionStats: {
     loginTime: Date;
-    timeOnline: number; // seconds
-    productivity: number; // real-time productivity score
+    timeOnline: number;
+    productivity: number;
   };
 }
 

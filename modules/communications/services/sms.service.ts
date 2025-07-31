@@ -462,7 +462,7 @@ export class SMSService {
     
     try {
       // For now, create a placeholder magic link message
-      const magicLinkUrl = `https://claim.resolvemyclaim.co.uk/magic-link/${Buffer.from(userId.toString()).toString('base64')}`;
+      const magicLinkUrl = `claim.resolvemyclaim.co.uk/magic-link/${Buffer.from(userId.toString()).toString('base64')}`;
       const message = `Hi ${user.firstName},\n\nAccess your secure claim portal here:\n\n${magicLinkUrl}`;
       
       const result = await this.sendSMS({

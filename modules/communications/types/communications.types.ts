@@ -22,7 +22,7 @@ export interface SendSMSOptions {
   agentId?: number;
   userId?: number;
   callSessionId?: string;
-  messageType?: 'manual' | 'auto_response' | 'magic_link' | 'callback_confirmation';
+  messageType?: 'manual' | 'auto_response' | 'magic_link' | 'callback_confirmation' | 'review_request';
   templateId?: string;
 }
 
@@ -165,7 +165,7 @@ export interface MagicLinkResult {
 export interface SendMagicLinkOptions extends MagicLinkOptions {
   phoneNumber?: string;
   email?: string;
-  userName?: string;
+  firstName?: string;
   customMessage?: string;
 }
 

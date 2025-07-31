@@ -106,7 +106,7 @@ export class MagicLinkService {
    * Send magic link via specified delivery method
    */
   async sendMagicLink(options: SendMagicLinkOptions): Promise<MagicLinkSendResult> {
-    const { deliveryMethod, phoneNumber, email, userName, customMessage } = options;
+    const { deliveryMethod, phoneNumber, email, firstName, customMessage } = options;
 
     // Generate the magic link
     const magicLink = await this.generateMagicLink(options);
@@ -115,7 +115,7 @@ export class MagicLinkService {
     const message = customMessage || this.buildMessage(
       options.linkType, 
       magicLink.shortUrl || magicLink.url, 
-      userName
+      firstName
     );
 
     let deliveryResult: any;
@@ -519,11 +519,14 @@ export class MagicLinkService {
     return url.toString();
   }
 
-  private buildMessage(linkType: MagicLinkType, url: string, userName?: string): string {
-    const name = userName || 'there';
+  private buildMessage(linkType: MagicLinkType, url: string, firstName?: string): string {
+    const name = firstName || 'there';
+    
+    // Remove https:// prefix for cleaner SMS messages
+    const cleanUrl = url.replace(/^https?:\/\//, '');
     
     // Updated message format as requested
-    return `Hi ${name},\n\nAccess your secure claim portal here:\n\n${url}`;
+    return `Hi ${name},\n\nAccess your secure claim portal here:\n\n${cleanUrl}`;
   }
 
   // private async generateShortUrl(originalUrl: string): Promise<string | null> {

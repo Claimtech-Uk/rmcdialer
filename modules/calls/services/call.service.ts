@@ -474,7 +474,8 @@ export class CallService {
           Number(callSession.userId),
           outcome.outcomeType,
           outcomeResult.scoreAdjustment,
-          outcomeResult.nextCallDelayHours // CRITICAL FIX: Pass delay hours
+          outcomeResult.nextCallDelayHours, // CRITICAL FIX: Pass delay hours
+          agentId // Pass agent context for proper attribution
         );
 
         // 6. Check for pending callbacks for this user and mark them as completed
@@ -907,7 +908,8 @@ export class CallService {
     userId: number,
     outcomeType: string,
     scoreAdjustment?: number,
-    delayHours?: number
+    delayHours?: number,
+    agentId?: number  // Add optional agent context
   ): Promise<void> {
     try {
       // Get current user call score record 
@@ -967,7 +969,9 @@ export class CallService {
             finalScore: newPriorityScore.finalScore,
             totalCallAttempts: newAttemptCount, // FIXED: Use incremented count for consistency
             lastCallAt: new Date(),
-            convertedAt: new Date()
+            convertedAt: new Date(),
+            // Add conditional agent attribution for score-based conversions
+            primaryAgentId: agentId || null  // Only set if agent context exists
           }
         });
 

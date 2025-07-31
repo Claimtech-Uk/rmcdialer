@@ -471,6 +471,25 @@ export function CallInterface({
     }
   });
 
+  // Review SMS sending mutation
+  const sendReviewSMSMutation = api.communications.sendReviewSMS.useMutation({
+    onSuccess: (result) => {
+      console.log('✅ Review SMS sent successfully:', result);
+      toast({ 
+        title: "Review Request Sent!", 
+        description: "User will receive a Trustpilot review request via SMS" 
+      });
+    },
+    onError: (error) => {
+      console.error('❌ Review SMS failed:', error);
+      toast({
+        title: "Failed to Send Review Request",
+        description: error.message || "Could not send review request",
+        variant: "destructive"
+      });
+    }
+  });
+
   const {
     isReady,
     isConnecting,
@@ -728,6 +747,28 @@ export function CallInterface({
     sendMagicLinkMutation.mutate(payload);
   };
 
+  const handleSendReviewSMS = () => {
+    const payload = {
+      userId: userContext.userId,
+      phoneNumber: userContext.phoneNumber,
+      callSessionId: callSessionId || undefined
+    };
+    
+    console.log('📤 Sending review SMS with payload:', payload);
+    
+    if (!userContext.phoneNumber) {
+      console.error('❌ No phone number available');
+      toast({
+        title: "No Phone Number",
+        description: "This user doesn't have a phone number on file",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    sendReviewSMSMutation.mutate(payload);
+  };
+
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -822,16 +863,30 @@ export function CallInterface({
                     {userContext.phoneNumber}
                   </div>
                   
-                  {/* View Profile Button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 text-blue-600 border-blue-200 hover:bg-blue-50"
-                    onClick={() => window.open(`https://claim.resolvemyclaim.co.uk/admin/users/${userContext.userId}`, '_blank')}
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    View Profile
-                  </Button>
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                      onClick={() => window.open(`https://claim.resolvemyclaim.co.uk/admin/users/${userContext.userId}`, '_blank')}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      View Profile
+                    </Button>
+                    
+                    <Button 
+                      onClick={handleSendReviewSMS}
+                      disabled={sendReviewSMSMutation.isPending || !userContext.phoneNumber}
+                      variant="outline"
+                      size="sm"
+                      className="text-purple-600 border-purple-200 hover:bg-purple-50"
+                      title={userContext.phoneNumber ? 'Send review request to customer' : 'No phone number available'}
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      {sendReviewSMSMutation.isPending ? 'Sending...' : 'Send Review'}
+                    </Button>
+                  </div>
                   {userContext.address && (
                     <div className="text-slate-600 mt-2">
                       <div className="flex items-center gap-2 mb-1">

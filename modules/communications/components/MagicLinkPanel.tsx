@@ -12,7 +12,7 @@ import type { MagicLinkType, DeliveryMethod } from '../types/communications.type
 
 interface MagicLinkPanelProps {
   userId: number
-  userName?: string
+  firstName?: string
   phoneNumber?: string
   email?: string
   claimId?: number
@@ -84,7 +84,7 @@ const deliveryMethods = [
 
 export function MagicLinkPanel({
   userId,
-  userName,
+  firstName,
   phoneNumber,
   email,
   claimId,
@@ -135,7 +135,7 @@ export function MagicLinkPanel({
       deliveryMethod: selectedDeliveryMethod,
       phoneNumber: selectedDeliveryMethod !== 'email' ? phoneNumber : undefined,
       email: selectedDeliveryMethod === 'email' ? email : undefined,
-      userName,
+      firstName,
       customMessage: customMessage.trim() || undefined,
       claimId,
       callSessionId

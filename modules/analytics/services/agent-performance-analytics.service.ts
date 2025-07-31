@@ -344,6 +344,29 @@ export class AgentPerformanceAnalyticsService {
         
         const totalTalkTime = todaysCalls.reduce((sum, call) => sum + (call.talkTimeSeconds || 0), 0);
         const timeOnline = Math.floor((new Date().getTime() - session.loginAt.getTime()) / 1000);
+
+        // Calculate conversions today for this agent
+        const conversionsToday = await this.deps.prisma.conversion.count({
+          where: {
+            primaryAgentId: session.agentId,
+            convertedAt: { gte: today }
+          }
+        });
+
+        // Calculate contact rate for today's calls
+        const contactedCalls = await this.deps.prisma.callOutcome.count({
+          where: {
+            callSession: {
+              agentId: session.agentId,
+              startedAt: { gte: today },
+              endedAt: { not: null }
+            },
+            outcomeType: 'contacted'
+          }
+        });
+        
+        const contactRateToday = todaysCalls.length > 0 ? 
+          Math.round((contactedCalls / todaysCalls.length) * 100) : 0;
         
         // Check for current gap
         let currentGap: { startedAt: Date; duration: number } | undefined;
@@ -373,6 +396,8 @@ export class AgentPerformanceAnalyticsService {
             callsToday: todaysCalls.length,
             talkTimeToday: totalTalkTime,
             avgGapTimeToday: gapMetrics.avgGapTime,
+            conversionsToday,
+            contactRateToday,
             currentGap
           },
           sessionStats: {

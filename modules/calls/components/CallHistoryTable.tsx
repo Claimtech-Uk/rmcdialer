@@ -95,6 +95,25 @@ export function CallHistoryTable({
     }
   });
 
+  // Review SMS sending mutation
+  const sendReviewSMSMutation = api.communications.sendReviewSMS.useMutation({
+    onSuccess: (result) => {
+      console.log('✅ Review SMS sent successfully from call history:', result);
+      toast({ 
+        title: "Review Request Sent!", 
+        description: "User will receive a Trustpilot review request via SMS" 
+      });
+    },
+    onError: (error) => {
+      console.error('❌ Review SMS failed from call history:', error);
+      toast({
+        title: "Failed to Send Review Request",
+        description: error.message || "Could not send review request",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Handle sending magic link for a specific call
   const handleSendMagicLink = (call: CallHistoryEntry) => {
     if (!call.userPhone) {
@@ -126,6 +145,39 @@ export function CallHistoryTable({
     
     console.log('📤 Sending magic link from call history with payload:', payload);
     sendMagicLinkMutation.mutate(payload);
+  };
+
+  // Handle sending review SMS for a specific call
+  const handleSendReviewSMS = (call: CallHistoryEntry) => {
+    if (!call.userPhone) {
+      toast({
+        title: "No Phone Number",
+        description: "This call record doesn't have a phone number on file",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Extract user ID from the call record
+    const userIdToUse = call.userId || userId;
+    
+    if (!userIdToUse) {
+      toast({
+        title: "No User ID",
+        description: "Cannot determine user ID for this call",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const payload = {
+      userId: userIdToUse,
+      phoneNumber: call.userPhone,
+      callSessionId: call.id
+    };
+    
+    console.log('📤 Sending review SMS from call history with payload:', payload);
+    sendReviewSMSMutation.mutate(payload);
   };
 
   // Recording Player Component
@@ -734,6 +786,18 @@ export function CallHistoryTable({
                             title={call.userPhone ? 'Send portal link to user' : 'No phone number available'}
                           >
                             <Send className="h-3 w-3 text-emerald-600" />
+                          </Button>
+                          
+                          {/* Review SMS Button */}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => handleSendReviewSMS(call)}
+                            disabled={sendReviewSMSMutation.isPending || !call.userPhone}
+                            className="h-6 w-6 hover:bg-purple-100 transition-colors"
+                            title={call.userPhone ? 'Send review request to user' : 'No phone number available'}
+                          >
+                            <MessageSquare className="h-3 w-3 text-purple-600" />
                           </Button>
                         </div>
                       </div>
