@@ -44,7 +44,7 @@ export class NoAnswerOutcome implements CallOutcomeHandler {
       nextActions,
       scoreAdjustment: this.scoringRules.scoreAdjustment,
       nextCallDelayHours: this.getDelayHours(context),
-      outcomeNotes: data?.notes || 'Customer did not answer the phone'
+      outcomeNotes: (data?.notes && data.notes.trim()) || 'Customer did not answer the phone'
     };
   }
   

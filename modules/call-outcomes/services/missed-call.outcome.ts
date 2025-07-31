@@ -68,7 +68,7 @@ export class MissedCallOutcome implements CallOutcomeHandler {
       nextCallDelayHours: this.getDelayHours(context, data),
       callbackDateTime: callbackTime,
       callbackReason: 'Return missed call - customer tried to reach us',
-      outcomeNotes: data?.notes || `Customer called at ${callbackTime.toLocaleString()} but we missed it`
+      outcomeNotes: (data?.notes && data.notes.trim()) || `Customer called at ${callbackTime.toLocaleString()} but we missed it`
     };
   }
 

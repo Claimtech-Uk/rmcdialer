@@ -56,7 +56,7 @@ export class DoNotContactOutcome implements CallOutcomeHandler {
         type: 'opted_out',
         reason: data?.reason || 'Customer requested not to be contacted'
       }],
-      outcomeNotes: data?.notes || 'Customer explicitly requested not to be contacted'
+      outcomeNotes: (data?.notes && data.notes.trim()) || 'Customer explicitly requested not to be contacted'
     };
   }
   

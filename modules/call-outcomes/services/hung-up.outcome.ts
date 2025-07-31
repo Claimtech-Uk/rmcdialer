@@ -44,7 +44,7 @@ export class HungUpOutcome implements CallOutcomeHandler {
       nextActions,
       scoreAdjustment: this.scoringRules.scoreAdjustment,
       nextCallDelayHours: this.getDelayHours(context),
-      outcomeNotes: data?.notes || 'Customer hung up during conversation'
+      outcomeNotes: (data?.notes && data.notes.trim()) || 'Customer hung up during conversation'
     };
   }
   

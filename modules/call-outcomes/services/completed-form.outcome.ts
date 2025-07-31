@@ -54,7 +54,7 @@ export class CompletedFormOutcome implements CallOutcomeHandler {
         reason: 'Form completed successfully',
         documentsRequested: data?.documentsRequested
       }],
-      outcomeNotes: data?.notes || 'Customer completed their form submission'
+      outcomeNotes: (data?.notes && data.notes.trim()) || 'Customer completed their form submission'
     };
   }
   

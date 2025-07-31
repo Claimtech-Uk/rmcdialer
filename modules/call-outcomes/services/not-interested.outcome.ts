@@ -44,7 +44,7 @@ export class NotInterestedOutcome implements CallOutcomeHandler {
       nextActions,
       scoreAdjustment: this.scoringRules.scoreAdjustment,
       nextCallDelayHours: this.getDelayHours(context),
-      outcomeNotes: data?.notes || 'Customer expressed they are not interested'
+      outcomeNotes: (data?.notes && data.notes.trim()) || 'Customer expressed they are not interested'
     };
   }
   

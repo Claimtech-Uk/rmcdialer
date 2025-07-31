@@ -52,7 +52,7 @@ export class NoClaimOutcome implements CallOutcomeHandler {
         type: 'no_longer_eligible',
         reason: data?.reason || 'No valid claim or requirements found'
       }],
-      outcomeNotes: data?.notes || 'Customer has no valid claim or requirements'
+      outcomeNotes: (data?.notes && data.notes.trim()) || 'Customer has no valid claim or requirements'
     };
   }
   

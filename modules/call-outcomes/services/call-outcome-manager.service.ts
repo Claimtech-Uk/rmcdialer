@@ -93,7 +93,7 @@ export class CallOutcomeManager {
           where: { id: context.sessionId },
           data: {
             lastOutcomeType: outcomeType,
-            lastOutcomeNotes: result.outcomeNotes || data?.notes || `Processed ${outcomeType} outcome`,
+            lastOutcomeNotes: result.outcomeNotes || (data?.notes && data.notes.trim()) || `Processed ${outcomeType} outcome`,
             lastOutcomeAt: new Date(),
             lastOutcomeAgentId: context.agentId,
             // Update status for missed calls specifically

@@ -55,7 +55,7 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
       callbackDateTime: data?.callbackDateTime,
       callbackReason: data?.callbackReason || 'Follow up on customer interest',
       magicLinkSent: data?.magicLinkSent || false,
-      outcomeNotes: data?.notes || 'Customer showed some interest but no commitment'
+      outcomeNotes: (data?.notes && data.notes.trim()) || 'Customer showed some interest but no commitment'
     };
   }
 

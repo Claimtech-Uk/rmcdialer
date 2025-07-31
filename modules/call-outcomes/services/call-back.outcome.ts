@@ -50,7 +50,7 @@ export class CallBackOutcome implements CallOutcomeHandler {
       nextCallDelayHours: this.getDelayHours(context, data),
       callbackDateTime: data?.callbackDateTime,
       callbackReason: data?.callbackReason || 'Customer requested callback',
-      outcomeNotes: data?.notes || 'Customer requested a callback'
+      outcomeNotes: (data?.notes && data.notes.trim()) || 'Customer requested a callback'
     };
   }
   

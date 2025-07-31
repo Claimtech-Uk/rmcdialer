@@ -44,7 +44,7 @@ export class BadNumberOutcome implements CallOutcomeHandler {
       nextActions,
       scoreAdjustment: this.scoringRules.scoreAdjustment,
       nextCallDelayHours: this.getDelayHours(context),
-      outcomeNotes: data?.notes || 'Phone number is incorrect or disconnected'
+      outcomeNotes: (data?.notes && data.notes.trim()) || 'Phone number is incorrect or disconnected'
     };
   }
   

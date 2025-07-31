@@ -55,7 +55,7 @@ export class GoingToCompleteOutcome implements CallOutcomeHandler {
       callbackDateTime: data?.callbackDateTime,
       callbackReason: data?.callbackReason || 'Follow up on commitment to complete form',
       magicLinkSent: data?.magicLinkSent || false,
-      outcomeNotes: data?.notes || 'Customer committed to completing their form'
+      outcomeNotes: (data?.notes && data.notes.trim()) || 'Customer committed to completing their form'
     };
   }
 
