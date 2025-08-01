@@ -386,8 +386,8 @@ export class AgentPerformanceAnalyticsService {
           }
         });
         
-        const positiveCallPercentageToday = todaysCalls.length > 0 ? 
-          Math.round((positiveCalls / todaysCalls.length) * 100) : 0;
+        const positiveCallPercentageToday = answeredCalls > 0 ? 
+          Math.round((positiveCalls / answeredCalls) * 100) : 0;
         
         // Check for current gap
         let currentGap: { startedAt: Date; duration: number } | undefined;
