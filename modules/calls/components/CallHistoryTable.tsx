@@ -403,6 +403,11 @@ export function CallHistoryTable({
 
   // Helper function to determine if call was missed
   const isMissedCall = (call: CallHistoryEntry) => {
+    // Only consider inbound calls (customer called us)
+    if (call.direction !== 'inbound') {
+      return false
+    }
+    
     // Check for explicit missed call outcomes
     if (call.outcome === 'missed_call' || call.status === 'missed_call') {
       return true
@@ -612,12 +617,12 @@ export function CallHistoryTable({
             <Clock className="h-5 w-5" />
             Call History
             <Badge variant="secondary">
-              {filteredAndSortedCalls.length} {quickFilter === 'missed' ? 'missed' : ''} calls
+              {filteredAndSortedCalls.length} {quickFilter === 'missed' ? 'inbound missed' : ''} calls
             </Badge>
             {quickFilter === 'missed' && (
               <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50">
                 <PhoneMissed className="h-3 w-3 mr-1" />
-                Missed Only
+                Inbound Missed Only
               </Badge>
             )}
           </CardTitle>
@@ -661,7 +666,7 @@ export function CallHistoryTable({
             }`}
           >
             <PhoneMissed className="h-4 w-4 mr-1" />
-            Missed Calls
+            Inbound Missed
           </Button>
         </div>
 
