@@ -196,7 +196,7 @@ export function CallOutcomeModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-50">
-      <Card className="w-[60vw] max-w-[1200px] max-h-[60vh] overflow-y-auto bg-white shadow-2xl border-0">
+      <Card className="w-[60vw] max-w-[1200px] max-h-[85vh] overflow-y-auto bg-white shadow-2xl border-0">
         <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
           <CardTitle className="flex items-center gap-3">
             <Phone className="w-6 h-6" />
@@ -214,7 +214,7 @@ export function CallOutcomeModal({
           </div>
         </CardHeader>
 
-        <CardContent className="p-6 space-y-6">
+        <CardContent className="p-4 space-y-4">
           {/* Disposition Selection */}
           <div>
             <Label className="text-base font-semibold mb-3 block">Disposition *</Label>
@@ -227,7 +227,7 @@ export function CallOutcomeModal({
                   <button
                     key={outcome.type}
                     onClick={() => handleOutcomeChange(outcome.type)}
-                    className={`p-4 rounded-xl border-2 transition-all duration-200 text-left h-[120px] flex flex-col justify-between hover:shadow-md ${
+                    className={`p-3 rounded-xl border-2 transition-all duration-200 text-left h-[100px] flex flex-col justify-between hover:shadow-md ${
                       isSelected
                         ? 'border-blue-500 bg-blue-50 shadow-lg scale-105'
                         : 'border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50'
