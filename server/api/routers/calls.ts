@@ -819,8 +819,8 @@ export const callsRouter = createTRPCRouter({
             }
           },
           orderBy: { startedAt: 'desc' },
-          take: filters.limit || 25,
-          skip: (filters.page - 1) * (filters.limit || 25)
+          take: filters.limit || 50,
+          skip: (filters.page - 1) * (filters.limit || 50)
         });
 
         // Get user details from replica DB for each call
@@ -856,6 +856,8 @@ export const callsRouter = createTRPCRouter({
             if (session.durationSeconds && session.durationSeconds > 0) {
               // Call had duration, likely was answered
               smartOutcome = 'contacted';
+            } else if (session.status === 'missed_call') {
+              smartOutcome = 'missed_call';
             } else if (session.status === 'no_answer') {
               smartOutcome = 'no_answer';
             } else if (session.status === 'failed') {
@@ -934,9 +936,9 @@ export const callsRouter = createTRPCRouter({
           calls: formattedCalls,
           meta: {
             page: filters.page,
-            limit: filters.limit,
+            limit: filters.limit || 50,
             total,
-            totalPages: Math.ceil(total / filters.limit)
+            totalPages: Math.ceil(total / (filters.limit || 50))
           }
         };
       } catch (error) {
