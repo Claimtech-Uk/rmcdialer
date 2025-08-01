@@ -403,10 +403,23 @@ export function CallHistoryTable({
 
   // Helper function to determine if call was missed
   const isMissedCall = (call: CallHistoryEntry) => {
-    return (
-      (!call.durationSeconds || call.durationSeconds === 0) &&
-      (call.outcome === 'no_answer' || call.status === 'no_answer')
-    )
+    // Check for explicit missed call outcomes
+    if (call.outcome === 'missed_call' || call.status === 'missed_call') {
+      return true
+    }
+    
+    // Check for no answer outcomes
+    if (call.outcome === 'no_answer' || call.status === 'no_answer') {
+      return true
+    }
+    
+    // Check for very short or zero duration calls that likely didn't connect
+    if ((!call.durationSeconds || call.durationSeconds <= 5) && 
+        (!call.talkTimeSeconds || call.talkTimeSeconds === 0)) {
+      return true
+    }
+    
+    return false
   }
 
   // Filter and sort calls
