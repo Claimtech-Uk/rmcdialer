@@ -452,6 +452,7 @@ export class CallService {
         }
 
         // 4. Handle conversions using outcome result
+        let conversionsAlreadyCreated = false;
         if (outcomeResult.conversions && outcomeResult.conversions.length > 0) {
           for (const conversion of outcomeResult.conversions) {
             await this.createConversion({
@@ -466,6 +467,7 @@ export class CallService {
               claimId: callSession.callQueue?.claimId ? Number(callSession.callQueue.claimId) : undefined
             });
           }
+          conversionsAlreadyCreated = true;
         }
 
         // 5. Update user score using outcome result score adjustment
@@ -475,7 +477,8 @@ export class CallService {
           outcome.outcomeType,
           outcomeResult.scoreAdjustment,
           outcomeResult.nextCallDelayHours, // CRITICAL FIX: Pass delay hours
-          agentId // Pass agent context for proper attribution
+          agentId, // Pass agent context for proper attribution
+          conversionsAlreadyCreated // PREVENT DUPLICATE CONVERSIONS
         );
 
         // 6. Check for pending callbacks for this user and mark them as completed
@@ -909,7 +912,8 @@ export class CallService {
     outcomeType: string,
     scoreAdjustment?: number,
     delayHours?: number,
-    agentId?: number  // Add optional agent context
+    agentId?: number,  // Add optional agent context
+    conversionsAlreadyCreated?: boolean // PREVENT DUPLICATE CONVERSIONS
   ): Promise<void> {
     try {
       // Get current user call score record 
@@ -955,16 +959,20 @@ export class CallService {
 
       // Check if outcome indicates conversion (score 200+)
       const shouldConvert = newPriorityScore.finalScore >= 200 || 
-        ['requirements_completed', 'opted_out', 'already_completed'].includes(outcomeType);
+        [
+          // Positive conversions
+          'requirements_completed', 'signature_obtained', 'documents_received', 'claim_completed', 'signed', 'completed_form',
+          // Negative conversions (removal from queue)
+          'no_claim', 'not_interested', 'do_not_contact', 'bad_number', 'opted_out', 'already_completed'
+        ].includes(outcomeType);
 
-      if (shouldConvert) {
-        // Create conversion record
+      if (shouldConvert && !conversionsAlreadyCreated) {
+        // Create conversion record ONLY if not already created by outcome processing
         await tx.conversion.create({
           data: {
             userId: BigInt(userId),
             previousQueueType: currentQueueType || 'unknown',
-            conversionType: outcomeType === 'requirements_completed' ? 'completed' : 
-                          outcomeType === 'opted_out' ? 'opted_out' : 'no_longer_eligible',
+            conversionType: this.mapOutcomeToConversionType(outcomeType, currentQueueType), // Use consistent mapping
             conversionReason: `Outcome: ${outcomeType}, Final score: ${newPriorityScore.finalScore}`,
             finalScore: newPriorityScore.finalScore,
             totalCallAttempts: newAttemptCount, // FIXED: Use incremented count for consistency
@@ -975,10 +983,16 @@ export class CallService {
           }
         });
 
+        this.deps.logger.info(`User ${userId} converted with outcome ${outcomeType}, score ${newPriorityScore.finalScore}`);
+      } else if (shouldConvert && conversionsAlreadyCreated) {
+        this.deps.logger.info(`User ${userId} conversion skipped - already created by outcome processing`);
+      }
+
+      if (shouldConvert) {
         // Mark user as inactive in scoring system
-    await tx.userCallScore.upsert({
-      where: { userId: BigInt(userId) },
-      update: {
+        await tx.userCallScore.upsert({
+          where: { userId: BigInt(userId) },
+          update: {
             isActive: false,
             currentScore: newPriorityScore.finalScore,
             updatedAt: new Date()
@@ -989,15 +1003,13 @@ export class CallService {
             isActive: false,
             currentQueueType: currentQueueType,
             lastResetDate: needsReset ? new Date() : new Date(),
-        lastOutcome: outcomeType,
-        lastCallAt: new Date(),
+            lastOutcome: outcomeType,
+            lastCallAt: new Date(),
             totalAttempts: newAttemptCount // FIXED: Use incremented count (1 for conversions)
           }
         });
-
-        this.deps.logger.info(`User ${userId} converted with outcome ${outcomeType}, score ${newPriorityScore.finalScore}`);
       } else {
-        // Normal score update
+        // Normal score update for non-conversion outcomes
         await tx.userCallScore.upsert({
           where: { userId: BigInt(userId) },
           update: {
@@ -1012,18 +1024,18 @@ export class CallService {
             totalAttempts: { increment: 1 }, // FIXED: Properly increment attempts counter
             successfulCalls: ['completed_form', 'going_to_complete', 'call_back'].includes(outcomeType) ? { increment: 1 } : undefined,
             lastQueueCheck: new Date(),
-        updatedAt: new Date()
-      },
-      create: {
-        userId: BigInt(userId),
+            updatedAt: new Date()
+          },
+          create: {
+            userId: BigInt(userId),
             currentScore: newPriorityScore.finalScore,
             isActive: true,
             currentQueueType: currentQueueType,
             lastResetDate: new Date(),
-        lastOutcome: outcomeType,
-        lastCallAt: new Date(),
-        nextCallAfter: nextCallAfter, // CRITICAL FIX: Set next call delay
-        totalAttempts: 1,
+            lastOutcome: outcomeType,
+            lastCallAt: new Date(),
+            nextCallAfter: nextCallAfter, // CRITICAL FIX: Set next call delay
+            totalAttempts: 1,
             successfulCalls: ['completed_form', 'going_to_complete', 'call_back'].includes(outcomeType) ? 1 : 0
           }
         });
@@ -1198,11 +1210,10 @@ export class CallService {
    */
   private isConversionOutcome(outcomeType: string): boolean {
     const conversionOutcomes = [
-      'requirements_completed',
-      'signature_obtained', 
-      'documents_received',
-      'claim_completed',
-      'signed'
+      // Positive conversions
+      'requirements_completed', 'signature_obtained', 'documents_received', 'claim_completed', 'signed', 'completed_form',
+      // Negative conversions (removal from queue)
+      'no_claim', 'not_interested', 'do_not_contact', 'bad_number', 'opted_out', 'already_completed'
     ];
     return conversionOutcomes.includes(outcomeType);
   }
@@ -1252,7 +1263,7 @@ export class CallService {
         .filter((id: number) => id !== agentId); // Exclude primary agent
 
       // Determine conversion details
-      const conversionType = this.mapOutcomeToConversionType(outcomeType);
+      const conversionType = this.mapOutcomeToConversionType(outcomeType, queueType);
       const signatureObtained = outcomeType.includes('sign') || outcomeType === 'signature_obtained';
       
       // Create conversion record
@@ -1306,15 +1317,58 @@ export class CallService {
 
   /**
    * Map call outcome type to conversion type
+   * @param outcomeType - The call outcome type
+   * @param queueType - The queue the user was in (for context-aware mapping)
    */
-  private mapOutcomeToConversionType(outcomeType: string): string {
+  private mapOutcomeToConversionType(outcomeType: string, queueType?: string | null): string {
+    // Handle context-dependent outcomes first
+    if (outcomeType === 'completed_form') {
+      // completed_form depends on which queue the user was in:
+      // - unsigned_users queue → they provided signature → 'signed'
+      // - outstanding_requests queue → they completed requirements → 'requirements_completed'
+      if (queueType === 'unsigned_users') {
+        return 'signed';
+      } else if (queueType === 'outstanding_requests') {
+        return 'requirements_completed';
+      } else {
+        // Default fallback for unknown queue context
+        console.warn(`⚠️ completed_form outcome without clear queue context (${queueType}) - defaulting to 'requirements_completed'`);
+        return 'requirements_completed';
+      }
+    }
+
     const mapping: Record<string, string> = {
+      // Positive outcomes
       'requirements_completed': 'requirements_completed',
       'signature_obtained': 'signed',
       'documents_received': 'info_received',
       'claim_completed': 'signed',
-      'signed': 'signed'
+      'signed': 'signed',
+      // Note: completed_form is handled above with context
+      
+      // Negative/ineligible outcomes  
+      'no_claim': 'no_longer_eligible',
+      'not_interested': 'opted_out',
+      'do_not_contact': 'opted_out',
+      'bad_number': 'no_longer_eligible',
+      
+      // Neutral outcomes that shouldn't convert
+      'going_to_complete': 'pending_completion',
+      'might_complete': 'pending_completion',
+      'call_back': 'callback_scheduled',
+      'no_answer': 'no_contact',
+      'missed_call': 'no_contact',
+      'hung_up': 'no_contact'
     };
-    return mapping[outcomeType] || 'requirements_completed';
+    
+    // CRITICAL FIX: Don't default to 'requirements_completed' for unknown outcomes
+    // This was causing unsigned users to get wrong conversion types
+    const mappedType = mapping[outcomeType];
+    if (!mappedType) {
+      console.warn(`⚠️ Unknown outcome type '${outcomeType}' - using 'other' conversion type`);
+      return 'other';
+    }
+    
+    return mappedType;
   }
 } 

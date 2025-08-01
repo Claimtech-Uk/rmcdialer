@@ -24,7 +24,8 @@ import {
   Check,
   CheckCheck,
   ExternalLink,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { api } from '@/lib/trpc/client';
 import { useToast } from '@/modules/core/hooks/use-toast';
@@ -201,6 +202,9 @@ export function CallInterface({
   const [callSessionId, setCallSessionId] = useState<string>('');
   const [submittingOutcome, setSubmittingOutcome] = useState(false);
   const [expandedConversations, setExpandedConversations] = useState<Set<string>>(new Set());
+  
+  // ADD: Loading state for call initiation to prevent double-clicking
+  const [isInitiatingCall, setIsInitiatingCall] = useState(false);
   
   // PERFORMANCE: Lazy loading state for heavy queries
   const [loadSmsConversations, setLoadSmsConversations] = useState(false);
@@ -605,6 +609,14 @@ export function CallInterface({
   }, [isInCall, wasInCall, callStatus?.state, showOutcomeModal]);
 
   const handleMakeCall = async () => {
+    // Prevent double-clicking during call initiation
+    if (isInitiatingCall) {
+      console.log('🚫 Call already in progress, ignoring duplicate click');
+      return;
+    }
+    
+    setIsInitiatingCall(true);
+    
     try {
       // CORRECT ARCHITECTURE: Start Twilio call FIRST, create DB session only when call connects
       console.log('📞 Starting Twilio call...');
@@ -637,6 +649,9 @@ export function CallInterface({
         description: error.message || "Could not start call",
         variant: "destructive"
       });
+    } finally {
+      // Always reset loading state, regardless of success or failure
+      setIsInitiatingCall(false);
     }
   };
 
@@ -1206,13 +1221,22 @@ export function CallInterface({
                 {!isInCall ? (
                   <Button
                     onClick={handleMakeCall}
-                    disabled={!isReady}
+                    disabled={!isReady || isInitiatingCall}
                     size="xl"
                     responsive="nowrap"
                     className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
                   >
-                    <Phone className="w-6 h-6 mr-2 flex-shrink-0" />
-                    Call {userContext.firstName}
+                    {isInitiatingCall ? (
+                      <>
+                        <Loader2 className="w-6 h-6 mr-2 flex-shrink-0 animate-spin" />
+                        Starting Call...
+                      </>
+                    ) : (
+                      <>
+                        <Phone className="w-6 h-6 mr-2 flex-shrink-0" />
+                        Call {userContext.firstName}
+                      </>
+                    )}
                   </Button>
                 ) : (
                   <Button

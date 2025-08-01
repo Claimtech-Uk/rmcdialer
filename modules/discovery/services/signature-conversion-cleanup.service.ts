@@ -292,22 +292,37 @@ export class SignatureConversionCleanupService {
         if (updateResult.count > 0) {
           updated += updateResult.count
 
-          // Create conversion record in database
-          await prisma.conversion.create({
-            data: {
+          // Check if a conversion already exists for this user within the last hour
+          // to prevent race conditions with live call outcomes
+          const recentConversion = await prisma.conversion.findFirst({
+            where: {
               userId: conversion.userId,
-              previousQueueType: 'unsigned_users',
-              conversionType: 'signature_obtained',
-              conversionReason: 'User provided signature - moved from unsigned queue',
-              finalScore: currentUserScore?.currentScore || 0,
-              totalCallAttempts: currentUserScore?.totalAttempts || 0,
-              lastCallAt: currentUserScore?.lastCallAt,
-              signatureObtained: true,
-              convertedAt: conversion.convertedAt
+              convertedAt: {
+                gte: new Date(Date.now() - 60 * 60 * 1000) // Last hour
+              }
             }
-          })
+          });
 
-          logger.info(`📝 [CONVERSION] Created conversion record for user ${conversion.userId}`)
+          if (recentConversion) {
+            logger.info(`⏭️ [SKIP] User ${conversion.userId} already has recent conversion ${recentConversion.id}, skipping duplicate`);
+          } else {
+            // Create conversion record in database
+            await prisma.conversion.create({
+              data: {
+                userId: conversion.userId,
+                previousQueueType: 'unsigned_users',
+                conversionType: 'signature_obtained',
+                conversionReason: 'User provided signature - moved from unsigned queue',
+                finalScore: currentUserScore?.currentScore || 0,
+                totalCallAttempts: currentUserScore?.totalAttempts || 0,
+                lastCallAt: currentUserScore?.lastCallAt,
+                signatureObtained: true,
+                convertedAt: conversion.convertedAt
+              }
+            })
+
+            logger.info(`📝 [CONVERSION] Created conversion record for user ${conversion.userId}`)
+          }
         }
       } catch (error: any) {
         logger.error(`❌ Failed to update user ${conversion.userId}:`, error)

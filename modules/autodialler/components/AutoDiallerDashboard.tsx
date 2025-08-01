@@ -20,7 +20,8 @@ import {
   FileText,
   RefreshCw,
   Mail,
-  MapPin
+  MapPin,
+  Loader2
 } from 'lucide-react';
 import { CallInterface } from '@/modules/calls/components/CallInterface';
 import { CountdownTimer } from '../../../app/queue/components/CountdownTimer';
@@ -37,6 +38,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
   const teamConfig = getTeamConfig(teamType);
   const [showSettings, setShowSettings] = useState(false);
   const [isCallInterfaceActive, setIsCallInterfaceActive] = useState(false);
+  const [isActivatingInterface, setIsActivatingInterface] = useState(false);
 
   const {
     state,
@@ -428,15 +430,41 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
               <CardContent className="py-10 px-8">
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
                   <Button
-                    onClick={() => {
-                      console.log('Activating call interface for:', currentUser.firstName, currentUser.lastName);
-                      setIsCallInterfaceActive(true);
+                    onClick={async () => {
+                      // Prevent double-clicking during interface activation
+                      if (isActivatingInterface) {
+                        console.log('🚫 Interface already activating, ignoring duplicate click');
+                        return;
+                      }
+                      
+                      setIsActivatingInterface(true);
+                      
+                      try {
+                        console.log('Activating call interface for:', currentUser.firstName, currentUser.lastName);
+                        
+                        // Small delay to show loading state (interface activation is usually instant)
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        
+                        setIsCallInterfaceActive(true);
+                      } finally {
+                        setIsActivatingInterface(false);
+                      }
                     }}
+                    disabled={isActivatingInterface}
                     className={`px-12 py-6 text-lg font-bold bg-gradient-to-r ${teamConfig.color.gradient} text-white hover:shadow-2xl transform hover:scale-105 transition-all duration-300 border-0 rounded-2xl shadow-lg`}
                     size="lg"
                   >
-                    <Phone className="w-6 h-6 mr-3" />
-                    Start Call Interface
+                    {isActivatingInterface ? (
+                      <>
+                        <Loader2 className="w-6 h-6 mr-3 animate-spin" />
+                        Activating...
+                      </>
+                    ) : (
+                      <>
+                        <Phone className="w-6 h-6 mr-3" />
+                        Start Call Interface
+                      </>
+                    )}
                   </Button>
                   
                   <Button

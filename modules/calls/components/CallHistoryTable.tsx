@@ -28,6 +28,9 @@ interface Filters {
   search: string
 }
 
+// Add quick filter type
+type QuickFilter = 'all' | 'missed'
+
 const OUTCOME_COLORS: Record<string, string> = {
   // New unified vocabulary
   'completed_form': 'bg-green-100 text-green-800',
@@ -68,6 +71,7 @@ export function CallHistoryTable({
     agent: 'all',
     search: ''
   })
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
   const [sortBy, setSortBy] = useState<'date' | 'duration' | 'outcome'>('date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [expandedCall, setExpandedCall] = useState<string | null>(null)
@@ -400,6 +404,11 @@ export function CallHistoryTable({
   // Filter and sort calls
   const filteredAndSortedCalls = useMemo(() => {
     let filtered = calls.filter(call => {
+      // Quick filter
+      if (quickFilter === 'missed' && !isMissedCall(call)) {
+        return false
+      }
+
       // Outcome filter
       if (filters.outcome !== 'all' && call.outcome !== filters.outcome) {
         return false
@@ -462,7 +471,7 @@ export function CallHistoryTable({
     })
 
     return filtered
-  }, [calls, filters, sortBy, sortOrder])
+  }, [calls, filters, sortBy, sortOrder, quickFilter])
 
   const formatDuration = (seconds: number | null | undefined) => {
     if (!seconds || seconds === 0) return 'N/A'
@@ -589,7 +598,15 @@ export function CallHistoryTable({
           <CardTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
             Call History
-            <Badge variant="secondary">{filteredAndSortedCalls.length} calls</Badge>
+            <Badge variant="secondary">
+              {filteredAndSortedCalls.length} {quickFilter === 'missed' ? 'missed' : ''} calls
+            </Badge>
+            {quickFilter === 'missed' && (
+              <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50">
+                <PhoneMissed className="h-3 w-3 mr-1" />
+                Missed Only
+              </Badge>
+            )}
           </CardTitle>
           {onRefresh && (
             <Button 
@@ -603,6 +620,36 @@ export function CallHistoryTable({
               Refresh
             </Button>
           )}
+        </div>
+
+        {/* Quick Filter Tabs */}
+        <div className="flex gap-2 mt-4">
+          <Button
+            variant={quickFilter === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setQuickFilter('all')}
+            className={`transition-all duration-200 ${
+              quickFilter === 'all'
+                ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md text-white'
+                : 'hover:bg-blue-50 border-blue-200 text-blue-700'
+            }`}
+          >
+            <Phone className="h-4 w-4 mr-1" />
+            All Calls
+          </Button>
+          <Button
+            variant={quickFilter === 'missed' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setQuickFilter('missed')}
+            className={`transition-all duration-200 ${
+              quickFilter === 'missed'
+                ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-md text-white'
+                : 'hover:bg-red-50 border-red-200 text-red-700'
+            }`}
+          >
+            <PhoneMissed className="h-4 w-4 mr-1" />
+            Missed Calls
+          </Button>
         </div>
 
         {/* Filters */}

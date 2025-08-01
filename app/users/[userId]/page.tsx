@@ -19,7 +19,8 @@ import {
   BarChart3,
   Send,
   Check,
-  CheckCheck
+  CheckCheck,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/modules/core/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card';
@@ -191,6 +192,7 @@ export default function UserDetailPage() {
   const isInboundCall = searchParams.get('inbound_call') === 'true';
   const callSid = searchParams.get('call_sid');
   const [showCallInterface, setShowCallInterface] = useState(false);
+  const [isStartingCall, setIsStartingCall] = useState(false);
 
   // Fetch user details
   const { 
@@ -297,6 +299,12 @@ export default function UserDetailPage() {
   });
 
   const handleStartCall = async () => {
+    // Prevent double-clicking during call initiation
+    if (isStartingCall) {
+      console.log('🚫 Call already starting, ignoring duplicate click');
+      return;
+    }
+    
     if (!user.phoneNumber) {
       toast({ 
         title: "No Phone Number", 
@@ -305,6 +313,8 @@ export default function UserDetailPage() {
       });
       return;
     }
+
+    setIsStartingCall(true);
 
     try {
       // NEW APPROACH: Navigate to call page immediately with user context
@@ -322,6 +332,9 @@ export default function UserDetailPage() {
         description: "Failed to start call session",
         variant: "destructive"
       });
+    } finally {
+      // Reset loading state after navigation or error
+      setIsStartingCall(false);
     }
   };
 
@@ -437,12 +450,22 @@ export default function UserDetailPage() {
             </Button>
             <Button 
               onClick={handleStartCall}
+              disabled={isStartingCall}
               size="default"
               responsive="nowrap"
               className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 shadow-lg hover:shadow-xl transition-all duration-200 text-white"
             >
-              <Phone className="w-4 h-4 mr-2 flex-shrink-0" />
-              Start Call
+              {isStartingCall ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 flex-shrink-0 animate-spin" />
+                  Starting...
+                </>
+              ) : (
+                <>
+                  <Phone className="w-4 h-4 mr-2 flex-shrink-0" />
+                  Start Call
+                </>
+              )}
             </Button>
             <Button 
               onClick={handleSendLink}

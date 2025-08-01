@@ -327,22 +327,37 @@ export class OutstandingRequirementsConversionCleanupService {
         if (updateResult.count > 0) {
           updated += updateResult.count
 
-          // Create conversion record in database
-          await prisma.conversion.create({
-            data: {
+          // Check if a conversion already exists for this user within the last hour
+          // to prevent race conditions with live call outcomes
+          const recentConversion = await prisma.conversion.findFirst({
+            where: {
               userId: conversion.userId,
-              previousQueueType: 'outstanding_requests',
-              conversionType: 'requirements_completed',
-              conversionReason: 'All outstanding requirements have been fulfilled - user complete',
-              finalScore: currentUserScore?.currentScore || 0,
-              totalCallAttempts: currentUserScore?.totalAttempts || 0,
-              lastCallAt: currentUserScore?.lastCallAt,
-              signatureObtained: true, // Already had signature to be in outstanding_requests
-              convertedAt: conversion.completedAt
+              convertedAt: {
+                gte: new Date(Date.now() - 60 * 60 * 1000) // Last hour
+              }
             }
-          })
+          });
 
-          logger.info(`📝 [CONVERSION] Created conversion record for user ${conversion.userId}`)
+          if (recentConversion) {
+            logger.info(`⏭️ [SKIP] User ${conversion.userId} already has recent conversion ${recentConversion.id}, skipping duplicate`);
+          } else {
+            // Create conversion record in database
+            await prisma.conversion.create({
+              data: {
+                userId: conversion.userId,
+                previousQueueType: 'outstanding_requests',
+                conversionType: 'requirements_completed',
+                conversionReason: 'All outstanding requirements have been fulfilled - user complete',
+                finalScore: currentUserScore?.currentScore || 0,
+                totalCallAttempts: currentUserScore?.totalAttempts || 0,
+                lastCallAt: currentUserScore?.lastCallAt,
+                signatureObtained: true, // Already had signature to be in outstanding_requests
+                convertedAt: conversion.completedAt
+              }
+            })
+
+            logger.info(`📝 [CONVERSION] Created conversion record for user ${conversion.userId}`)
+          }
         }
       } catch (error: any) {
         logger.error(`❌ Failed to update user ${conversion.userId}:`, error)
