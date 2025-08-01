@@ -50,7 +50,7 @@ export class ConversionAgentAttributionService {
     const { 
       batchSize = this.DEFAULT_BATCH_SIZE,
       dryRun = false,
-      hoursBack = 6 // Default to last 6 hours of conversions
+      hoursBack = 1 // Only check last hour for performance
     } = options
 
     const result: ConversionAgentAttributionResult = {
@@ -152,6 +152,7 @@ export class ConversionAgentAttributionService {
           convertedAt: true,
           conversionType: true
         },
+        take: 100, // Safety limit - max 100 conversions per run
         orderBy: [
           { convertedAt: 'desc' }  // Most recent conversions first
         ]
@@ -240,16 +241,13 @@ export class ConversionAgentAttributionService {
         // Get call history for this user with meaningful talk time
         const agentData = await this.getAgentAttributionData(conversion.userId, conversion.convertedAt)
         
-        if (!agentData.primaryAgentId) {
-          skippedNoCallHistory++
-          logger.info(`⏭️ [SKIP] Conversion ${conversion.id}: No call history with >${this.MIN_TALK_TIME_SECONDS}s talk time`)
-          continue
-        }
+        // Handle both agent-attributed and uninpacted cases
+        const primaryAgent = agentData.primaryAgentId || 0 // Use 0 if no agent impact
 
         const attribution: ConversionAgentAttributionData = {
           conversionId: conversion.id,
           userId: conversion.userId,
-          primaryAgentId: agentData.primaryAgentId,
+          primaryAgentId: primaryAgent,
           contributingAgents: agentData.contributingAgents,
           totalCallsAnalyzed: agentData.totalCallsAnalyzed,
           mostRecentCallDate: agentData.mostRecentCallDate,
@@ -258,18 +256,23 @@ export class ConversionAgentAttributionService {
 
         attributions.push(attribution)
 
-        // Update conversion record with agent data
+        // Update conversion record with agent data or mark as uninpacted
         if (!dryRun) {
           await prisma.conversion.update({
             where: { id: conversion.id },
             data: {
-              primaryAgentId: agentData.primaryAgentId,
-              contributingAgents: agentData.contributingAgents
+              primaryAgentId: primaryAgent,
+              contributingAgents: agentData.contributingAgents || null
             }
           })
 
           attributed++
-          logger.info(`🏷️ [ATTRIBUTED] Conversion ${conversion.id}: Primary=${agentData.primaryAgentId}, Contributing=[${agentData.contributingAgents.join(',')}]`)
+          
+          if (primaryAgent === 0) {
+            logger.info(`🔄 [UNINPACTED] Conversion ${conversion.id}: No agent impact - marked as uninpacted sign`)
+          } else {
+            logger.info(`🏷️ [ATTRIBUTED] Conversion ${conversion.id}: Primary=${primaryAgent}, Contributing=[${agentData.contributingAgents.join(',')}]`)
+          }
         }
       } catch (error: any) {
         logger.error(`❌ Failed to process conversion ${conversion.id}:`, error)
@@ -279,7 +282,7 @@ export class ConversionAgentAttributionService {
     return {
       checked: conversions.length,
       attributed: attributed,
-      skippedNoCallHistory: skippedNoCallHistory,
+      skippedNoCallHistory: 0, // No longer skipping any conversions
       attributions: attributions
     }
   }
@@ -307,13 +310,12 @@ export class ConversionAgentAttributionService {
         },
         talkTimeSeconds: {
           gt: this.MIN_TALK_TIME_SECONDS
-        },
-        status: 'completed' // Only completed calls
+        }
+        // Removed status filter - any call with 30+ seconds counts
       },
       select: {
         agentId: true,
-        startedAt: true,
-        talkTimeSeconds: true
+        startedAt: true
       },
       orderBy: [
         { startedAt: 'desc' }  // Most recent first
