@@ -107,8 +107,8 @@ export class SMSService {
         statusCallback: `${process.env.API_BASE_URL}/api/webhooks/sms/status`
       });
 
-      // Find or create conversation
-      const conversation = await this.findOrCreateConversation(phoneNumber, userId);
+      // Find or create conversation with 'closed' status for outbound messages
+      const conversation = await this.findOrCreateConversation(phoneNumber, userId, 'closed');
 
       // Log the message in database
       const smsMessage = await prisma.smsMessage.create({
@@ -123,12 +123,12 @@ export class SMSService {
         }
       });
 
-      // Update conversation status
+      // Update conversation timestamp but keep it closed for outbound messages
       await prisma.smsConversation.update({
         where: { id: conversation.id },
         data: {
           lastMessageAt: new Date(),
-          status: 'active',
+          // Don't change status for outbound messages - keep conversations closed
           ...(agentId && { assignedAgentId: agentId })
         }
       });
@@ -153,7 +153,7 @@ export class SMSService {
       
       // Log failed attempt
       if (userId) {
-        const conversation = await this.findOrCreateConversation(phoneNumber, userId);
+        const conversation = await this.findOrCreateConversation(phoneNumber, userId, 'closed');
         await prisma.smsMessage.create({
           data: {
             conversationId: conversation.id,
@@ -745,7 +745,8 @@ export class SMSService {
 
   private async findOrCreateConversation(
     phoneNumber: string, 
-    userId?: number
+    userId?: number,
+    initialStatus: string = 'active'
   ): Promise<SMSConversation> {
     // Try to find existing conversation
     let conversation = await prisma.smsConversation.findFirst({
@@ -770,12 +771,12 @@ export class SMSService {
     }
 
     if (!conversation) {
-      // Create new conversation with matched user ID
+      // Create new conversation with matched user ID and specified status
       conversation = await prisma.smsConversation.create({
         data: {
           phoneNumber,
           userId: matchedUserId,
-          status: 'active',
+          status: initialStatus,
           lastMessageAt: new Date()
         }
       });
@@ -784,7 +785,8 @@ export class SMSService {
         conversationId: conversation.id,
         phoneNumber,
         userId: matchedUserId,
-        userMatched: !!matchedUserId
+        userMatched: !!matchedUserId,
+        status: initialStatus
       });
     } else if (matchedUserId && !conversation.userId) {
       // Update conversation with user ID if we found a match
