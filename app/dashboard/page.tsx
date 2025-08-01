@@ -318,6 +318,178 @@ function AgentAnalyticsTable({
   );
 }
 
+// Call Outcomes Table Component
+function CallOutcomesTable({ 
+  outcomesData, 
+  isLoading, 
+  onRefresh 
+}: {
+  outcomesData: any;
+  isLoading: boolean;
+  onRefresh: () => void;
+}) {
+  // Outcome type display configuration
+  const outcomeConfig: Record<string, { label: string; color: string }> = {
+    completed_form: { label: 'Completed Form', color: 'text-green-700' },
+    going_to_complete: { label: 'Going to Complete', color: 'text-blue-700' },
+    might_complete: { label: 'Might Complete', color: 'text-yellow-700' },
+    call_back: { label: 'Call Back', color: 'text-purple-700' },
+    no_answer: { label: 'No Answer', color: 'text-gray-700' },
+    missed_call: { label: 'Missed Call', color: 'text-gray-600' },
+    hung_up: { label: 'Hung Up', color: 'text-red-700' },
+    bad_number: { label: 'Bad Number', color: 'text-orange-700' },
+    no_claim: { label: 'No Claim', color: 'text-red-600' },
+    not_interested: { label: 'Not Interested', color: 'text-red-500' },
+    do_not_contact: { label: 'Do Not Contact', color: 'text-black' }
+  };
+
+  const outcomeTypes = Object.keys(outcomeConfig);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="w-5 h-5" />
+            Call Outcomes by Agent
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <RotateCcw className="w-6 h-6 animate-spin text-blue-600 mr-2" />
+            Loading call outcomes...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!outcomesData || !outcomesData.agents || outcomesData.agents.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="w-5 h-5" />
+            Call Outcomes by Agent
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-gray-500">
+            No call outcomes data available for the selected date range.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="flex items-center gap-2">
+          <Activity className="w-5 h-5" />
+          Call Outcomes by Agent
+        </CardTitle>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRefresh}
+          className="flex items-center gap-2"
+        >
+          <RotateCcw className="w-4 h-4" />
+          Refresh
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-3 px-4 font-semibold text-gray-700 min-w-[120px]">
+                  Agent
+                </th>
+                {outcomeTypes.map(type => (
+                  <th key={type} className="text-center py-3 px-3 font-semibold text-gray-700 min-w-[100px]">
+                    <div className={`text-xs ${outcomeConfig[type].color}`}>
+                      {outcomeConfig[type].label}
+                    </div>
+                  </th>
+                ))}
+                <th className="text-center py-3 px-4 font-semibold text-gray-700 min-w-[80px]">
+                  Total Calls
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {outcomesData.agents.map((agent: any) => (
+                <tr key={agent.agentId} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4 font-medium text-gray-900">
+                    {agent.agentName}
+                  </td>
+                  {outcomeTypes.map(type => {
+                    const outcome = agent.outcomes[type];
+                    return (
+                      <td key={type} className="text-center py-3 px-3">
+                        <div className="text-sm">
+                          <div className="font-medium text-gray-900">
+                            {outcome?.count || 0}
+                          </div>
+                          <div className={`text-xs ${outcomeConfig[type].color}`}>
+                            ({outcome?.percentage || 0}%)
+                          </div>
+                        </div>
+                      </td>
+                    );
+                  })}
+                  <td className="text-center py-3 px-4 font-medium text-gray-900">
+                    {agent.totalCalls}
+                  </td>
+                </tr>
+              ))}
+              
+              {/* Totals Row */}
+              <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
+                <td className="py-3 px-4 font-bold text-gray-900">
+                  TOTALS
+                </td>
+                {outcomeTypes.map(type => {
+                  const total = outcomesData.totals[type];
+                  return (
+                    <td key={type} className="text-center py-3 px-3">
+                      <div className="text-sm">
+                        <div className="font-bold text-gray-900">
+                          {total?.count || 0}
+                        </div>
+                        <div className={`text-xs font-medium ${outcomeConfig[type].color}`}>
+                          ({total?.percentage || 0}%)
+                        </div>
+                      </div>
+                    </td>
+                  );
+                })}
+                <td className="text-center py-3 px-4 font-bold text-gray-900">
+                  {outcomesData.totalCalls}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        {/* Summary Info */}
+        <div className="mt-4 text-sm text-gray-600 border-t pt-4">
+          <div className="flex items-center justify-between">
+            <span>
+              Showing outcomes for {outcomesData.agents.length} agent{outcomesData.agents.length !== 1 ? 's' : ''}
+            </span>
+            <span>
+              Total calls: {outcomesData.totalCalls}
+            </span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Conversions Table Component
 function ConversionsTable({ 
   conversions, 
@@ -551,6 +723,16 @@ export default function DashboardPage() {
       }
     });
 
+  // Get call outcomes by agent for selected date range
+  const { data: callOutcomesData, isLoading: outcomesLoading, refetch: refetchOutcomes } = 
+    api.analytics.getCallOutcomesByAgent.useQuery(dateRange, {
+      retry: false,
+      refetchInterval: 30000,
+      onError: (error) => {
+        console.warn('Call outcomes failed:', error.message);
+      }
+    });
+
   // Loading state
   const isLoading = callsLoading || queueLoading || agentsLoading;
 
@@ -672,6 +854,13 @@ export default function DashboardPage() {
               className="flex-1"
             >
               Conversions
+            </Button>
+            <Button
+              variant={activeTab === 'outcomes' ? 'default' : 'ghost'}
+              onClick={() => setActiveTab('outcomes')}
+              className="flex-1"
+            >
+              Call Outcomes
             </Button>
           </div>
 
@@ -841,6 +1030,17 @@ export default function DashboardPage() {
                 conversions={conversions || []}
                 isLoading={conversionsLoading}
                 onRefresh={refetchConversions}
+              />
+            </div>
+          )}
+
+          {/* Call Outcomes Tab */}
+          {activeTab === 'outcomes' && (
+            <div className="space-y-6">
+              <CallOutcomesTable
+                outcomesData={callOutcomesData}
+                isLoading={outcomesLoading}
+                onRefresh={refetchOutcomes}
               />
             </div>
           )}

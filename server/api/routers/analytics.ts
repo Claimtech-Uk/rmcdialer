@@ -261,6 +261,150 @@ export const analyticsRouter = createTRPCRouter({
       }
     }),
 
+  // Get call outcomes breakdown by agent for analytics dashboard
+  getCallOutcomesByAgent: protectedProcedure
+    .input(DateRangeSchema.optional())
+    .query(async ({ input, ctx }) => {
+      try {
+        // Only supervisors and admins can see call outcomes breakdown
+        if (ctx.agent.role === 'agent') {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Insufficient permissions to view call outcomes breakdown'
+          });
+        }
+
+        // Use provided date range or default to today
+        let startDate: Date, endDate: Date;
+        if (input) {
+          startDate = input.startDate;
+          endDate = input.endDate;
+        } else {
+          // Default to today
+          const today = new Date();
+          startDate = new Date(today);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(today);
+          endDate.setHours(23, 59, 59, 999);
+        }
+
+        // Get all call outcomes for the date range with agent and outcome details
+        const callOutcomes = await prisma.callOutcome.findMany({
+          where: {
+            callSession: {
+              startedAt: {
+                gte: startDate,
+                lte: endDate
+              },
+              endedAt: { not: null }
+            }
+          },
+          include: {
+            callSession: {
+              include: {
+                agent: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        // Group outcomes by agent
+        const agentOutcomesMap = new Map();
+        const totalOutcomesMap = new Map();
+
+        // Initialize outcome types
+        const outcomeTypes = [
+          'completed_form', 'going_to_complete', 'might_complete', 'call_back',
+          'no_answer', 'missed_call', 'hung_up', 'bad_number', 
+          'no_claim', 'not_interested', 'do_not_contact'
+        ];
+
+        // Process each call outcome
+        callOutcomes.forEach(outcome => {
+          const agentId = outcome.callSession.agentId;
+          const agentName = outcome.callSession.agent 
+            ? `${outcome.callSession.agent.firstName} ${outcome.callSession.agent.lastName}`
+            : `Agent ${agentId}`;
+          const outcomeType = outcome.outcomeType;
+
+          // Initialize agent data if not exists
+          if (!agentOutcomesMap.has(agentId)) {
+            agentOutcomesMap.set(agentId, {
+              agentId,
+              agentName,
+              outcomes: new Map(),
+              totalCalls: 0
+            });
+            
+            // Initialize all outcome types for this agent
+            outcomeTypes.forEach(type => {
+              agentOutcomesMap.get(agentId).outcomes.set(type, 0);
+            });
+          }
+
+          // Increment counts
+          const agentData = agentOutcomesMap.get(agentId);
+          agentData.outcomes.set(outcomeType, (agentData.outcomes.get(outcomeType) || 0) + 1);
+          agentData.totalCalls += 1;
+
+          // Update totals
+          totalOutcomesMap.set(outcomeType, (totalOutcomesMap.get(outcomeType) || 0) + 1);
+        });
+
+        // Calculate total calls across all agents
+        const totalCalls = callOutcomes.length;
+
+        // Format agent data with percentages
+        const agents = Array.from(agentOutcomesMap.values()).map(agentData => {
+          const formattedOutcomes: Record<string, { count: number; percentage: number }> = {};
+          outcomeTypes.forEach(type => {
+            const count = agentData.outcomes.get(type) || 0;
+            const percentage = agentData.totalCalls > 0 
+              ? Math.round((count / agentData.totalCalls) * 100) 
+              : 0;
+            formattedOutcomes[type] = { count, percentage };
+          });
+
+          return {
+            agentId: agentData.agentId,
+            agentName: agentData.agentName,
+            outcomes: formattedOutcomes,
+            totalCalls: agentData.totalCalls
+          };
+        });
+
+        // Format totals with percentages
+        const totals: Record<string, { count: number; percentage: number }> = {};
+        outcomeTypes.forEach(type => {
+          const count = totalOutcomesMap.get(type) || 0;
+          const percentage = totalCalls > 0 
+            ? Math.round((count / totalCalls) * 100) 
+            : 0;
+          totals[type] = { count, percentage };
+        });
+
+        return {
+          agents: agents.sort((a, b) => a.agentName.localeCompare(b.agentName)),
+          totals,
+          totalCalls,
+          dateRange: { startDate, endDate }
+        };
+
+      } catch (error) {
+        logger.error('Error fetching call outcomes by agent:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to fetch call outcomes breakdown'
+        });
+      }
+    }),
+
   // Get weekly summary for agent
   getMyWeeklyMetrics: protectedProcedure
     .input(z.object({
