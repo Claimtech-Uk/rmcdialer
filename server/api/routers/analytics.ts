@@ -111,6 +111,44 @@ export const analyticsRouter = createTRPCRouter({
       }
     }),
 
+  // Get agent metrics for a specific date range (for dashboard analytics)
+  getAgentMetricsForDateRange: protectedProcedure
+    .input(DateRangeSchema.optional())
+    .query(async ({ input, ctx }) => {
+      try {
+        // Check permissions - only supervisors and admins can see agent metrics
+        if (ctx.agent.role === 'agent') {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Insufficient permissions to view agent metrics'
+          });
+        }
+
+        // Use provided date range or default to today
+        let startDate: Date, endDate: Date;
+        if (input) {
+          startDate = input.startDate;
+          endDate = input.endDate;
+        } else {
+          // Default to today
+          const today = new Date();
+          startDate = new Date(today);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(today);
+          endDate.setHours(23, 59, 59, 999);
+        }
+
+        const agentMetrics = await analyticsService.getAgentMetricsForDateRange(startDate, endDate);
+        return agentMetrics;
+      } catch (error) {
+        logger.error('Failed to get agent metrics for date range', { error });
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to retrieve agent metrics'
+        });
+      }
+    }),
+
   // Get agent's daily summary (for agent profile/dashboard)
   getMyDailyMetrics: protectedProcedure
     .input(z.object({

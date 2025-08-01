@@ -403,12 +403,11 @@ export class AgentPerformanceAnalyticsService {
         }
 
         const callsPerHour = timeOnline > 0 ? (todaysCalls.length * 3600) / timeOnline : 0;
-        const productivity = this.calculateProductivityScore({
-          callsPerHour,
-          avgGapTime: gapMetrics.avgGapTime,
-          talkTimePercentage: timeOnline > 0 ? (totalTalkTime / timeOnline) * 100 : 0,
-          utilization: timeOnline > 0 ? ((totalTalkTime + gapMetrics.totalGapTime) / timeOnline) * 100 : 0
-        });
+        const productivity = Math.round(Math.min(100, Math.max(0, 
+          callsPerHour * 10 + // Base score from call frequency
+          (gapMetrics.avgGapTime > 0 ? Math.max(0, 30 - (gapMetrics.avgGapTime / 60)) : 30) + // Gap penalty
+          (timeOnline > 0 ? (totalTalkTime / timeOnline) * 40 : 0) // Talk time efficiency
+        )));
 
         liveMetrics.push({
           agentId: session.agentId,
@@ -435,6 +434,171 @@ export class AgentPerformanceAnalyticsService {
 
     } catch (error) {
       this.deps.logger.error('Failed to get live agent metrics', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Get agent metrics for a specific date range (for dashboard analytics)
+   */
+  async getAgentMetricsForDateRange(startDate: Date, endDate: Date): Promise<LiveAgentMetrics[]> {
+    try {
+      // Get all agent sessions within the date range
+      const agentSessions = await this.deps.prisma.agentSession.findMany({
+        where: {
+          loginAt: { 
+            gte: startDate,
+            lte: endDate 
+          }
+        },
+        include: {
+          agent: {
+            select: { firstName: true, lastName: true }
+          }
+        }
+      });
+
+      // Group sessions by agent to get unique agents
+      const agentSessionsMap = new Map<number, any>();
+      for (const session of agentSessions) {
+        if (!agentSessionsMap.has(session.agentId) || 
+            session.loginAt > agentSessionsMap.get(session.agentId).loginAt) {
+          agentSessionsMap.set(session.agentId, session);
+        }
+      }
+
+      const metrics: LiveAgentMetrics[] = [];
+
+      for (const [agentId, latestSession] of agentSessionsMap) {
+        // Get all calls for this agent in the date range
+        const calls = await this.deps.prisma.callSession.findMany({
+          where: {
+            agentId: agentId,
+            startedAt: { 
+              gte: startDate,
+              lte: endDate 
+            },
+            endedAt: { not: null }
+          },
+          orderBy: { startedAt: 'asc' }
+        });
+
+        if (calls.length === 0) {
+          // Include agents with no calls but show zeros
+          metrics.push({
+            agentId: agentId,
+            agentName: latestSession.agent ? `${latestSession.agent.firstName} ${latestSession.agent.lastName}` : `Agent ${agentId}`,
+            currentStatus: latestSession.status || 'offline',
+            todayStats: {
+              callsToday: 0,
+              talkTimeToday: 0,
+              avgGapTimeToday: 0,
+              conversionsToday: 0,
+              contactRateToday: 0,
+              positiveCallPercentageToday: 0,
+              currentGap: undefined
+            },
+            sessionStats: {
+              loginTime: latestSession.loginAt,
+              timeOnline: 0,
+              productivity: 0
+            }
+          });
+          continue;
+        }
+
+        const gaps = this.calculateCallGaps(calls);
+        const gapMetrics = this.analyzeGaps(gaps);
+        
+        const totalTalkTime = calls.reduce((sum, call) => sum + (call.talkTimeSeconds || 0), 0);
+        
+        // Calculate total time worked during the period
+        const totalWorkTime = Math.floor((endDate.getTime() - startDate.getTime()) / 1000);
+
+        // Calculate conversions for this agent in the date range
+        const conversions = await this.deps.prisma.conversion.count({
+          where: {
+            primaryAgentId: agentId,
+            convertedAt: { 
+              gte: startDate,
+              lte: endDate 
+            }
+          }
+        });
+
+        // Calculate contact rate (answered calls)
+        const noAnswerCalls = await this.deps.prisma.callOutcome.count({
+          where: {
+            callSession: {
+              agentId: agentId,
+              startedAt: { 
+                gte: startDate,
+                lte: endDate 
+              },
+              endedAt: { not: null }
+            },
+            outcomeType: {
+              in: ['no_answer', 'missed_call']
+            }
+          }
+        });
+        
+        const answeredCalls = calls.length - noAnswerCalls;
+        const contactRate = calls.length > 0 ? 
+          Math.round((answeredCalls / calls.length) * 100) : 0;
+
+        // Calculate positive call percentage (completed_form + going_to_complete)
+        const positiveCalls = await this.deps.prisma.callOutcome.count({
+          where: {
+            callSession: {
+              agentId: agentId,
+              startedAt: { 
+                gte: startDate,
+                lte: endDate 
+              },
+              endedAt: { not: null }
+            },
+            outcomeType: {
+              in: ['completed_form', 'going_to_complete']
+            }
+          }
+        });
+        
+        const positiveCallPercentage = answeredCalls > 0 ? 
+          Math.round((positiveCalls / answeredCalls) * 100) : 0;
+
+        const callsPerHour = totalWorkTime > 0 ? (calls.length * 3600) / totalWorkTime : 0;
+        const productivity = Math.round(Math.min(100, Math.max(0, 
+          callsPerHour * 10 + // Base score from call frequency
+          (gapMetrics.avgGapTime > 0 ? Math.max(0, 30 - (gapMetrics.avgGapTime / 60)) : 30) + // Gap penalty
+          (totalWorkTime > 0 ? (totalTalkTime / totalWorkTime) * 40 : 0) // Talk time efficiency
+        )));
+
+        metrics.push({
+          agentId: agentId,
+          agentName: latestSession.agent ? `${latestSession.agent.firstName} ${latestSession.agent.lastName}` : `Agent ${agentId}`,
+          currentStatus: latestSession.status || 'offline',
+          todayStats: {
+            callsToday: calls.length,
+            talkTimeToday: totalTalkTime,
+            avgGapTimeToday: gapMetrics.avgGapTime,
+            conversionsToday: conversions,
+            contactRateToday: contactRate,
+            positiveCallPercentageToday: positiveCallPercentage,
+            currentGap: undefined // Not applicable for historical data
+          },
+          sessionStats: {
+            loginTime: latestSession.loginAt,
+            timeOnline: totalWorkTime,
+            productivity
+          }
+        });
+      }
+
+      return metrics;
+
+    } catch (error) {
+      this.deps.logger.error('Failed to get agent metrics for date range', { startDate, endDate, error });
       throw error;
     }
   }

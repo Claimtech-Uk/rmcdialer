@@ -692,12 +692,12 @@ export default function DashboardPage() {
     }
   });
 
-  // Get live agent metrics from our new analytics module
-  const { data: liveMetrics, isLoading: liveMetricsLoading, refetch: refetchLiveMetrics } = api.analytics.getLiveAgentMetrics.useQuery(undefined, {
+  // Get agent metrics for the selected date range (for analytics tab)
+  const { data: liveMetrics, isLoading: liveMetricsLoading, refetch: refetchLiveMetrics } = api.analytics.getAgentMetricsForDateRange.useQuery(dateRange, {
     retry: false,
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: 30000, // Refresh every 30 seconds (less frequent for historical data)
     onError: (error) => {
-      console.warn('Live metrics failed:', error.message);
+      console.warn('Agent metrics failed:', error.message);
     }
   });
 
@@ -730,8 +730,8 @@ export default function DashboardPage() {
       refetchInterval: 30000,
       onError: (error) => {
         console.warn('Call outcomes failed:', error.message);
-      }
-    });
+    }
+  });
 
   // Loading state
   const isLoading = callsLoading || queueLoading || agentsLoading;
@@ -1019,9 +1019,9 @@ export default function DashboardPage() {
                   </div>
                                  )}
                </CardContent>
-                         </Card>
-            </div>
-          )}
+             </Card>
+             </div>
+           )}
 
           {/* Conversions Tab */}
           {activeTab === 'conversions' && (
@@ -1031,7 +1031,7 @@ export default function DashboardPage() {
                 isLoading={conversionsLoading}
                 onRefresh={refetchConversions}
               />
-            </div>
+         </div>
           )}
 
           {/* Call Outcomes Tab */}
