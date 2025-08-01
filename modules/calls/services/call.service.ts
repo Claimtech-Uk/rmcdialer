@@ -452,23 +452,25 @@ export class CallService {
         }
 
         // 4. Handle conversions using outcome result
+        // REMOVED: Conversions are only created by cleanup cron services
+        // after verifying signature_file_id IS NOT NULL in replica database
         let conversionsAlreadyCreated = false;
-        if (outcomeResult.conversions && outcomeResult.conversions.length > 0) {
-          for (const conversion of outcomeResult.conversions) {
-            await this.createConversion({
-              tx,
-              userId: Number(callSession.userId),
-              agentId,
-              outcomeType: outcome.outcomeType,
-              outcomeNotes: outcomeResult.outcomeNotes,
-              documentsRequested: outcomeResult.documentsRequested,
-              queueType: callSession.sourceQueueType || 'unknown',
-              totalAttempts: callSession.callQueue?.userCallScore?.totalAttempts || 0,
-              claimId: callSession.callQueue?.claimId ? Number(callSession.callQueue.claimId) : undefined
-            });
-          }
-          conversionsAlreadyCreated = true;
-        }
+        // if (outcomeResult.conversions && outcomeResult.conversions.length > 0) {
+        //   for (const conversion of outcomeResult.conversions) {
+        //     await this.createConversion({
+        //       tx,
+        //       userId: Number(callSession.userId),
+        //       agentId,
+        //       outcomeType: outcome.outcomeType,
+        //       outcomeNotes: outcomeResult.outcomeNotes,
+        //       documentsRequested: outcomeResult.documentsRequested,
+        //       queueType: callSession.sourceQueueType || 'unknown',
+        //       totalAttempts: callSession.callQueue?.userCallScore?.totalAttempts || 0,
+        //       claimId: callSession.callQueue?.claimId ? Number(callSession.callQueue.claimId) : undefined
+        //     });
+        //   }
+        //   conversionsAlreadyCreated = true;
+        // }
 
         // 5. Update user score using outcome result score adjustment
         await this.updateUserScoreAfterCall(
@@ -889,22 +891,37 @@ export class CallService {
     }
   }
 
+  /**
+   * Get default delay hours for outcome types
+   */
   private getDefaultDelayHours(outcomeType: string): number {
-    // Use CallOutcomeManager for delay logic
-    const handler = this.callOutcomeManager.getHandler(outcomeType as any);
-    if (handler) {
-      return handler.getDelayHours({} as any); // Simplified context for delay calculation
-    }
-    
-    // Fallback mapping for legacy outcomes not in our new system
-    const legacyDelayMap: Record<string, number> = {
-      'contacted': 24,
-      'busy': 2,
-      'left_voicemail': 8,
-      'failed': 1
+    const delayMap: Record<string, number> = {
+      'call_back': 0, // Immediate callback handling
+      'going_to_complete': 72, // 3 days
+      'might_complete': 168, // 1 week
+      'no_answer': 4, // 4 hours
+      'hung_up': 24, // 1 day
+      'missed_call': 2, // 2 hours
+      'not_interested': 0, // No follow-up
+      'do_not_contact': 0, // No follow-up
+      'bad_number': 0, // No follow-up
+      'completed_form': 0, // No follow-up
+      'requirements_completed': 0, // No follow-up
+      'signature_obtained': 0, // No follow-up
+      'documents_received': 0 // No follow-up
     };
-    return legacyDelayMap[outcomeType] || 4;
+    
+    return delayMap[outcomeType] || 24; // Default 24 hours
   }
+
+  // REMOVED: Conversion creation methods - conversions are now only created 
+  // by cleanup cron services after verifying signature_file_id in replica database
+  //
+  // - isConversionOutcome()
+  // - createConversion()  
+  // - mapOutcomeToConversionType()
+  //
+  // This ensures conversions are only counted when users have actually signed
 
   private async updateUserScoreAfterCall(
     tx: Prisma.TransactionClient,
@@ -958,104 +975,100 @@ export class CallService {
         : null; // null = immediately available
 
       // Check if outcome indicates conversion (score 200+)
-      const shouldConvert = newPriorityScore.finalScore >= 200 || 
-        [
-          // Only positive conversions that indicate successful completion
-          'requirements_completed', 'signature_obtained', 'documents_received', 'claim_completed', 'signed', 'completed_form'
-          // Removed negative outcomes: 'no_claim', 'not_interested', 'do_not_contact', 'bad_number', 'opted_out', 'already_completed'
-          // These should be tracked as disqualifications, not conversions
-        ].includes(outcomeType);
+      // REMOVED: Conversions are only created by cleanup cron services
+      // after verifying signature_file_id IS NOT NULL in replica database
+      const shouldConvert = false; // Never create conversions from call outcomes
+      // newPriorityScore.finalScore >= 200 || 
+      //   [
+      //     // Only positive conversions that indicate successful completion
+      //     'requirements_completed', 'signature_obtained', 'documents_received', 'claim_completed', 'signed', 'completed_form'
+      //     // Removed negative outcomes: 'no_claim', 'not_interested', 'do_not_contact', 'bad_number', 'opted_out', 'already_completed'
+      //     // These should be tracked as disqualifications, not conversions
+      //   ].includes(outcomeType);
 
       if (shouldConvert && !conversionsAlreadyCreated) {
-        // Create conversion record ONLY if not already created by outcome processing
-        await tx.conversion.create({
-          data: {
-            userId: BigInt(userId),
-            previousQueueType: currentQueueType || 'unknown',
-            conversionType: this.mapOutcomeToConversionType(outcomeType, currentQueueType), // Use consistent mapping
-            conversionReason: `Outcome: ${outcomeType}, Final score: ${newPriorityScore.finalScore}`,
-            finalScore: newPriorityScore.finalScore,
-            totalCallAttempts: newAttemptCount, // FIXED: Use incremented count for consistency
-            lastCallAt: new Date(),
-            convertedAt: new Date(),
-            // Add conditional agent attribution for score-based conversions
-            primaryAgentId: agentId || null  // Only set if agent context exists
-          }
-        });
+        // REMOVED: No conversion creation from call outcomes
+        // await tx.conversion.create({
+        //   data: {
+        //     userId: BigInt(userId),
+        //     previousQueueType: currentQueueType || 'unknown',
+        //     conversionType: this.mapOutcomeToConversionType(outcomeType, currentQueueType),
+        //     conversionReason: `Outcome: ${outcomeType}, Final score: ${newPriorityScore.finalScore}`,
+        //     finalScore: newPriorityScore.finalScore,
+        //     totalCallAttempts: newAttemptCount,
+        //     lastCallAt: new Date(),
+        //     convertedAt: new Date(),
+        //     primaryAgentId: agentId || null
+        //   }
+        // });
 
-        this.deps.logger.info(`User ${userId} converted with outcome ${outcomeType}, score ${newPriorityScore.finalScore}`);
+        // this.deps.logger.info(`User ${userId} converted with outcome ${outcomeType}, score ${newPriorityScore.finalScore}`);
       } else if (shouldConvert && conversionsAlreadyCreated) {
-        this.deps.logger.info(`User ${userId} conversion skipped - already created by outcome processing`);
+        // this.deps.logger.info(`User ${userId} conversion skipped - already created by outcome processing`);
       }
 
-      if (shouldConvert) {
-        // Mark user as inactive in scoring system
-        await tx.userCallScore.upsert({
-          where: { userId: BigInt(userId) },
-          update: {
-            isActive: false,
-            currentScore: newPriorityScore.finalScore,
-            updatedAt: new Date()
-          },
-          create: {
-            userId: BigInt(userId),
-            currentScore: newPriorityScore.finalScore,
-            isActive: false,
-            currentQueueType: currentQueueType,
-            lastResetDate: needsReset ? new Date() : new Date(),
-            lastOutcome: outcomeType,
-            lastCallAt: new Date(),
-            totalAttempts: newAttemptCount // FIXED: Use incremented count (1 for conversions)
-          }
-        });
-      } else {
-        // Normal score update for non-conversion outcomes
-        await tx.userCallScore.upsert({
-          where: { userId: BigInt(userId) },
-          update: {
-            currentScore: newPriorityScore.finalScore,
-            isActive: true,
-            currentQueueType: currentQueueType,
-            // FIXED: Set lastResetDate for existing users who don't have it (prevents future fresh start treatment)
-            lastResetDate: needsReset ? new Date() : (userScore?.lastResetDate || new Date()),
-            lastOutcome: outcomeType,
-            lastCallAt: new Date(),
-            nextCallAfter: nextCallAfter, // CRITICAL FIX: Set next call delay
-            totalAttempts: { increment: 1 }, // FIXED: Properly increment attempts counter
-            successfulCalls: ['completed_form', 'going_to_complete', 'call_back'].includes(outcomeType) ? { increment: 1 } : undefined,
-            lastQueueCheck: new Date(),
-            updatedAt: new Date()
-          },
-          create: {
-            userId: BigInt(userId),
-            currentScore: newPriorityScore.finalScore,
-            isActive: true,
-            currentQueueType: currentQueueType,
-            lastResetDate: new Date(),
-            lastOutcome: outcomeType,
-            lastCallAt: new Date(),
-            nextCallAfter: nextCallAfter, // CRITICAL FIX: Set next call delay
-            totalAttempts: 1,
-            successfulCalls: ['completed_form', 'going_to_complete', 'call_back'].includes(outcomeType) ? 1 : 0
-          }
-        });
+      // REMOVED: No conversion-based queue management from call outcomes
+      // if (shouldConvert) {
+      //   // Mark user as inactive in scoring system
+      //   await tx.userCallScore.updateMany({
+      //     where: { userId: BigInt(userId) },
+      //     data: {
+      //       isActive: false,
+      //       currentScore: 0,
+      //       updatedAt: new Date()
+      //     }
+      //   });
+      // }
 
-        this.deps.logger.info(`Updated score for user ${userId}: ${newPriorityScore.finalScore} (${outcomeType}), next call: ${nextCallAfter || 'immediate'}`);
-      }
+      // REMOVED: shouldConvert is always false now - no immediate conversion logic
+      // Users are only marked as converted by cleanup cron services after signature verification
+      
+      // Normal score update for all outcomes (no immediate conversions)
+      await tx.userCallScore.upsert({
+        where: { userId: BigInt(userId) },
+        update: {
+          currentScore: newPriorityScore.finalScore,
+          isActive: true,
+          currentQueueType: currentQueueType,
+          // FIXED: Set lastResetDate for existing users who don't have it (prevents future fresh start treatment)
+          lastResetDate: needsReset ? new Date() : (userScore?.lastResetDate || new Date()),
+          lastOutcome: outcomeType,
+          lastCallAt: new Date(),
+          nextCallAfter: nextCallAfter, // CRITICAL FIX: Set next call delay
+          totalAttempts: { increment: 1 }, // FIXED: Properly increment attempts counter
+          successfulCalls: ['completed_form', 'going_to_complete', 'call_back'].includes(outcomeType) ? { increment: 1 } : undefined,
+          lastQueueCheck: new Date(),
+          updatedAt: new Date()
+        },
+        create: {
+          userId: BigInt(userId),
+          currentScore: newPriorityScore.finalScore,
+          isActive: true,
+          currentQueueType: currentQueueType,
+          lastResetDate: new Date(),
+          lastOutcome: outcomeType,
+          lastCallAt: new Date(),
+          nextCallAfter: nextCallAfter, // CRITICAL FIX: Set next call delay
+          totalAttempts: 1,
+          successfulCalls: ['completed_form', 'going_to_complete', 'call_back'].includes(outcomeType) ? 1 : 0
+        }
+      });
+
+      this.deps.logger.info(`Updated score for user ${userId}: ${newPriorityScore.finalScore} (${outcomeType}), next call: ${nextCallAfter || 'immediate'}`);
 
       // CRITICAL: Sync call_queue.priority_score with user_call_scores.current_score
       // This ensures queue ordering reflects actual user scores after call outcomes
 
-      // Update queue: either remove user or sync priority_score with current_score
-      if (shouldConvert || outcomeType === 'call_back') {
-        // Remove from queue if converted or callback requested
+      // Update queue: either remove user for callbacks or sync priority_score with current_score
+      if (outcomeType === 'call_back') {
+        // Remove from queue if callback requested
         await tx.callQueue.updateMany({
           where: { 
             userId: BigInt(userId),
             status: 'pending'
           },
           data: { 
-            status: shouldConvert ? 'converted' : 'completed',
+            status: 'completed',
             updatedAt: new Date()
           }
         });
@@ -1203,172 +1216,5 @@ export class CallService {
       recordedByAgentId: dbOutcome.recordedByAgentId,
       createdAt: dbOutcome.createdAt
     };
-  }
-
-  /**
-   * Check if an outcome type should trigger a conversion
-   */
-  private isConversionOutcome(outcomeType: string): boolean {
-    const conversionOutcomes = [
-      // Positive conversions
-      'requirements_completed', 'signature_obtained', 'documents_received', 'claim_completed', 'signed', 'completed_form',
-      // Negative conversions (removal from queue)
-      'no_claim', 'not_interested', 'do_not_contact', 'bad_number', 'opted_out', 'already_completed'
-    ];
-    return conversionOutcomes.includes(outcomeType);
-  }
-
-  /**
-   * Create a conversion record with agent attribution
-   */
-  private async createConversion({
-    tx,
-    userId,
-    agentId,
-    outcomeType,
-    outcomeNotes,
-    documentsRequested,
-    queueType,
-    totalAttempts,
-    claimId
-  }: {
-    tx: any;
-    userId: number;
-    agentId: number;
-    outcomeType: string;
-    outcomeNotes?: string;
-    documentsRequested?: string[];
-    queueType: string;
-    totalAttempts: number;
-    claimId?: number;
-  }): Promise<void> {
-    try {
-      // Get contributing agents from recent call sessions
-      const recentSessions = await tx.callSession.findMany({
-        where: {
-          userId: BigInt(userId),
-          startedAt: {
-            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
-          }
-        },
-        select: {
-          agentId: true,
-          lastOutcomeType: true
-        },
-        distinct: ['agentId']
-      });
-
-      const contributingAgentIds = recentSessions
-        .map((session: { agentId: number; lastOutcomeType: string | null }) => session.agentId)
-        .filter((id: number) => id !== agentId); // Exclude primary agent
-
-      // Determine conversion details
-      const conversionType = this.mapOutcomeToConversionType(outcomeType, queueType);
-      const signatureObtained = outcomeType.includes('sign') || outcomeType === 'signature_obtained';
-      
-      // Create conversion record
-      await tx.conversion.create({
-        data: {
-          userId: BigInt(userId),
-          previousQueueType: queueType,
-          conversionType,
-          conversionReason: outcomeNotes || `Converted via ${outcomeType}`,
-          finalScore: 0, // Conversions always end with score 0
-          totalCallAttempts: totalAttempts,
-          lastCallAt: new Date(),
-          convertedAt: new Date(),
-          primaryAgentId: agentId,
-          contributingAgents: contributingAgentIds.length > 0 ? contributingAgentIds : null,
-          documentsReceived: documentsRequested || null,
-          signatureObtained,
-          requirementsMet: documentsRequested || null
-        }
-      });
-
-      // Mark user as inactive in scoring system (converted)
-      await tx.userCallScore.updateMany({
-        where: { userId: BigInt(userId) },
-        data: {
-          isActive: false,
-          currentScore: 0,
-          updatedAt: new Date()
-        }
-      });
-
-      // Remove from queue (converted)
-      await tx.callQueue.updateMany({
-        where: { 
-          userId: BigInt(userId),
-          status: 'pending'
-        },
-        data: { 
-          status: 'converted',
-          updatedAt: new Date()
-        }
-      });
-
-      console.log(`🎉 Created conversion for user ${userId} by agent ${agentId} (${conversionType})`);
-
-    } catch (error) {
-      console.error(`❌ Failed to create conversion for user ${userId}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Map call outcome type to conversion type
-   * @param outcomeType - The call outcome type
-   * @param queueType - The queue the user was in (for context-aware mapping)
-   */
-  private mapOutcomeToConversionType(outcomeType: string, queueType?: string | null): string {
-    // Handle context-dependent outcomes first
-    if (outcomeType === 'completed_form') {
-      // completed_form depends on which queue the user was in:
-      // - unsigned_users queue → they provided signature → 'signed'
-      // - outstanding_requests queue → they completed requirements → 'requirements_completed'
-      if (queueType === 'unsigned_users') {
-        return 'signed';
-      } else if (queueType === 'outstanding_requests') {
-        return 'requirements_completed';
-      } else {
-        // Default fallback for unknown queue context
-        console.warn(`⚠️ completed_form outcome without clear queue context (${queueType}) - defaulting to 'requirements_completed'`);
-        return 'requirements_completed';
-      }
-    }
-
-    const mapping: Record<string, string> = {
-      // Positive outcomes
-      'requirements_completed': 'requirements_completed',
-      'signature_obtained': 'signed',
-      'documents_received': 'info_received',
-      'claim_completed': 'signed',
-      'signed': 'signed',
-      // Note: completed_form is handled above with context
-      
-      // Removed negative/ineligible outcomes as these are not conversions:
-      // 'no_claim': 'no_longer_eligible',
-      // 'not_interested': 'opted_out', 
-      // 'do_not_contact': 'opted_out',
-      // 'bad_number': 'no_longer_eligible',
-      
-      // Neutral outcomes that shouldn't convert
-      'going_to_complete': 'pending_completion',
-      'might_complete': 'pending_completion',
-      'call_back': 'callback_scheduled',
-      'no_answer': 'no_contact',
-      'missed_call': 'no_contact',
-      'hung_up': 'no_contact'
-    };
-    
-    // CRITICAL FIX: Don't default to 'requirements_completed' for unknown outcomes
-    // This was causing unsigned users to get wrong conversion types
-    const mappedType = mapping[outcomeType];
-    if (!mappedType) {
-      console.warn(`⚠️ Unknown outcome type '${outcomeType}' - using 'other' conversion type`);
-      return 'other';
-    }
-    
-    return mappedType;
   }
 } 
