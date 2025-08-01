@@ -67,17 +67,8 @@ export class NoClaimOutcome implements CallOutcomeHandler {
       priority: 'critical'
     });
     
-    // Mark conversion as "no longer eligible"
-    actions.push({
-      type: 'mark_conversion',
-      description: 'Mark as converted - no longer eligible',
-      required: true,
-      priority: 'critical',
-      parameters: {
-        conversionType: 'no_longer_eligible',
-        reason: data?.reason
-      }
-    });
+    // Removed mark_conversion action - users with no claim are not conversions
+    // They should be tracked as ineligible, not conversions
     
     // Update user data
     actions.push({

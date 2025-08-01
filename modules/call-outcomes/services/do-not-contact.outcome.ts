@@ -71,17 +71,8 @@ export class DoNotContactOutcome implements CallOutcomeHandler {
       priority: 'critical'
     });
     
-    // Mark conversion as opted out
-    actions.push({
-      type: 'mark_conversion',
-      description: 'Mark as converted - customer opted out',
-      required: true,
-      priority: 'critical',
-      parameters: {
-        conversionType: 'opted_out',
-        reason: data?.reason || 'Do not contact request'
-      }
-    });
+    // Removed mark_conversion action - opted out users are not conversions
+    // They should be tracked as disqualifications, not conversions
     
     // Update user data to reflect opt-out status
     actions.push({

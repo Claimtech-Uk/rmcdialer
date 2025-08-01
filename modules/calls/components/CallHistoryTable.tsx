@@ -401,6 +401,14 @@ export function CallHistoryTable({
     )
   }
 
+  // Helper function to determine if call was missed
+  const isMissedCall = (call: CallHistoryEntry) => {
+    return (
+      (!call.durationSeconds || call.durationSeconds === 0) &&
+      (call.outcome === 'no_answer' || call.status === 'no_answer')
+    )
+  }
+
   // Filter and sort calls
   const filteredAndSortedCalls = useMemo(() => {
     let filtered = calls.filter(call => {
@@ -493,14 +501,6 @@ export function CallHistoryTable({
     
     // Don't show anything if no duration - we'll handle this with call status instead
     return null
-  }
-
-  // Helper function to determine if call was missed
-  const isMissedCall = (call: CallHistoryEntry) => {
-    return (
-      (!call.durationSeconds || call.durationSeconds === 0) &&
-      (call.outcome === 'no_answer' || call.status === 'no_answer')
-    )
   }
 
   // Helper function to get direction icon and label

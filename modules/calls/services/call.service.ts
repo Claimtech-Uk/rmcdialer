@@ -960,10 +960,10 @@ export class CallService {
       // Check if outcome indicates conversion (score 200+)
       const shouldConvert = newPriorityScore.finalScore >= 200 || 
         [
-          // Positive conversions
-          'requirements_completed', 'signature_obtained', 'documents_received', 'claim_completed', 'signed', 'completed_form',
-          // Negative conversions (removal from queue)
-          'no_claim', 'not_interested', 'do_not_contact', 'bad_number', 'opted_out', 'already_completed'
+          // Only positive conversions that indicate successful completion
+          'requirements_completed', 'signature_obtained', 'documents_received', 'claim_completed', 'signed', 'completed_form'
+          // Removed negative outcomes: 'no_claim', 'not_interested', 'do_not_contact', 'bad_number', 'opted_out', 'already_completed'
+          // These should be tracked as disqualifications, not conversions
         ].includes(outcomeType);
 
       if (shouldConvert && !conversionsAlreadyCreated) {
@@ -1346,11 +1346,11 @@ export class CallService {
       'signed': 'signed',
       // Note: completed_form is handled above with context
       
-      // Negative/ineligible outcomes  
-      'no_claim': 'no_longer_eligible',
-      'not_interested': 'opted_out',
-      'do_not_contact': 'opted_out',
-      'bad_number': 'no_longer_eligible',
+      // Removed negative/ineligible outcomes as these are not conversions:
+      // 'no_claim': 'no_longer_eligible',
+      // 'not_interested': 'opted_out', 
+      // 'do_not_contact': 'opted_out',
+      // 'bad_number': 'no_longer_eligible',
       
       // Neutral outcomes that shouldn't convert
       'going_to_complete': 'pending_completion',
