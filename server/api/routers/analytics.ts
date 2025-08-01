@@ -165,8 +165,9 @@ export const analyticsRouter = createTRPCRouter({
       }
     }),
 
-  // Get today's conversions for analytics dashboard
-  getTodayConversions: protectedProcedure
+  // Get conversions for analytics dashboard with date range filtering
+  getConversions: protectedProcedure
+    .input(DateRangeSchema.optional())
     .query(async ({ input, ctx }) => {
       try {
         // Only supervisors and admins can see all conversions
@@ -177,16 +178,25 @@ export const analyticsRouter = createTRPCRouter({
           });
         }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(today);
-        endOfDay.setHours(23, 59, 59, 999);
+        // Use provided date range or default to today
+        let startDate: Date, endDate: Date;
+        if (input) {
+          startDate = input.startDate;
+          endDate = input.endDate;
+        } else {
+          // Default to today
+          const today = new Date();
+          startDate = new Date(today);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(today);
+          endDate.setHours(23, 59, 59, 999);
+        }
 
         const conversions = await prisma.conversion.findMany({
           where: {
             convertedAt: {
-              gte: today,
-              lte: endOfDay
+              gte: startDate,
+              lte: endDate
             }
           },
           include: {

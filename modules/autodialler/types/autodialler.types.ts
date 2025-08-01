@@ -89,6 +89,7 @@ export interface UseAutoDiallerReturn {
   skipUser: () => Promise<void>;
   handleCallStart: () => void;
   handleCallComplete: (outcome: CallOutcomeOptions) => Promise<void>;
+  resetToUserLoaded: () => void;
   
   // Settings
   settings: AutoDiallerSettings | null;

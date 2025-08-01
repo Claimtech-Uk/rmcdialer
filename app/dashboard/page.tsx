@@ -45,6 +45,7 @@ import { Button } from '@/modules/core/components/ui/button'
 import { Input } from '@/modules/core/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/modules/core/components/ui/select'
 import { Badge } from '@/modules/core/components/ui/badge'
+import { DateRangePicker, DateRange } from '@/modules/core/components/ui/date-range-picker'
 
 import { api } from '@/lib/trpc/client'
 
@@ -444,33 +445,52 @@ function ConversionsTable({
 }
 
 export default function DashboardPage() {
-  // State for analytics controls
-  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  // State for analytics controls with localStorage persistence
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    // Try to load from localStorage first
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('dashboard-date-range');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          return {
+            startDate: new Date(parsed.startDate),
+            endDate: new Date(parsed.endDate)
+          };
+        }
+      } catch (error) {
+        console.warn('Failed to load saved date range:', error);
+      }
+    }
+    
+    // Default to today
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(today);
+    endDate.setHours(23, 59, 59, 999);
+    return { startDate, endDate };
+  });
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
 
-  // Calculate date range based on selection
-  const getDateRange = () => {
-    const endDate = new Date(selectedDate);
-    const startDate = new Date(selectedDate);
-    
-    switch (selectedPeriod) {
-      case 'week':
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case 'month':
-        startDate.setDate(startDate.getDate() - 30);
-        break;
-      default: // today
-        startDate.setHours(0, 0, 0, 0);
-        endDate.setHours(23, 59, 59, 999);
+  // Persist date range to localStorage when it changes
+  const handleDateRangeChange = (newRange: DateRange) => {
+    setDateRange(newRange);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('dashboard-date-range', JSON.stringify({
+          startDate: newRange.startDate.toISOString(),
+          endDate: newRange.endDate.toISOString()
+        }));
+      } catch (error) {
+        console.warn('Failed to save date range:', error);
+      }
     }
-    
-    return { startDate, endDate };
   };
 
-  const { startDate, endDate } = getDateRange();
+  const { startDate, endDate } = dateRange;
 
   // Get real data using tRPC queries with error handling
   const { data: callAnalytics, isLoading: callsLoading, error: callsError } = api.calls.getAnalytics.useQuery({
@@ -521,9 +541,9 @@ export default function DashboardPage() {
     }
   });
 
-  // Get today's conversions
-  const { data: todayConversions, isLoading: conversionsLoading, refetch: refetchConversions } = 
-    api.analytics.getTodayConversions.useQuery(undefined, {
+  // Get conversions for selected date range
+  const { data: conversions, isLoading: conversionsLoading, refetch: refetchConversions } = 
+    api.analytics.getConversions.useQuery(dateRange, {
       retry: false,
       refetchInterval: 30000,
       onError: (error) => {
@@ -610,20 +630,12 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center space-x-4">
-            {/* Time Period Selector */}
-            <div className="flex items-center space-x-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-slate-200">
-              <Calendar className="w-4 h-4 text-slate-500" />
-              <Select value={selectedPeriod} onValueChange={(value: any) => setSelectedPeriod(value)}>
-                <SelectTrigger className="w-32 border-0 bg-transparent">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="week">Last 7 Days</SelectItem>
-                  <SelectItem value="month">Last 30 Days</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Date Range Picker */}
+            <DateRangePicker 
+              value={dateRange}
+              onChange={handleDateRangeChange}
+              className="flex-shrink-0"
+            />
             <span className="text-sm text-slate-500 bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-200">
               Auto-refreshes live data
             </span>
@@ -826,7 +838,7 @@ export default function DashboardPage() {
           {activeTab === 'conversions' && (
             <div className="space-y-6">
               <ConversionsTable
-                conversions={todayConversions || []}
+                conversions={conversions || []}
                 isLoading={conversionsLoading}
                 onRefresh={refetchConversions}
               />

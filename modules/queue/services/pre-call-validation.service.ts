@@ -256,6 +256,7 @@ export class PreCallValidationService {
             lastName: userServiceContext.user.lastName || 'User',
             email: userServiceContext.user.email || `user${user.userId}@unknown.com`,
             phoneNumber: userServiceContext.user.phoneNumber || '+44000000000',
+            createdAt: userServiceContext.user.createdAt,
             address: userServiceContext.user.address ? {
               fullAddress: userServiceContext.user.address.fullAddress || '',
               postCode: userServiceContext.user.address.postCode || '',

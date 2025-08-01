@@ -212,6 +212,26 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
     });
   }, [currentUser, session, teamType, transitionTo]);
 
+  // Reset to user loaded state for callbacks
+  const resetToUserLoaded = useCallback(() => {
+    if (!currentUser) {
+      logger.warn('Cannot reset to user loaded - no current user');
+      return;
+    }
+    
+    transitionTo('user_loaded', 'Reset to user loaded state for callback');
+    
+    autoDiallerService.logActivity('Reset to user loaded for callback', session?.agent?.id || 0, teamType, {
+      userId: currentUser.userId,
+      userName: `${currentUser.firstName} ${currentUser.lastName}`
+    });
+    
+    toast({
+      title: "Ready for Callback",
+      description: `Ready to call ${currentUser.firstName} ${currentUser.lastName} again`,
+    });
+  }, [currentUser, session, teamType, transitionTo, toast, autoDiallerService]);
+
   // Handle call completion
   const handleCallComplete = useCallback(async (outcome: CallOutcomeOptions) => {
     if (!transitionTo('disposing', `Call completed with outcome: ${outcome.outcomeType}`)) return;
@@ -453,6 +473,7 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
     skipUser,
     handleCallStart,
     handleCallComplete,
+    resetToUserLoaded,
     
     // Settings
     settings: settings || null,

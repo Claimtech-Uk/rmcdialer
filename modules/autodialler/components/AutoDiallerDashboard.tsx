@@ -26,9 +26,11 @@ import {
 import { CallInterface } from '@/modules/calls/components/CallInterface';
 import { CountdownTimer } from '../../../app/queue/components/CountdownTimer';
 import { EmptyQueueState } from '../../../app/queue/components/EmptyQueueState';
+import { CallbackConfirmationDialog } from './CallbackConfirmationDialog';
 import { useAutoDialler } from '../hooks';
 import { getTeamConfig } from '@/lib/config/teams';
 import type { TeamType } from '@/lib/config/teams';
+import type { CallOutcomeOptions } from '@/modules/calls/types/call.types';
 
 interface AutoDiallerDashboardProps {
   teamType: TeamType;
@@ -39,6 +41,10 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [isCallInterfaceActive, setIsCallInterfaceActive] = useState(false);
   const [isActivatingInterface, setIsActivatingInterface] = useState(false);
+  
+  // Callback confirmation dialog state
+  const [showCallbackConfirmation, setShowCallbackConfirmation] = useState(false);
+  const [pendingOutcome, setPendingOutcome] = useState<CallOutcomeOptions | null>(null);
 
   const {
     state,
@@ -54,6 +60,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
     skipUser,
     handleCallStart,
     handleCallComplete,
+    resetToUserLoaded,
     settings,
     updateSettings,
     isLoading,
@@ -77,6 +84,37 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
       console.error('AutoDialler error:', error);
     },
   });
+
+  // Callback confirmation handlers
+  const handleCallCompleteWithConfirmation = (outcome: CallOutcomeOptions) => {
+    setIsCallInterfaceActive(false);
+    
+    // Intercept hung_up outcomes for callback confirmation
+    if (outcome.outcomeType === 'hung_up') {
+      setPendingOutcome(outcome);
+      setShowCallbackConfirmation(true);
+      return;
+    }
+    
+    // Normal flow for all other outcomes
+    handleCallComplete(outcome);
+  };
+
+  const handleConfirmCallback = () => {
+    setShowCallbackConfirmation(false);
+    setPendingOutcome(null);
+    // Reset to user_loaded state for immediate callback
+    resetToUserLoaded();
+  };
+
+  const handleSkipCallback = () => {
+    setShowCallbackConfirmation(false);
+    // Proceed with normal flow - record outcome and move to next user
+    if (pendingOutcome) {
+      handleCallComplete(pendingOutcome);
+    }
+    setPendingOutcome(null);
+  };
 
   const getStateDisplay = () => {
     switch (state) {
@@ -335,6 +373,24 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                       </div>
                     </div>
                     
+                    {currentUser.createdAt && (
+                      <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-300 hover:border-amber-400 transition-all duration-200 shadow-sm hover:shadow-md">
+                        <div className="w-10 h-10 bg-gradient-to-r from-amber-600 to-amber-700 rounded-xl flex items-center justify-center shadow-lg">
+                          <User className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-xs text-amber-800 font-bold uppercase tracking-wider">Account Created</div>
+                          <div className="font-bold text-base text-slate-900 mt-1">
+                            {new Date(currentUser.createdAt).toLocaleDateString('en-GB', {
+                              day: '2-digit',
+                              month: '2-digit', 
+                              year: 'numeric'
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
                     {currentUser.address && (
                       <div className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-300 hover:border-purple-400 transition-all duration-200 shadow-sm hover:shadow-md">
                         <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl flex items-center justify-center shadow-lg">
@@ -549,10 +605,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                                  <CallInterface 
                   userContext={currentUser}
                   onCallStart={handleCallStart}
-                  onCallComplete={(outcome) => {
-                    setIsCallInterfaceActive(false);
-                    handleCallComplete(outcome);
-                  }}
+                  onCallComplete={handleCallCompleteWithConfirmation}
                 />
                </CardContent>
              </Card>
@@ -583,7 +636,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                             <CallInterface 
               userContext={currentUser}
               onCallStart={handleCallStart}
-              onCallComplete={handleCallComplete}
+              onCallComplete={handleCallCompleteWithConfirmation}
             />
               </CardContent>
             </Card>
@@ -592,6 +645,14 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
 
         {/* Countdown removed - agent controls pacing with manual "Start Call" button */}
       </div>
+
+      {/* Callback Confirmation Dialog */}
+      <CallbackConfirmationDialog
+        isOpen={showCallbackConfirmation}
+        customerName={currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : ''}
+        onConfirm={handleConfirmCallback}
+        onCancel={handleSkipCallback}
+      />
     </div>
   );
 } 
