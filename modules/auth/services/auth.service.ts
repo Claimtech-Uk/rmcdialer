@@ -186,9 +186,29 @@ export class AuthService {
           lastActivity: new Date()
         };
 
-        // Handle logout
-        if (statusUpdate.status === 'offline') {
-          updateData.logoutAt = new Date();
+        // Handle different status changes with proper cleanup
+        switch (statusUpdate.status) {
+          case 'offline':
+            updateData.logoutAt = new Date();
+            updateData.currentCallSessionId = null; // Clear any stuck call sessions
+            this.deps.logger.info('Agent going offline - clearing session', { agentId });
+            break;
+            
+          case 'break':
+            // Agent on break - should not receive calls, but keep session active
+            updateData.currentCallSessionId = null; // Clear calls when on break
+            this.deps.logger.info('Agent going on break - clearing calls', { agentId });
+            break;
+            
+          case 'available':
+            // Agent back and ready - keep existing currentCallSessionId if they have one
+            this.deps.logger.info('Agent now available for calls', { agentId });
+            break;
+
+          case 'on_call':
+            // This should typically be set by the call system, not manually
+            this.deps.logger.info('Agent status set to on_call', { agentId });
+            break;
         }
 
         agentSession = await tx.agentSession.update({
