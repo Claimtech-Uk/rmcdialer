@@ -1,19 +1,24 @@
 'use client'
 
+import { useState } from 'react'
 import { CallHistoryTable } from '@/modules/calls'
 import { api } from '@/lib/trpc/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card'
-import { AlertCircle, BarChart3, Clock, Phone, TrendingUp } from 'lucide-react'
+import { Button } from '@/modules/core/components/ui/button'
+import { AlertCircle, BarChart3, Clock, Phone, TrendingUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 
 export default function CallHistoryPage() {
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+
   const { 
     data: callHistoryData, 
     isLoading, 
     error, 
     refetch 
   } = api.calls.getCallHistoryTable.useQuery({
-    page: 1,
-    limit: 50
+    page: currentPage,
+    limit: pageSize
   })
 
   if (error) {
@@ -57,7 +62,7 @@ export default function CallHistoryPage() {
               Recent Calls
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 relative">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-center">
@@ -66,15 +71,139 @@ export default function CallHistoryPage() {
                 </div>
               </div>
             ) : (
-              <CallHistoryTable
-                calls={callHistoryData?.calls || []}
-                isLoading={isLoading}
-                onRefresh={() => refetch()}
-                showUserInfo={true}
-              />
+              <>
+                <CallHistoryTable
+                  calls={callHistoryData?.calls || []}
+                  isLoading={isLoading}
+                  onRefresh={() => refetch()}
+                  showUserInfo={true}
+                />
+                {isLoading && (
+                  <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-10">
+                    <div className="text-center">
+                      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                      <p className="text-slate-600 text-sm">Loading page {currentPage}...</p>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
+
+        {/* Pagination Controls */}
+        {callHistoryData?.meta && callHistoryData.meta.totalPages > 1 && (
+          <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                {/* Results Info */}
+                <div className="text-sm text-slate-600">
+                  Showing <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> to{' '}
+                  <span className="font-medium">
+                    {Math.min(currentPage * pageSize, callHistoryData.meta.total)}
+                  </span>{' '}
+                  of <span className="font-medium">{callHistoryData.meta.total}</span> calls
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex items-center gap-2">
+                  {/* First Page */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1 || isLoading}
+                    className="p-2"
+                  >
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+
+                  {/* Previous Page */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1 || isLoading}
+                    className="p-2"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+
+                  {/* Page Numbers */}
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, callHistoryData.meta.totalPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (callHistoryData.meta.totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= callHistoryData.meta.totalPages - 2) {
+                        pageNum = callHistoryData.meta.totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={pageNum === currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(pageNum)}
+                          disabled={isLoading}
+                          className="w-8 h-8 p-0"
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Next Page */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(callHistoryData.meta.totalPages, prev + 1))}
+                    disabled={currentPage === callHistoryData.meta.totalPages || isLoading}
+                    className="p-2"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+
+                  {/* Last Page */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(callHistoryData.meta.totalPages)}
+                    disabled={currentPage === callHistoryData.meta.totalPages || isLoading}
+                    className="p-2"
+                  >
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* Page Size Selector */}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-slate-600">Show:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value))
+                      setCurrentPage(1) // Reset to first page when changing page size
+                    }}
+                    disabled={isLoading}
+                    className="px-2 py-1 border border-slate-300 rounded bg-white text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={200}>200</option>
+                  </select>
+                  <span className="text-slate-600">per page</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Summary Cards */}
         {callHistoryData?.meta && callHistoryData.meta.total > 0 && (
