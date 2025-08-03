@@ -192,6 +192,110 @@ Thank you for calling!`;
   }
 
   /**
+   * Generate custom message with provided text
+   * Returns either R2 URL or data URI depending on configuration
+   */
+  async generateCustomMessage(text: string): Promise<string> {
+    try {
+      console.log('🎵 Generating Hume TTS custom message...');
+      
+      const audioBase64 = await this.synthesizeText(text);
+
+      // If R2 is configured, upload and return URL
+      if (this.r2Service) {
+        try {
+          const audioUrl = await this.r2Service.uploadAudioFile(audioBase64, 'connecting', 'message');
+          console.log('✅ Custom message uploaded to R2:', audioUrl);
+          return audioUrl;
+        } catch (r2Error) {
+          console.warn('⚠️ R2 upload failed, falling back to data URI:', r2Error);
+          return this.convertToDataUri(audioBase64);
+        }
+      }
+
+      // Fallback to data URI
+      return this.convertToDataUri(audioBase64);
+    } catch (error) {
+      console.error('❌ Hume TTS custom message failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate callback offer message
+   * Returns either R2 URL or data URI depending on configuration
+   */
+  async generateCallbackOffer(): Promise<string> {
+    try {
+      console.log('🎵 Generating Hume TTS callback offer...');
+      
+      const message = `Due to high call volume, we can arrange for one of our agents to call you back. 
+      
+This way, you won't have to wait on hold. 
+
+Press 1 if you'd like us to call you back, or stay on the line to continue holding.`;
+
+      const audioBase64 = await this.synthesizeText(message);
+
+      // If R2 is configured, upload and return URL
+      if (this.r2Service) {
+        try {
+          const audioUrl = await this.r2Service.uploadAudioFile(audioBase64, 'connecting', 'offer');
+          console.log('✅ Callback offer uploaded to R2:', audioUrl);
+          return audioUrl;
+        } catch (r2Error) {
+          console.warn('⚠️ R2 upload failed, falling back to data URI:', r2Error);
+          return this.convertToDataUri(audioBase64);
+        }
+      }
+
+      // Fallback to data URI
+      return this.convertToDataUri(audioBase64);
+    } catch (error) {
+      console.error('❌ Hume TTS callback offer failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate apology message for long waits
+   * Returns either R2 URL or data URI depending on configuration
+   */
+  async generateApologyMessage(): Promise<string> {
+    try {
+      console.log('🎵 Generating Hume TTS apology message...');
+      
+      const message = `We sincerely apologize for the wait. 
+
+All of our agents are currently assisting other customers, and we're experiencing higher than normal call volume.
+
+We'll have someone call you back as soon as an agent becomes available. 
+
+Thank you for your patience and for choosing Resolve My Claim.`;
+
+      const audioBase64 = await this.synthesizeText(message);
+
+      // If R2 is configured, upload and return URL
+      if (this.r2Service) {
+        try {
+          const audioUrl = await this.r2Service.uploadAudioFile(audioBase64, 'busy', 'message');
+          console.log('✅ Apology message uploaded to R2:', audioUrl);
+          return audioUrl;
+        } catch (r2Error) {
+          console.warn('⚠️ R2 upload failed, falling back to data URI:', r2Error);
+          return this.convertToDataUri(audioBase64);
+        }
+      }
+
+      // Fallback to data URI
+      return this.convertToDataUri(audioBase64);
+    } catch (error) {
+      console.error('❌ Hume TTS apology message failed:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Safe Hume TTS generation with multiple fallback attempts
    * Returns null if all attempts fail
    */

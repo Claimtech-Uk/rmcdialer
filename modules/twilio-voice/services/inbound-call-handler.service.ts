@@ -14,6 +14,10 @@ import { createMissedCallSession } from './call-session.service';
 import { normalizePhoneNumber, calculateCallerPriority } from '../utils';
 import { getWebhookBaseUrl } from '../utils/twiml.utils';
 import { NameInfo, CallerInfo } from '../types/twilio-voice.types';
+import { createAgentHeartbeatService } from '@/modules/agents/services/agent-heartbeat.service';
+import { createDeviceConnectivityService } from '@/modules/twilio-voice/services/device-connectivity.service';
+import { createInboundCallQueueService } from '@/modules/call-queue/services/inbound-call-queue.service';
+import { INBOUND_CALL_FLAGS } from '@/lib/config/features';
 
 /**
  * Handle inbound calls with proper call session creation and agent routing
@@ -70,30 +74,9 @@ export async function handleInboundCall(
       priorityScore: 50 // Default priority for fast path
     } : null;
     
-    // Check agent availability
-    const availableAgents = await prisma.agentSession.findMany({
-      where: {
-        status: 'available',
-        logoutAt: null,
-        agent: { isActive: true }
-      },
-      include: {
-        agent: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            isActive: true
-          }
-        }
-      },
-      orderBy: { lastActivity: 'asc' },
-      take: 1
-    });
-
-    const validatedAgent = availableAgents[0];
-    console.log(`👥 Available agents: ${availableAgents.length}`);
+    // Enhanced agent discovery with heartbeat and device validation
+    const validatedAgent = await findTrulyAvailableAgent();
+    console.log(`👥 Validated available agents: ${validatedAgent ? 1 : 0}`);
     
     // Determine the right message type based on agent availability
     let messageType: 'connecting' | 'busy' | 'out_of_hours';
@@ -108,24 +91,42 @@ export async function handleInboundCall(
     
     console.log(`🎵 Message type determined: ${messageType} (Hours: ${withinBusinessHours}, Agent: ${!!validatedAgent})`);
 
-    // 4. Create call session regardless of agent availability
-    const callSession = await createCallSession(userId, callerInfo, from, callSid, validatedAgent);
-    
-    if (!validatedAgent) {
-      // No agents available during business hours
-      return await handleNoAgentsAvailable(from, firstName, callerName, userId, callSession);
+    // 4. Determine call routing strategy based on feature flags and agent availability
+    if (INBOUND_CALL_FLAGS.ENHANCED_INBOUND_QUEUE && withinBusinessHours) {
+      // Use queue-based routing (Phase 2)
+      console.log('🔧 Using queue-based call routing');
+      return await routeCallThroughQueue(
+        from,
+        callSid,
+        firstName,
+        callerName,
+        callerInfo,
+        validatedAgent,
+        userId
+      );
+    } else {
+      // Use legacy direct routing (Phase 1)
+      console.log('🔧 Using legacy direct call routing');
+      
+      // Create call session for legacy routing
+      const callSession = await createCallSession(userId, callerInfo, from, callSid, validatedAgent);
+      
+      if (!validatedAgent) {
+        // No agents available during business hours
+        return await handleNoAgentsAvailable(from, firstName, callerName, userId, callSession);
+      }
+      
+      // Agents are available - proceed with direct call routing
+      return await routeCallToAgent(
+        from, 
+        callSid, 
+        firstName, 
+        callerName,
+        callerInfo,
+        validatedAgent,
+        callSession
+      );
     }
-    
-    // Agents are available - proceed with call routing
-    return await routeCallToAgent(
-      from, 
-      callSid, 
-      firstName, 
-      callerName,
-      callerInfo,
-      validatedAgent,
-      callSession
-    );
     
   } catch (error) {
     console.error('❌ Error handling inbound call:', error);
@@ -162,6 +163,344 @@ export async function handleInboundCall(
 }
 
 // Helper functions
+
+/**
+ * Enhanced agent discovery with heartbeat and device validation
+ * Uses new heartbeat and device connectivity services when feature flags are enabled
+ */
+async function findTrulyAvailableAgent(): Promise<any> {
+  try {
+    // If enhanced discovery is disabled, fall back to original logic
+    if (!INBOUND_CALL_FLAGS.ENHANCED_AGENT_DISCOVERY) {
+      console.log('🔧 Using legacy agent discovery (enhanced discovery disabled)');
+      return await findAvailableAgentLegacy();
+    }
+
+    console.log('🔍 Using enhanced agent discovery with heartbeat and device validation');
+
+    // Get basic available agents from database
+    const candidateAgents = await prisma.agentSession.findMany({
+      where: {
+        status: 'available',
+        logoutAt: null,
+        agent: { isActive: true }
+      },
+      include: {
+        agent: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            isActive: true
+          }
+        }
+      },
+      orderBy: { lastActivity: 'asc' },
+      take: 5 // Get top 5 candidates for validation
+    });
+
+    if (candidateAgents.length === 0) {
+      console.log('📭 No candidate agents found in database');
+      return null;
+    }
+
+    console.log(`🔍 Found ${candidateAgents.length} candidate agents, validating readiness...`);
+
+    // Enhanced validation with heartbeat and device connectivity
+    const deviceConnectivityService = createDeviceConnectivityService(prisma);
+    
+    // Validate each candidate agent
+    for (const candidateAgent of candidateAgents) {
+      try {
+        const readiness = await deviceConnectivityService.validateAgentReadiness(candidateAgent.agentId);
+        
+        console.log(`🔍 Agent ${candidateAgent.agentId} readiness check:`, {
+          agentName: `${candidateAgent.agent.firstName} ${candidateAgent.agent.lastName}`,
+          isReady: readiness.isReady,
+          readinessScore: readiness.readinessScore,
+          deviceConnected: readiness.deviceConnected,
+          issues: readiness.issues
+        });
+
+        if (readiness.isReady && readiness.readinessScore >= 70) {
+          console.log(`✅ Agent ${candidateAgent.agentId} (${candidateAgent.agent.firstName} ${candidateAgent.agent.lastName}) passed enhanced validation`);
+          return candidateAgent;
+        } else {
+          console.log(`❌ Agent ${candidateAgent.agentId} failed validation: ${readiness.issues.join(', ')}`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Validation failed for agent ${candidateAgent.agentId}:`, error);
+        // Continue to next agent
+      }
+    }
+
+    console.log('📭 No agents passed enhanced validation, checking if we should fallback');
+
+    // If no agents pass enhanced validation but we have candidates, 
+    // decide whether to use fallback or return null
+    if (INBOUND_CALL_FLAGS.ENHANCED_AGENT_HEARTBEAT && candidateAgents.length > 0) {
+      console.log('🔄 Enhanced validation failed, falling back to legacy agent selection');
+      return candidateAgents[0]; // Use first candidate as fallback
+    }
+
+    return null;
+
+  } catch (error) {
+    console.error('❌ Enhanced agent discovery failed:', error);
+    console.log('🔄 Falling back to legacy agent discovery');
+    return await findAvailableAgentLegacy();
+  }
+}
+
+/**
+ * Legacy agent discovery method (original logic)
+ */
+async function findAvailableAgentLegacy(): Promise<any> {
+  const availableAgents = await prisma.agentSession.findMany({
+    where: {
+      status: 'available',
+      logoutAt: null,
+      agent: { isActive: true }
+    },
+    include: {
+      agent: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          isActive: true
+        }
+      }
+    },
+    orderBy: { lastActivity: 'asc' },
+    take: 1
+  });
+
+  return availableAgents[0] || null;
+}
+
+/**
+ * Route call through queue system (Phase 2)
+ */
+async function routeCallThroughQueue(
+  from: string,
+  callSid: string,
+  firstName: string,
+  callerName: string,
+  callerInfo: any,
+  validatedAgent: any,
+  userId: number | null
+): Promise<NextResponse> {
+  try {
+    console.log(`📋 Routing call ${callSid} through queue system`);
+    
+    // Initialize queue service
+    const queueService = createInboundCallQueueService(prisma);
+    
+    // Prepare call info for queue
+    const callInfo = {
+      twilioCallSid: callSid,
+      callerPhone: from,
+      callerName: callerName || undefined,
+      userId: userId || undefined,
+      priorityScore: callerInfo?.priorityScore || 50,
+      metadata: {
+        firstName,
+        originalTimestamp: new Date().toISOString(),
+        businessHours: true,
+        agentAvailable: !!validatedAgent
+      }
+    };
+
+    if (validatedAgent) {
+      // Agent available - fast track through queue with immediate assignment
+      console.log(`⚡ Fast-tracking call ${callSid} - agent ${validatedAgent.agentId} available`);
+      
+      // Add to queue
+      const queuePosition = await queueService.enqueueCall(callInfo);
+      
+      // Immediately dequeue for assignment
+      const queuedCall = await queueService.dequeueNextCall();
+      
+      if (queuedCall) {
+        // Mark as assigned to the available agent
+        await prisma.inboundCallQueue.update({
+          where: { id: queuedCall.id },
+          data: {
+            status: 'connecting',
+            assignedToAgentId: validatedAgent.agentId,
+            assignedAt: new Date()
+          }
+        });
+
+        // Generate immediate connection TwiML
+        return await generateQueuedCallTwiML(queuedCall, validatedAgent, firstName);
+      }
+    }
+
+    // No immediate agent available - enter queue with hold music
+    console.log(`📋 Adding call ${callSid} to queue - no immediate agent available`);
+    
+    const queuePosition = await queueService.enqueueCall(callInfo);
+    
+    console.log(`📍 Call ${callSid} queued at position ${queuePosition.position}, estimated wait: ${queuePosition.estimatedWaitSeconds}s`);
+
+    // Generate queue entry TwiML with welcome message and hold music
+    return await generateQueueEntryTwiML(firstName, callerName, queuePosition);
+
+  } catch (error) {
+    console.error('❌ Queue routing failed, falling back to legacy routing:', error);
+    
+    // Fallback to legacy routing on any queue error
+    const callSession = await createCallSession(userId, callerInfo, from, callSid, validatedAgent);
+    
+    if (validatedAgent) {
+      return await routeCallToAgent(from, callSid, firstName, callerName, callerInfo, validatedAgent, callSession);
+    } else {
+      return await handleNoAgentsAvailable(from, firstName, callerName, userId, callSession);
+    }
+  }
+}
+
+/**
+ * Generate TwiML for immediate agent connection from queue
+ */
+async function generateQueuedCallTwiML(
+  queuedCall: any,
+  validatedAgent: any,
+  firstName: string
+): Promise<NextResponse> {
+  try {
+    console.log(`📞 Generating immediate connection TwiML for queued call ${queuedCall.twilioCallSid}`);
+    
+    const agentClientName = `agent_${validatedAgent.agentId}`;
+    const baseUrl = getWebhookBaseUrl();
+    
+    // Generate connecting greeting with Hume TTS
+    const humeTTSService = new SimpleHumeTTSService();
+    const audioBase64 = await humeTTSService.generateConnectingGreeting(firstName || undefined);
+    
+    const twimlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>${audioBase64}</Play>
+    <Dial timeout="30" 
+          record="record-from-answer" 
+          recordingStatusCallback="${baseUrl}/api/webhooks/twilio/recording"
+          statusCallback="${baseUrl}/api/webhooks/twilio/call-status"
+          statusCallbackEvent="initiated ringing answered completed busy no-answer failed"
+          statusCallbackMethod="POST"
+          action="${baseUrl}/api/webhooks/twilio/queue-handler">
+        <Client>
+            <Identity>${agentClientName}</Identity>
+            <Parameter name="originalCallSid" value="${queuedCall.twilioCallSid}" />
+            <Parameter name="callerPhone" value="${queuedCall.callerPhone}" />
+            <Parameter name="queueId" value="${queuedCall.id}" />
+            <Parameter name="callerName" value="${queuedCall.callerName || ''}" />
+            <Parameter name="userId" value="${queuedCall.userId || ''}" />
+        </Client>
+    </Dial>
+    <Redirect>${baseUrl}/api/webhooks/twilio/queue-handler</Redirect>
+</Response>`;
+
+    return new NextResponse(twimlContent, {
+      status: 200,
+      headers: { 'Content-Type': 'application/xml' }
+    });
+
+  } catch (error) {
+    console.warn('⚠️ Queued call TwiML generation failed, using simple version:', error);
+    
+    const agentClientName = `agent_${validatedAgent.agentId}`;
+    const baseUrl = getWebhookBaseUrl();
+    
+    const twimlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Please hold while we connect you to an available agent.</Say>
+    <Dial timeout="30" action="${baseUrl}/api/webhooks/twilio/queue-handler">
+        <Client>
+            <Identity>${agentClientName}</Identity>
+        </Client>
+    </Dial>
+    <Redirect>${baseUrl}/api/webhooks/twilio/queue-handler</Redirect>
+</Response>`;
+
+    return new NextResponse(twimlContent, {
+      status: 200,
+      headers: { 'Content-Type': 'application/xml' }
+    });
+  }
+}
+
+/**
+ * Generate TwiML for queue entry with hold music
+ */
+async function generateQueueEntryTwiML(
+  firstName: string,
+  callerName: string,
+  queuePosition: any
+): Promise<NextResponse> {
+  try {
+    console.log(`📋 Generating queue entry TwiML for caller ${callerName}`);
+    
+    const baseUrl = getWebhookBaseUrl();
+    const estimatedMinutes = Math.ceil(queuePosition.estimatedWaitSeconds / 60);
+    
+    // Generate welcome message with queue position
+    const humeTTSService = new SimpleHumeTTSService();
+    const welcomeText = firstName 
+      ? `Hello ${firstName}! Welcome to Resolve My Claim. You are number ${queuePosition.position} in line. Your estimated wait time is ${estimatedMinutes} minute${estimatedMinutes !== 1 ? 's' : ''}. Please stay on the line.`
+      : `Welcome to Resolve My Claim. You are number ${queuePosition.position} in line. Your estimated wait time is ${estimatedMinutes} minute${estimatedMinutes !== 1 ? 's' : ''}. Please stay on the line.`;
+    
+    const audioBase64 = await humeTTSService.generateCustomMessage(welcomeText);
+    
+    const twimlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>${audioBase64}</Play>
+    <Enqueue waitUrl="${baseUrl}/api/webhooks/twilio/queue-hold-music" 
+             action="${baseUrl}/api/webhooks/twilio/queue-handler">
+        <Task priority="${queuePosition.position}">
+            {
+                "callSid": "${queuePosition.id}",
+                "position": ${queuePosition.position},
+                "estimatedWait": ${queuePosition.estimatedWaitSeconds}
+            }
+        </Task>
+    </Enqueue>
+</Response>`;
+
+    return new NextResponse(twimlContent, {
+      status: 200,
+      headers: { 'Content-Type': 'application/xml' }
+    });
+
+  } catch (error) {
+    console.warn('⚠️ Queue entry TwiML generation failed, using simple version:', error);
+    
+    const baseUrl = getWebhookBaseUrl();
+    const estimatedMinutes = Math.ceil(queuePosition.estimatedWaitSeconds / 60);
+    
+    const twimlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Welcome to Resolve My Claim. You are number ${queuePosition.position} in line. Your estimated wait time is ${estimatedMinutes} minute${estimatedMinutes !== 1 ? 's' : ''}. Please stay on the line.</Say>
+    <Enqueue waitUrl="${baseUrl}/api/webhooks/twilio/queue-hold-music" 
+             action="${baseUrl}/api/webhooks/twilio/queue-handler">
+        <Task priority="${queuePosition.position}">
+            {
+                "callSid": "${queuePosition.id}",
+                "position": ${queuePosition.position}
+            }
+        </Task>
+    </Enqueue>
+</Response>`;
+
+    return new NextResponse(twimlContent, {
+      status: 200,
+      headers: { 'Content-Type': 'application/xml' }
+    });
+  }
+}
 
 /**
  * Create call session with proper validation and agent assignment

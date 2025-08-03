@@ -33,6 +33,9 @@ model Agent {
   shortUrls           ShortUrl[]
   smsConversations    SmsConversation[]
   autoDialerSettings  AutoDialerSettings?    // NEW: Auto-dialer preferences
+  // PHASE 2: Queue system relations
+  queueAssignments    InboundCallQueue[]     @relation("QueueAssignedAgent")
+  queueAttempts       InboundCallQueue[]     @relation("QueueLastAttemptAgent")
 
   @@map("agents")
 }
@@ -52,9 +55,60 @@ model AgentSession {
   autoDialerQueueType     String?   @map("auto_dialer_queue_type")
   lastAutoCallAt          DateTime? @map("last_auto_call_at")
   callsCompletedInSession Int       @default(0) @map("calls_completed_in_session")
+  // NEW: Enhanced agent availability fields
+  lastHeartbeat           DateTime? @map("last_heartbeat")
+  deviceConnected         Boolean   @default(false) @map("device_connected")
+  maxConcurrentCalls      Int       @default(1) @map("max_concurrent_calls")
   agent                   Agent     @relation(fields: [agentId], references: [id])
 
+  @@index([lastHeartbeat, deviceConnected, status], map: "idx_agent_sessions_heartbeat")
+  @@index([agentId, status, logoutAt, lastHeartbeat], map: "idx_agent_sessions_availability")
   @@map("agent_sessions")
+}
+
+// =============================================================================
+// PHASE 2: Queue-Based Call Holding System
+// =============================================================================
+
+model InboundCallQueue {
+  id                    String    @id @default(uuid()) @db.Uuid
+  twilioCallSid         String    @unique @map("twilio_call_sid")
+  callerPhone           String    @map("caller_phone")
+  callerName            String?   @map("caller_name")
+  userId                BigInt?   @map("user_id")
+  priorityScore         Int       @default(0) @map("priority_score")
+  queuePosition         Int?      @map("queue_position")
+  estimatedWaitSeconds  Int?      @map("estimated_wait_seconds")
+  enteredQueueAt        DateTime  @default(now()) @map("entered_queue_at")
+  assignedToAgentId     Int?      @map("assigned_to_agent_id")
+  assignedAt            DateTime? @map("assigned_at")
+  status                String    @default("waiting") // waiting, assigned, connecting, connected, abandoned, completed
+  attemptsCount         Int       @default(0) @map("attempts_count")
+  lastAttemptAt         DateTime? @map("last_attempt_at")
+  lastAttemptAgentId    Int?      @map("last_attempt_agent_id")
+  abandonedAt           DateTime? @map("abandoned_at")
+  connectedAt           DateTime? @map("connected_at")
+  completedAt           DateTime? @map("completed_at")
+  totalWaitSeconds      Int?      @map("total_wait_seconds")
+  maxWaitReached        Boolean   @default(false) @map("max_wait_reached")
+  callbackOffered       Boolean   @default(false) @map("callback_offered")
+  callbackAccepted      Boolean   @default(false) @map("callback_accepted")
+  metadata              Json?     // Store additional call context
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  // Relations (optional - not enforced to maintain data safety)
+  assignedAgent         Agent?    @relation("QueueAssignedAgent", fields: [assignedToAgentId], references: [id], onDelete: SetNull)
+  lastAttemptAgent      Agent?    @relation("QueueLastAttemptAgent", fields: [lastAttemptAgentId], references: [id], onDelete: SetNull)
+
+  // Indexes for efficient queue operations
+  @@index([status, priorityScore], map: "idx_queue_status_priority")
+  @@index([queuePosition], map: "idx_queue_position")
+  @@index([callerPhone], map: "idx_queue_caller_phone")
+  @@index([enteredQueueAt, status], map: "idx_queue_entry_time")
+  @@index([assignedToAgentId, status], map: "idx_queue_agent_assignment")
+  @@index([twilioCallSid], map: "idx_queue_twilio_sid")
+  @@map("inbound_call_queue")
 }
 
 model UserCallScore {

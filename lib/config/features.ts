@@ -39,6 +39,38 @@ export const QUEUE_MIGRATION_FLAGS = {
 } as const;
 
 // ============================================================================
+// INBOUND CALL ENHANCEMENT FEATURE FLAGS
+// ============================================================================
+
+export const INBOUND_CALL_FLAGS = {
+  // Phase 1: Enhanced Agent Availability
+  ENHANCED_AGENT_HEARTBEAT: process.env.FEATURE_AGENT_HEARTBEAT === 'true',
+  DEVICE_CONNECTIVITY_CHECK: process.env.FEATURE_DEVICE_CONNECTIVITY === 'true',
+  ENHANCED_AGENT_DISCOVERY: process.env.FEATURE_ENHANCED_DISCOVERY === 'true',
+  
+  // Phase 2: Queue-Based Call Holding
+  ENHANCED_INBOUND_QUEUE: process.env.FEATURE_ENHANCED_QUEUE === 'true',
+  QUEUE_HOLD_MUSIC: process.env.FEATURE_QUEUE_HOLD_MUSIC === 'true',
+  QUEUE_POSITION_UPDATES: process.env.FEATURE_QUEUE_POSITION === 'true',
+  
+  // Phase 3: Continuous Agent Discovery
+  MULTI_AGENT_FALLBACK: process.env.FEATURE_MULTI_AGENT === 'true',
+  CONTINUOUS_AGENT_POLLING: process.env.FEATURE_AGENT_POLLING === 'true',
+  AGENT_FAILOVER: process.env.FEATURE_AGENT_FAILOVER === 'true',
+  
+  // Phase 4: Advanced Features
+  PRIORITY_QUEUE_MANAGEMENT: process.env.FEATURE_PRIORITY_QUEUE === 'true',
+  SMART_LOAD_BALANCING: process.env.FEATURE_LOAD_BALANCING === 'true',
+  CALLBACK_REQUEST_SYSTEM: process.env.FEATURE_CALLBACK_SYSTEM === 'true',
+  
+  // Development and monitoring
+  INBOUND_CALL_DEBUG: process.env.INBOUND_CALL_DEBUG === 'true',
+  AGENT_HEARTBEAT_INTERVAL: parseInt(process.env.AGENT_HEARTBEAT_INTERVAL || '30'), // seconds
+  QUEUE_POLLING_INTERVAL: parseInt(process.env.QUEUE_POLLING_INTERVAL || '10'), // seconds
+  MAX_QUEUE_WAIT_TIME: parseInt(process.env.MAX_QUEUE_WAIT_TIME || '600') // seconds (10 minutes)
+} as const;
+
+// ============================================================================
 // MIGRATION STATE MANAGEMENT
 // ============================================================================
 
