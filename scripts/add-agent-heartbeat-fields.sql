@@ -16,21 +16,21 @@
 
 -- SAFE: Add new fields to agent_sessions table for heartbeat tracking
 -- These columns are NULL-able or have safe defaults
-ALTER TABLE agent_sessions 
+ALTER TABLE public.agent_sessions 
 ADD COLUMN IF NOT EXISTS last_heartbeat TIMESTAMP,
 ADD COLUMN IF NOT EXISTS device_connected BOOLEAN DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS max_concurrent_calls INTEGER DEFAULT 1;
 
 -- SAFE: Create indexes for efficient heartbeat queries (only improves performance)
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_heartbeat 
-ON agent_sessions (last_heartbeat, device_connected, status);
+ON public.agent_sessions (last_heartbeat, device_connected, status);
 
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_availability 
-ON agent_sessions (agent_id, status, logout_at, last_heartbeat);
+ON public.agent_sessions (agent_id, status, logout_at, last_heartbeat);
 
 -- SAFE: Update existing active sessions to have realistic defaults
 -- This only affects the new columns we just added
-UPDATE agent_sessions 
+UPDATE public.agent_sessions 
 SET device_connected = true 
 WHERE logout_at IS NULL 
   AND status IN ('available', 'on_call') 
@@ -38,15 +38,15 @@ WHERE logout_at IS NULL
 
 -- SAFE: Set last_heartbeat to last_activity for existing sessions (one-time migration)
 -- This gives us a realistic starting point for heartbeat tracking
-UPDATE agent_sessions 
+UPDATE public.agent_sessions 
 SET last_heartbeat = last_activity 
 WHERE last_heartbeat IS NULL 
   AND logout_at IS NULL;
 
 -- SAFE: Add documentation comments
-COMMENT ON COLUMN agent_sessions.last_heartbeat IS 'Timestamp of last heartbeat received from agent device/application';
-COMMENT ON COLUMN agent_sessions.device_connected IS 'Whether the agent device (browser, app) is currently connected';
-COMMENT ON COLUMN agent_sessions.max_concurrent_calls IS 'Maximum number of concurrent calls this agent can handle';
+COMMENT ON COLUMN public.agent_sessions.last_heartbeat IS 'Timestamp of last heartbeat received from agent device/application';
+COMMENT ON COLUMN public.agent_sessions.device_connected IS 'Whether the agent device (browser, app) is currently connected';
+COMMENT ON COLUMN public.agent_sessions.max_concurrent_calls IS 'Maximum number of concurrent calls this agent can handle';
 
 -- POST-MIGRATION VERIFICATION
 -- Run these queries to verify migration success:

@@ -17,7 +17,7 @@
 -- WHERE last_heartbeat IS NOT NULL OR device_connected IS NOT NULL;
 
 -- SAFE: Create new inbound_call_queue table (completely separate from existing data)
-CREATE TABLE IF NOT EXISTS inbound_call_queue (
+CREATE TABLE IF NOT EXISTS public.inbound_call_queue (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     twilio_call_sid VARCHAR(255) UNIQUE NOT NULL,
     caller_phone VARCHAR(20) NOT NULL,
@@ -47,22 +47,22 @@ CREATE TABLE IF NOT EXISTS inbound_call_queue (
 
 -- SAFE: Create indexes for efficient queue operations (performance only)
 CREATE INDEX IF NOT EXISTS idx_queue_status_priority 
-ON inbound_call_queue (status, priority_score);
+ON public.inbound_call_queue (status, priority_score);
 
 CREATE INDEX IF NOT EXISTS idx_queue_position 
-ON inbound_call_queue (queue_position);
+ON public.inbound_call_queue (queue_position);
 
 CREATE INDEX IF NOT EXISTS idx_queue_caller_phone 
-ON inbound_call_queue (caller_phone);
+ON public.inbound_call_queue (caller_phone);
 
 CREATE INDEX IF NOT EXISTS idx_queue_entry_time 
-ON inbound_call_queue (entered_queue_at, status);
+ON public.inbound_call_queue (entered_queue_at, status);
 
 CREATE INDEX IF NOT EXISTS idx_queue_agent_assignment 
-ON inbound_call_queue (assigned_to_agent_id, status);
+ON public.inbound_call_queue (assigned_to_agent_id, status);
 
 CREATE INDEX IF NOT EXISTS idx_queue_twilio_sid 
-ON inbound_call_queue (twilio_call_sid);
+ON public.inbound_call_queue (twilio_call_sid);
 
 -- SAFE: Add trigger for updated_at timestamp
 CREATE OR REPLACE FUNCTION update_inbound_call_queue_updated_at()
@@ -74,19 +74,19 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_inbound_call_queue_updated_at
-    BEFORE UPDATE ON inbound_call_queue
+    BEFORE UPDATE ON public.inbound_call_queue
     FOR EACH ROW
     EXECUTE FUNCTION update_inbound_call_queue_updated_at();
 
 -- SAFE: Add table comments for documentation
-COMMENT ON TABLE inbound_call_queue IS 'Queue management for inbound calls - holds callers until agents available';
-COMMENT ON COLUMN inbound_call_queue.twilio_call_sid IS 'Unique Twilio call SID for this queued call';
-COMMENT ON COLUMN inbound_call_queue.queue_position IS 'Current position in queue (1 = next, NULL = not positioned)';
-COMMENT ON COLUMN inbound_call_queue.status IS 'Queue status: waiting, assigned, connecting, connected, abandoned, completed';
-COMMENT ON COLUMN inbound_call_queue.attempts_count IS 'Number of agent assignment attempts made';
-COMMENT ON COLUMN inbound_call_queue.estimated_wait_seconds IS 'Estimated wait time provided to caller';
-COMMENT ON COLUMN inbound_call_queue.max_wait_reached IS 'Whether caller reached maximum wait time threshold';
-COMMENT ON COLUMN inbound_call_queue.callback_offered IS 'Whether callback option was offered to caller';
+COMMENT ON TABLE public.inbound_call_queue IS 'Queue management for inbound calls - holds callers until agents available';
+COMMENT ON COLUMN public.inbound_call_queue.twilio_call_sid IS 'Unique Twilio call SID for this queued call';
+COMMENT ON COLUMN public.inbound_call_queue.queue_position IS 'Current position in queue (1 = next, NULL = not positioned)';
+COMMENT ON COLUMN public.inbound_call_queue.status IS 'Queue status: waiting, assigned, connecting, connected, abandoned, completed';
+COMMENT ON COLUMN public.inbound_call_queue.attempts_count IS 'Number of agent assignment attempts made';
+COMMENT ON COLUMN public.inbound_call_queue.estimated_wait_seconds IS 'Estimated wait time provided to caller';
+COMMENT ON COLUMN public.inbound_call_queue.max_wait_reached IS 'Whether caller reached maximum wait time threshold';
+COMMENT ON COLUMN public.inbound_call_queue.callback_offered IS 'Whether callback option was offered to caller';
 
 -- POST-MIGRATION VERIFICATION
 -- Run these queries to verify migration success:

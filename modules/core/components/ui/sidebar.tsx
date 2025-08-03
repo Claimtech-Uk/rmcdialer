@@ -5,6 +5,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/trpc/client';
 import { Button } from '@/modules/core/components/ui/button';
+import { AgentStatusControl } from '@/components/AgentStatusControl';
+import { BrowserEventMonitor } from '@/components/BrowserEventMonitor';
 import { 
   Users, 
   Settings, 
@@ -206,6 +208,12 @@ export default function Sidebar({ children }: SidebarProps) {
           )}
         </div>
       </div>
+
+      {/* Agent Status Control */}
+      <AgentStatusControl />
+
+      {/* Browser Event Monitor (Debug Mode) */}
+      <BrowserEventMonitor enabled={process.env.NODE_ENV === 'development'} />
 
       {/* User Profile Section */}
       <div className="p-6 border-t border-gray-200">
