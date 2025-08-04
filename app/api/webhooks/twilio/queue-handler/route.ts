@@ -14,11 +14,11 @@ import { INBOUND_CALL_FLAGS } from '@/lib/config/features';
 // Twilio queue event schema
 const QueueEventSchema = z.object({
   CallSid: z.string(),
-  QueueSid: z.string().optional(),
-  QueueResult: z.string().optional(), // bridged, abandoned, redirected
-  QueueTime: z.string().optional(),
-  DialCallStatus: z.string().optional(),
-  DialCallSid: z.string().optional()
+  QueueSid: z.string().nullable().optional(),
+  QueueResult: z.string().nullable().optional(), // bridged, abandoned, redirected
+  QueueTime: z.string().nullable().optional(),
+  DialCallStatus: z.string().nullable().optional(),
+  DialCallSid: z.string().nullable().optional()
 });
 
 export async function POST(request: NextRequest) {
@@ -29,12 +29,16 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const webhookData = {
       CallSid: formData.get('CallSid') as string,
-      QueueSid: formData.get('QueueSid') as string,
-      QueueResult: formData.get('QueueResult') as string,
-      QueueTime: formData.get('QueueTime') as string,
-      DialCallStatus: formData.get('DialCallStatus') as string,
-      DialCallSid: formData.get('DialCallSid') as string
+      QueueSid: formData.get('QueueSid') as string | null,
+      QueueResult: formData.get('QueueResult') as string | null,
+      QueueTime: formData.get('QueueTime') as string | null,
+      DialCallStatus: formData.get('DialCallStatus') as string | null,
+      DialCallSid: formData.get('DialCallSid') as string | null
     };
+
+    // Debug: Log raw webhook data
+    console.log('📋 Raw webhook data:', Object.fromEntries(formData.entries()));
+    console.log('📋 Parsed webhook data:', webhookData);
 
     const { CallSid, QueueResult, QueueTime, DialCallStatus } = QueueEventSchema.parse(webhookData);
 
