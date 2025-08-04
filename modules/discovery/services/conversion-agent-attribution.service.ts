@@ -242,7 +242,7 @@ export class ConversionAgentAttributionService {
         const agentData = await this.getAgentAttributionData(conversion.userId, conversion.convertedAt)
         
         // Handle both agent-attributed and uninpacted cases
-        const primaryAgent = agentData.primaryAgentId || 0 // Use 0 if no agent impact
+        const primaryAgent = agentData.primaryAgentId || null // Use NULL if no agent impact
 
         const attribution: ConversionAgentAttributionData = {
           conversionId: conversion.id,
@@ -268,8 +268,8 @@ export class ConversionAgentAttributionService {
 
           attributed++
           
-          if (primaryAgent === 0) {
-            logger.info(`🔄 [UNINPACTED] Conversion ${conversion.id}: No agent impact - marked as uninpacted sign`)
+          if (primaryAgent === null) {
+            logger.info(`🔄 [UNINPACTED] Conversion ${conversion.id}: No agent impact - left as uninpacted sign`)
           } else {
             logger.info(`🏷️ [ATTRIBUTED] Conversion ${conversion.id}: Primary=${primaryAgent}, Contributing=[${agentData.contributingAgents.join(',')}]`)
           }
