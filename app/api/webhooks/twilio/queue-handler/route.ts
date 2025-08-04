@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
       default:
         // Handle ongoing queue processing
-        return await handleQueueProcessing(CallSid, queueService, DialCallStatus);
+        return await handleQueueProcessing(CallSid, queueService, DialCallStatus || undefined);
     }
 
   } catch (error) {
