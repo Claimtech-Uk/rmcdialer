@@ -67,11 +67,14 @@ export async function POST(request: NextRequest) {
 
     // Determine what to play based on queue time
     const queueTimeSeconds = parseInt(QueueTime || '0');
-    const shouldAnnouncePosition = queueTimeSeconds > 0 && queueTimeSeconds % 30 === 0; // Every 30 seconds
+    const shouldAnnouncePosition = queueTimeSeconds > 0 && queueTimeSeconds % 45 === 0; // Every 45 seconds
+    
+    // For very long waits (over 5 minutes), provide encouraging messages
+    const isLongWait = queueTimeSeconds > 300; // 5 minutes
 
     if (shouldAnnouncePosition && INBOUND_CALL_FLAGS.QUEUE_POSITION_UPDATES) {
-      // Generate position update with Hume TTS
-      return await getPositionUpdateResponse(queuedCall, queueStats);
+      // Generate position update with encouraging messaging for long waits
+      return await getPositionUpdateResponse(queuedCall, queueStats, isLongWait);
     } else {
       // Provide hold music
       return await getHoldMusicResponse();
@@ -88,7 +91,7 @@ export async function POST(request: NextRequest) {
 /**
  * Generate TwiML with position update announcement
  */
-async function getPositionUpdateResponse(queuedCall: any, queueStats: any): Promise<NextResponse> {
+async function getPositionUpdateResponse(queuedCall: any, queueStats: any, isLongWait: boolean = false): Promise<NextResponse> {
   try {
     const position = queuedCall.queuePosition || 1;
     const estimatedWait = queuedCall.estimatedWaitSeconds || 120;
@@ -103,12 +106,22 @@ async function getPositionUpdateResponse(queuedCall: any, queueStats: any): Prom
     const humeTTSService = new SimpleHumeTTSService();
     let announcementText = '';
 
-    if (position === 1) {
-      announcementText = "You are next in line. An agent will be with you shortly.";
-    } else if (position <= 3) {
-      announcementText = `You are number ${position} in line. Your estimated wait time is ${estimatedMinutes} minute${estimatedMinutes !== 1 ? 's' : ''}.`;
+    if (isLongWait) {
+      // Special messaging for long waits (likely no agents available)
+      if (position === 1) {
+        announcementText = "You are next in line. We're working to get an agent to take your call as soon as possible. Your call is very important to us.";
+      } else {
+        announcementText = `You are number ${position} in line. We appreciate your patience and will connect you with an agent as soon as one becomes available. Thank you for holding.`;
+      }
     } else {
-      announcementText = `You are currently number ${position} in line. Your estimated wait time is ${estimatedMinutes} minute${estimatedMinutes !== 1 ? 's' : ''}. Thank you for your patience.`;
+      // Standard messaging for normal waits
+      if (position === 1) {
+        announcementText = "You are next in line. An agent will be with you shortly.";
+      } else if (position <= 3) {
+        announcementText = `You are number ${position} in line. Your estimated wait time is ${estimatedMinutes} minute${estimatedMinutes !== 1 ? 's' : ''}.`;
+      } else {
+        announcementText = `You are currently number ${position} in line. Your estimated wait time is ${estimatedMinutes} minute${estimatedMinutes !== 1 ? 's' : ''}. Thank you for your patience.`;
+      }
     }
 
     const audioBase64 = await humeTTSService.generateCustomMessage(announcementText);

@@ -101,8 +101,9 @@ async function processPendingCalls(
     console.log(`👥 Found ${availableAgents.length} available agents for queue processing`);
 
     if (availableAgents.length === 0) {
-      console.log('📭 No agents available, checking for timeout handling...');
-      await handleQueueTimeouts(queueService);
+      console.log('📭 No agents available - calls will wait indefinitely');
+      // Don't handle timeouts when no agents are available
+      // Calls should wait until agents come online
       return results;
     }
 
@@ -126,15 +127,24 @@ async function processPendingCalls(
       results.processedCalls++;
 
       try {
-        // Check if call has been waiting too long
+        // Check if call has been waiting too long - but only timeout if agents are available
         const waitTimeSeconds = Math.floor((Date.now() - call.enteredQueueAt.getTime()) / 1000);
         const maxWaitTime = INBOUND_CALL_FLAGS.MAX_QUEUE_WAIT_TIME;
 
-        if (waitTimeSeconds > maxWaitTime) {
-          console.log(`⏰ Call ${call.twilioCallSid} exceeded max wait time (${waitTimeSeconds}s > ${maxWaitTime}s)`);
+        // Only timeout calls if:
+        // 1. They've exceeded max wait time AND
+        // 2. Agents are available (indicating a system issue, not just no agents)
+        if (waitTimeSeconds > maxWaitTime && availableAgents.length > 0) {
+          console.log(`⏰ Call ${call.twilioCallSid} exceeded max wait time (${waitTimeSeconds}s > ${maxWaitTime}s) with agents available`);
           await handleCallTimeout(call, queueService);
           results.timeoutHandled++;
           continue;
+        }
+
+        // If no agents available, let calls wait indefinitely
+        if (availableAgents.length === 0) {
+          console.log(`📞 Call ${call.twilioCallSid} waiting indefinitely (${waitTimeSeconds}s) - no agents available`);
+          continue; // Keep waiting, don't timeout
         }
 
         // Skip calls that were recently assigned (give time for agent response)
@@ -327,10 +337,21 @@ async function handleCallTimeout(call: any, queueService: any): Promise<void> {
 }
 
 /**
- * Handle all calls that have exceeded timeout
+ * Handle all calls that have exceeded timeout - but only when agents are available
+ * This prevents timing out calls when the issue is simply no agents online
  */
 async function handleQueueTimeouts(queueService: any): Promise<number> {
   try {
+    // Only timeout calls if agents are currently available
+    // This prevents abandoning calls when the issue is just no agents online
+    const agentPollingService = createAgentPollingService(prisma);
+    const availableAgents = await agentPollingService.getAvailableAgents();
+    
+    if (availableAgents.length === 0) {
+      console.log('📭 No timeout handling - no agents available, calls should wait indefinitely');
+      return 0;
+    }
+
     const maxWaitTime = INBOUND_CALL_FLAGS.MAX_QUEUE_WAIT_TIME;
     const timeoutThreshold = new Date(Date.now() - maxWaitTime * 1000);
 
@@ -344,12 +365,13 @@ async function handleQueueTimeouts(queueService: any): Promise<number> {
 
     let handledCount = 0;
     for (const call of timeoutCalls) {
+      console.log(`⏰ Timing out call ${call.twilioCallSid} - agents available but call not assigned after ${maxWaitTime}s`);
       await handleCallTimeout(call, queueService);
       handledCount++;
     }
 
     if (handledCount > 0) {
-      console.log(`⏰ Handled ${handledCount} timeout calls`);
+      console.log(`⏰ Handled ${handledCount} timeout calls (agents were available)`);
     }
 
     return handledCount;
