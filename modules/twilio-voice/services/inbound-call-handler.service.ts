@@ -385,7 +385,7 @@ async function generateQueuedCallTwiML(
     const twimlContent = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Play>${audioBase64}</Play>
-    <Dial timeout="30" 
+    <Dial timeout="600" 
           record="record-from-answer" 
           recordingStatusCallback="${baseUrl}/api/webhooks/twilio/recording"
           statusCallback="${baseUrl}/api/webhooks/twilio/call-status"
@@ -418,7 +418,7 @@ async function generateQueuedCallTwiML(
     const twimlContent = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>Please hold while we connect you to an available agent.</Say>
-    <Dial timeout="30" action="${baseUrl}/api/webhooks/twilio/queue-handler">
+    <Dial timeout="600" action="${baseUrl}/api/webhooks/twilio/queue-handler">
         <Client>
             <Identity>${agentClientName}</Identity>
         </Client>
@@ -831,7 +831,7 @@ async function routeCallToAgent(
     const twimlContent = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Play>${audioBase64}</Play>
-    <Dial timeout="30" 
+    <Dial timeout="600" 
           record="record-from-answer" 
           recordingStatusCallback="${recordingCallbackUrl}"
           statusCallback="${statusCallbackUrl}"
@@ -865,7 +865,7 @@ async function routeCallToAgent(
     return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>Hello${firstName ? ' ' + firstName : ' there'}! Welcome to Resolve My Claim. Please hold while we connect you to an available agent.</Say>
-    <Dial timeout="30" 
+    <Dial timeout="600" 
           record="record-from-answer" 
           recordingStatusCallback="${recordingCallbackUrl}"
           statusCallback="${statusCallbackUrl}"

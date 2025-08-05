@@ -46,7 +46,7 @@ export interface FallbackResult {
 export class MultiAgentFallbackService {
   private readonly defaultStrategy: FallbackStrategy = {
     maxAttempts: 3,
-    attemptTimeoutMs: 30000, // 30 seconds per agent attempt
+    attemptTimeoutMs: 600000, // 10 minutes per agent attempt (generous timeout)
     cooldownBetweenAttemptsMs: 2000, // 2 seconds between attempts
     prioritizeByReadinessScore: true,
     allowSameAgentRetry: false,

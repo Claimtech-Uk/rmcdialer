@@ -176,7 +176,7 @@ async function processPendingCalls(
           excludeAgents,
           {
             maxAttempts: 3, // Try up to 3 different agents
-            attemptTimeoutMs: 45000, // 45 seconds per agent attempt
+            attemptTimeoutMs: 600000, // 10 minutes per agent attempt (no rush!)
             cooldownBetweenAttemptsMs: 2000, // 2 seconds between attempts
             allowSameAgentRetry: false // Don't retry same agent
           }
@@ -226,7 +226,7 @@ async function makeAgentCall(queuedCall: any, agent: any): Promise<{ success: bo
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="alice">Connecting you to an available agent. Please hold.</Say>
-    <Dial timeout="30" 
+            <Dial timeout="600" 
           record="record-from-answer" 
           recordingStatusCallback="${baseUrl}/api/webhooks/twilio/recording"
           statusCallback="${baseUrl}/api/webhooks/twilio/call-status"
