@@ -65,7 +65,7 @@ export const INBOUND_CALL_FLAGS = {
   
   // Development and monitoring
   INBOUND_CALL_DEBUG: process.env.INBOUND_CALL_DEBUG === 'true',
-  AGENT_HEARTBEAT_INTERVAL: parseInt(process.env.AGENT_HEARTBEAT_INTERVAL || '30'), // seconds
+  AGENT_HEARTBEAT_INTERVAL: parseInt(process.env.AGENT_HEARTBEAT_INTERVAL || '300'), // seconds (5 minutes - more reasonable timeout)
   QUEUE_POLLING_INTERVAL: parseInt(process.env.QUEUE_POLLING_INTERVAL || '10'), // seconds
   MAX_QUEUE_WAIT_TIME: parseInt(process.env.MAX_QUEUE_WAIT_TIME || '3600') // seconds (1 hour - will be handled intelligently)
 } as const;
