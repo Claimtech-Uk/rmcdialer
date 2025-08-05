@@ -336,14 +336,15 @@ export class ConversionAgentAttributionService {
     const seenAgents = new Set<number>()
     
     for (const session of callSessions) {
-      if (!seenAgents.has(session.agentId)) {
+      // Filter out invalid agent IDs (0, negative, or system agents)
+      if (session.agentId > 0 && !seenAgents.has(session.agentId)) {
         uniqueAgents.push(session.agentId)
         seenAgents.add(session.agentId)
       }
     }
 
     // Most recent agent becomes primary, others become contributing
-    const primaryAgentId = uniqueAgents[0]
+    const primaryAgentId = uniqueAgents[0] || null // Handle case where no valid agents found
     const contributingAgents = uniqueAgents.slice(1) // Exclude primary agent
 
     return {
