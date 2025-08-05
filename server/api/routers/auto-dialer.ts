@@ -106,8 +106,8 @@ export const autoDialerRouter = createTRPCRouter({
           });
         }
 
-        // Update agent session to active auto-dialer mode
-        const agentSession = await prisma.agentSession.updateMany({
+        // Try to update existing active session first
+        const existingSession = await prisma.agentSession.updateMany({
           where: { 
             agentId: ctx.agent.id,
             logoutAt: null
@@ -120,11 +120,24 @@ export const autoDialerRouter = createTRPCRouter({
           }
         });
 
-        if (agentSession.count === 0) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'No active agent session found. Please log in first.'
+        // If no active session exists, create a new one for authenticated agent
+        if (existingSession.count === 0) {
+          console.log(`🔄 No active session found for agent ${ctx.agent.id}, creating new session for auto dialer`);
+          
+          await prisma.agentSession.create({
+            data: {
+              agentId: ctx.agent.id,
+              status: 'available',
+              autoDialerActive: true,
+              autoDialerQueueType: teamConfig.queueType,
+              callsCompletedInSession: 0,
+              deviceConnected: true, // Assume connected since they're authenticated
+              lastActivity: new Date(),
+              lastHeartbeat: new Date()
+            }
           });
+          
+          console.log(`✅ Created new agent session for agent ${ctx.agent.id} to start auto dialer`);
         }
 
         return { 
