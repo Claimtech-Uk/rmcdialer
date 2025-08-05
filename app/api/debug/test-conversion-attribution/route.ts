@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     
     console.log('✅ [DEBUG] Manual conversion attribution completed:', {
-      duration: `${duration}ms`,
+      executionTime: `${duration}ms`,
       ...result
     })
     
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Manual conversion attribution completed',
-      duration: `${duration}ms`,
+      executionTime: `${duration}ms`,
       configuration: {
         dryRun,
         hoursBack,
@@ -58,13 +58,13 @@ export async function GET(request: NextRequest) {
     console.error('❌ [DEBUG] Manual conversion attribution failed:', {
       error: error.message,
       stack: error.stack,
-      duration: `${duration}ms`
+      executionTime: `${duration}ms`
     })
     
     return NextResponse.json({
       success: false,
       error: error.message,
-      duration: `${duration}ms`,
+      executionTime: `${duration}ms`,
       timestamp: new Date().toISOString()
     }, { status: 500 })
   }
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     const duration = Date.now() - startTime
     
     console.log('✅ [DEBUG] Manual conversion attribution completed:', {
-      duration: `${duration}ms`,
+      executionTime: `${duration}ms`,
       ...result
     })
     
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Manual conversion attribution completed',
-      duration: `${duration}ms`,
+      executionTime: `${duration}ms`,
       configuration: {
         dryRun,
         hoursBack,
@@ -126,13 +126,13 @@ export async function POST(request: NextRequest) {
     console.error('❌ [DEBUG] Manual conversion attribution failed:', {
       error: error.message,
       stack: error.stack,
-      duration: `${duration}ms`
+      executionTime: `${duration}ms`
     })
     
     return NextResponse.json({
       success: false,
       error: error.message,
-      duration: `${duration}ms`,
+      executionTime: `${duration}ms`,
       timestamp: new Date().toISOString()
     }, { status: 500 })
   }
