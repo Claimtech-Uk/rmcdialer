@@ -115,7 +115,7 @@ export interface OutstandingRequirementsConversionData {
 export interface ConversionAgentAttributionData {
   conversionId: string
   userId: bigint
-  primaryAgentId: number
+  primaryAgentId: number | null
   contributingAgents: number[]
   totalCallsAnalyzed: number
   mostRecentCallDate: Date | null

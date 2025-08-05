@@ -247,7 +247,7 @@ export class ConversionAgentAttributionService {
         const attribution: ConversionAgentAttributionData = {
           conversionId: conversion.id,
           userId: conversion.userId,
-          primaryAgentId: primaryAgent as number | null,
+          primaryAgentId: primaryAgent,
           contributingAgents: agentData.contributingAgents,
           totalCallsAnalyzed: agentData.totalCallsAnalyzed,
           mostRecentCallDate: agentData.mostRecentCallDate,
