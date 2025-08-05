@@ -217,6 +217,32 @@ export async function POST(request: NextRequest) {
       endedAt: updateData.endedAt
     });
 
+    // CRITICAL FIX: Handle inbound call queue completion
+    if (['completed', 'busy', 'failed', 'no-answer', 'canceled'].includes(effectiveStatus)) {
+      try {
+        const queueEntry = await prisma.inboundCallQueue.findUnique({
+          where: { twilioCallSid: CallSid }
+        });
+        
+        if (queueEntry) {
+          const { createInboundCallQueueService } = await import('@/modules/call-queue/services/inbound-call-queue.service');
+          const queueService = createInboundCallQueueService(prisma);
+          
+          if (effectiveStatus === 'completed' && updateData.talkTimeSeconds && updateData.talkTimeSeconds > 5) {
+            // Call was successfully completed with meaningful talk time
+            await queueService.markCallCompleted(CallSid, updateData.durationSeconds);
+            console.log(`✅ Marked queue entry ${queueEntry.id} as completed (talk time: ${updateData.talkTimeSeconds}s)`);
+          } else {
+            // Call ended without meaningful completion - mark as abandoned
+            await queueService.markCallAbandoned(CallSid, `call_ended_${effectiveStatus}`);
+            console.log(`📞 Marked queue entry ${queueEntry.id} as abandoned (status: ${effectiveStatus})`);
+          }
+        }
+      } catch (queueError) {
+        console.error(`❌ Failed to update queue entry for call ${CallSid}:`, queueError);
+      }
+    }
+
     // Update agent session based on effective call status (prioritizing dial status for inbound calls)
     if (['answered', 'in-progress'].includes(effectiveStatus)) {
       // Call connected - now mark agent as on_call (this fixes the race condition)

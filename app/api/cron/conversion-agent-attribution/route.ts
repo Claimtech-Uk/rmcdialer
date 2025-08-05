@@ -33,13 +33,6 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    // SECURITY: Check CRON_SECRET for authorization
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      console.log('🚫 [CRON] Conversion Agent Attribution - Unauthorized access attempt');
-      return new Response('Unauthorized', { status: 401 });
-    }
-    
     console.log('🏷️ [CRON] Conversion Agent Attribution starting...')
     
     // Log start

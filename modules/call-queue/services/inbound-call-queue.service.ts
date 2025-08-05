@@ -356,6 +356,45 @@ export class InboundCallQueueService {
   }
 
   /**
+   * Mark call as completed when it successfully ends
+   */
+  async markCallCompleted(callSid: string, duration?: number): Promise<void> {
+    try {
+      const now = new Date();
+      
+      await this.deps.prisma.inboundCallQueue.update({
+        where: { twilioCallSid: callSid },
+        data: {
+          status: 'completed',
+          completedAt: now,
+          totalWaitSeconds: duration ? Math.floor(duration) : undefined,
+          metadata: JSON.stringify({
+            completedReason: 'call_ended',
+            completedAt: now.toISOString(),
+            duration: duration
+          })
+        }
+      });
+
+      // Reorder remaining queue positions
+      await this.reorderQueuePositions();
+
+      this.deps.logger.info('Call completed from queue', {
+        callSid,
+        duration,
+        completedAt: now.toISOString()
+      });
+
+    } catch (error) {
+      this.deps.logger.error('Failed to mark call as completed', {
+        callSid,
+        duration,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  /**
    * Get queue statistics for monitoring
    */
   async getQueueStats(): Promise<QueueStats> {
