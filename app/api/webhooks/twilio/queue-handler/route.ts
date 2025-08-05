@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
       case 'error':
         // CRITICAL FIX: Handle queue errors (agent unreachable, timeout, etc.)
-        return await handleQueueError(CallSid, queueService, DialCallStatus);
+        return await handleQueueError(CallSid, queueService, DialCallStatus || undefined);
 
       default:
         // Handle ongoing queue processing
