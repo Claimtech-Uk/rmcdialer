@@ -7,8 +7,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createInboundCallQueueService } from '@/modules/call-queue/services/inbound-call-queue.service';
 import { createAgentPollingService } from '@/modules/agents/services/agent-polling.service';
+import { MultiAgentFallbackService } from '@/modules/agents/services/multi-agent-fallback.service';
 import { INBOUND_CALL_FLAGS } from '@/lib/config/features';
 import twilio from 'twilio';
+import { logger } from '@/modules/core';
 
 // Twilio client for making agent calls
 const twilioClient = twilio(
@@ -156,46 +158,41 @@ async function processPendingCalls(
           }
         }
 
-        // Find best available agent (excluding recent attempts)
-        const excludeAgents = call.lastAttemptAgentId ? [call.lastAttemptAgentId] : [];
-        const bestAgent = await agentPollingService.findBestAgent(excludeAgents);
-
-        if (!bestAgent) {
-          console.log(`📭 No available agent for call ${call.twilioCallSid}`);
-          results.failedAssignments++;
-          continue;
+        // Use sophisticated multi-agent fallback system instead of primitive retry
+        console.log(`🔄 Starting multi-agent fallback for call ${call.twilioCallSid} (attempt ${call.attemptsCount + 1})`);
+        
+        // Initialize multi-agent fallback service
+        const fallbackService = new MultiAgentFallbackService({ prisma, logger });
+        
+        // Build exclusion list from all previous failed attempts (not just last one)
+        const excludeAgents: number[] = [];
+        if (call.lastAttemptAgentId) {
+          excludeAgents.push(call.lastAttemptAgentId);
         }
-
-        // Attempt assignment
-        const assignment = await agentPollingService.assignQueuedCall(
-          call.id, 
-          bestAgent, 
-          call.attemptsCount + 1
+        
+        // Execute intelligent multi-agent fallback
+        const fallbackResult = await fallbackService.executeFallback(
+          call.id,
+          excludeAgents,
+          {
+            maxAttempts: 3, // Try up to 3 different agents
+            attemptTimeoutMs: 45000, // 45 seconds per agent attempt
+            cooldownBetweenAttemptsMs: 2000, // 2 seconds between attempts
+            allowSameAgentRetry: false // Don't retry same agent
+          }
         );
 
-        if (assignment) {
-          // Trigger actual Twilio call to agent
-          const callResult = await makeAgentCall(call, bestAgent);
-          
-          if (callResult.success) {
-            console.log(`✅ Successfully initiated call to agent ${bestAgent.agentId} for ${call.twilioCallSid}`);
-            results.successfulAssignments++;
-          } else {
-            console.log(`❌ Failed to initiate call to agent ${bestAgent.agentId}: ${callResult.error}`);
-            results.failedAssignments++;
-            
-            // Mark assignment as failed and return to queue
-            await prisma.inboundCallQueue.update({
-              where: { id: call.id },
-              data: {
-                status: 'waiting',
-                assignedToAgentId: null,
-                assignedAt: null
-              }
-            });
-          }
+        if (fallbackResult.success) {
+          console.log(`✅ Multi-agent fallback succeeded for ${call.twilioCallSid} with agent ${fallbackResult.finalAgentId} after ${fallbackResult.totalAttempts} attempts`);
+          results.successfulAssignments++;
         } else {
+          console.log(`❌ Multi-agent fallback exhausted for ${call.twilioCallSid} after ${fallbackResult.totalAttempts} attempts: ${fallbackResult.failureReason}`);
           results.failedAssignments++;
+          
+          // If all agents failed, mark call for special handling or timeout
+          if (fallbackResult.escalated) {
+            console.log(`🚨 Call ${call.twilioCallSid} escalated after multiple failures`);
+          }
         }
 
       } catch (callError) {

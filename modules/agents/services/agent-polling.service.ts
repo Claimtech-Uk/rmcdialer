@@ -40,7 +40,7 @@ export class AgentPollingService {
   private pollingInterval?: NodeJS.Timeout;
   private readonly POLLING_INTERVAL_MS: number;
   private readonly MAX_ASSIGNMENT_ATTEMPTS = 3;
-  private readonly READINESS_THRESHOLD = 70; // Minimum readiness score
+  private readonly READINESS_THRESHOLD = INBOUND_CALL_FLAGS.AGENT_READINESS_THRESHOLD; // Use shared threshold
 
   constructor(private deps: AgentPollingDependencies) {
     this.POLLING_INTERVAL_MS = (INBOUND_CALL_FLAGS.QUEUE_POLLING_INTERVAL || 10) * 1000;

@@ -321,6 +321,7 @@ export class AgentHeartbeatService {
           data: {
             status: 'offline',
             deviceConnected: false,
+            logoutAt: new Date(), // CRITICAL FIX: Set logout timestamp for proper session closure
             lastActivity: new Date()
           }
         });

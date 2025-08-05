@@ -6,10 +6,13 @@
   "framework": "nextjs",
   "functions": {
     "app/api/**": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "app/api/cron/**": {
       "maxDuration": 300
+    },
+    "app/api/webhooks/**": {
+      "maxDuration": 180
     }
   },
   "crons": [
@@ -52,6 +55,18 @@
     {
       "path": "/api/cron/daily-cleanup",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/queue-processor",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/session-cleanup",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/heartbeat-cleanup",
+      "schedule": "* * * * *"
     }
   ],
   "git": {

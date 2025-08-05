@@ -223,7 +223,7 @@ async function findTrulyAvailableAgent(): Promise<any> {
           issues: readiness.issues
         });
 
-        if (readiness.isReady && readiness.readinessScore >= 70) {
+        if (readiness.isReady && readiness.readinessScore >= INBOUND_CALL_FLAGS.AGENT_READINESS_THRESHOLD) {
           console.log(`✅ Agent ${candidateAgent.agentId} (${candidateAgent.agent.firstName} ${candidateAgent.agent.lastName}) passed enhanced validation`);
           return candidateAgent;
         } else {

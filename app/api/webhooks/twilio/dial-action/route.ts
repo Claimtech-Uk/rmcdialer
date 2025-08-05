@@ -42,62 +42,30 @@ export async function POST(request: NextRequest) {
         headers: { 'Content-Type': 'application/xml' }
       });
     } else {
-      // Agent didn't answer - provide friendly fallback message using Hume TTS
-      console.log(`🎵 Generating Hume TTS agent unavailable message for dial status: ${dialCallStatus}`);
+      // Agent didn't answer - return to queue for retry with another agent
+      console.log(`🔄 Agent didn't answer (${dialCallStatus}), returning caller to queue for retry`);
       
-      try {
-        const humeTTSService = new SimpleHumeTTSService();
-        const audioBase64 = await humeTTSService.generateBusyGreeting();
-        
-        console.log(`✅ Using Hume TTS for agent unavailable message`);
-        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+      // Get webhook base URL for redirect
+      const webhookBaseUrl = process.env.WEBHOOK_BASE_URL || 'https://rmcdialer.vercel.app';
+      
+      console.log(`📞 Redirecting call ${callSid} back to queue hold music for agent retry`);
+      return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Play>${audioBase64}</Play>
-    <Hangup/>
+    <Redirect>${webhookBaseUrl}/api/webhooks/twilio/queue-hold-music</Redirect>
 </Response>`, {
-          status: 200,
-          headers: { 'Content-Type': 'application/xml' }
-        });
-      } catch (error) {
-        console.warn(`⚠️ Hume TTS agent unavailable message failed, trying fallback:`, error instanceof Error ? error.message : String(error));
-        
-        // Second attempt with basic Hume TTS
-        try {
-          const fallbackHumeTTSService = new SimpleHumeTTSService();
-          const fallbackAudio = await fallbackHumeTTSService.generateBusyGreeting();
-          
-          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Play>${fallbackAudio}</Play>
-    <Hangup/>
-</Response>`, {
-            status: 200,
-            headers: { 'Content-Type': 'application/xml' }
-          });
-        } catch (fallbackError) {
-          console.error(`❌ All Hume TTS attempts failed for dial action:`, fallbackError);
-          
-          // Emergency fallback - minimal response without voice
-          return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Pause length="2"/>
-    <Hangup/>
-</Response>`, {
-            status: 200,
-            headers: { 'Content-Type': 'application/xml' }
-          });
-        }
-      }
+        status: 200,
+        headers: { 'Content-Type': 'application/xml' }
+      });
     }
 
   } catch (error) {
     console.error('❌ Dial action webhook error:', error);
     
-    // Emergency fallback TwiML
+    // Emergency fallback - redirect to queue instead of hanging up
+    const webhookBaseUrl = process.env.WEBHOOK_BASE_URL || 'https://rmcdialer.vercel.app';
     return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Pause length="1"/>
-    <Hangup/>
+    <Redirect>${webhookBaseUrl}/api/webhooks/twilio/queue-hold-music</Redirect>
 </Response>`, {
       status: 200,
       headers: { 'Content-Type': 'application/xml' }

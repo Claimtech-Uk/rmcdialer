@@ -67,7 +67,10 @@ export const INBOUND_CALL_FLAGS = {
   INBOUND_CALL_DEBUG: process.env.INBOUND_CALL_DEBUG === 'true',
   AGENT_HEARTBEAT_INTERVAL: parseInt(process.env.AGENT_HEARTBEAT_INTERVAL || '300'), // seconds (5 minutes - more reasonable timeout)
   QUEUE_POLLING_INTERVAL: parseInt(process.env.QUEUE_POLLING_INTERVAL || '10'), // seconds
-  MAX_QUEUE_WAIT_TIME: parseInt(process.env.MAX_QUEUE_WAIT_TIME || '3600') // seconds (1 hour - will be handled intelligently)
+  MAX_QUEUE_WAIT_TIME: parseInt(process.env.MAX_QUEUE_WAIT_TIME || '3600'), // seconds (1 hour - will be handled intelligently)
+  
+  // Agent validation thresholds
+  AGENT_READINESS_THRESHOLD: parseInt(process.env.AGENT_READINESS_THRESHOLD || '70') // Minimum readiness score for agent availability
 } as const;
 
 // ============================================================================
