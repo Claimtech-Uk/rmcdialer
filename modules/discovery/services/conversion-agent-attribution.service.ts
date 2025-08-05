@@ -242,7 +242,7 @@ export class ConversionAgentAttributionService {
         const agentData = await this.getAgentAttributionData(conversion.userId, conversion.convertedAt)
         
         // Handle both agent-attributed and uninpacted cases
-        const primaryAgent = agentData.primaryAgentId || null // Use NULL if no agent impact
+        const primaryAgent: number | null = agentData.primaryAgentId || null // Use NULL if no agent impact
 
         const attribution: ConversionAgentAttributionData = {
           conversionId: conversion.id,
