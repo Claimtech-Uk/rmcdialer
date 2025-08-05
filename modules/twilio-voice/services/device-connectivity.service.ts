@@ -143,6 +143,7 @@ export class DeviceConnectivityService {
         if (!deviceConnected) {
           issues.push('Device connection status is false');
           readinessScore -= 30;
+          isReady = false; // CRITICAL FIX: Hard fail if device not connected
         }
       }
 
