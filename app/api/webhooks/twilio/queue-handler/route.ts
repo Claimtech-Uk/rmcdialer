@@ -70,6 +70,10 @@ export async function POST(request: NextRequest) {
         // Call was redirected (usually timeout or queue full)
         return await handleCallRedirected(CallSid, queueService);
 
+      case 'error':
+        // CRITICAL FIX: Handle queue errors (agent unreachable, timeout, etc.)
+        return await handleQueueError(CallSid, queueService, DialCallStatus);
+
       default:
         // Handle ongoing queue processing
         return await handleQueueProcessing(CallSid, queueService, DialCallStatus || undefined);
@@ -158,6 +162,77 @@ async function handleCallRedirected(callSid: string, queueService: any): Promise
 
   } catch (error) {
     console.error(`❌ Error handling redirected call ${callSid}:`, error);
+    return getErrorFallbackResponse();
+  }
+}
+
+/**
+ * Handle queue errors (agent unreachable, dial timeout, etc.)
+ */
+async function handleQueueError(callSid: string, queueService: any, dialStatus?: string): Promise<NextResponse> {
+  try {
+    console.log(`🚨 Queue error for call ${callSid}, dial status: ${dialStatus || 'unknown'}`);
+    
+    // Get the current queue entry to check retry attempts
+    const queueEntry = await prisma.inboundCallQueue.findUnique({
+      where: { twilioCallSid: callSid }
+    });
+
+    if (!queueEntry) {
+      console.error(`❌ Queue entry not found for call ${callSid} - cannot handle error`);
+      return getErrorFallbackResponse();
+    }
+
+    console.log(`🔍 Queue error details: attempts=${queueEntry.attemptsCount}, lastAgent=${queueEntry.lastAttemptAgentId}, status=${queueEntry.status}`);
+
+    // If this is the first or second attempt, try again with a different agent
+    if (queueEntry.attemptsCount < 2) {
+      console.log(`🔄 Retrying call ${callSid} after queue error (attempt ${queueEntry.attemptsCount + 1})`);
+      
+      // Mark the current attempt as failed and increment attempt count
+      await prisma.inboundCallQueue.update({
+        where: { twilioCallSid: callSid },
+        data: {
+          status: 'waiting', // Return to waiting status for retry
+          attemptsCount: { increment: 1 },
+          lastAttemptAt: new Date(),
+          // Clear current assignment since it failed
+          assignedToAgentId: null,
+          assignedAt: null
+        }
+      });
+
+      // Clear any stuck agent sessions
+      if (queueEntry.assignedToAgentId) {
+        await prisma.agentSession.updateMany({
+          where: { 
+            agentId: queueEntry.assignedToAgentId,
+            currentCallSessionId: { not: null }
+          },
+          data: {
+            status: 'available',
+            currentCallSessionId: null,
+            lastActivity: new Date()
+          }
+        });
+        console.log(`🔧 Freed up agent ${queueEntry.assignedToAgentId} after queue error`);
+      }
+
+      // Return to hold music - the queue processor will pick this up and try a different agent
+      return await returnToHoldMusic(callSid);
+    } else {
+      // Too many failures - offer callback or end call
+      console.log(`❌ Call ${callSid} exceeded retry attempts after queue errors`);
+      
+      if (!queueEntry.callbackOffered) {
+        return await offerCallbackOption(callSid, queueService);
+      } else {
+        return await endCallWithApology(callSid, queueService);
+      }
+    }
+
+  } catch (error) {
+    console.error(`❌ Error handling queue error for call ${callSid}:`, error);
     return getErrorFallbackResponse();
   }
 }
