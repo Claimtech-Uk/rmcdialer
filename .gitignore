@@ -167,6 +167,22 @@ dist/
 
 # Uncomment these if you have a monorepo
 
+# Archive directory
+archive/
+
+# Additional log patterns
+victory.log
+success.log
+final-test.log
+production-ready.log
+
+# Additional build artifacts
+*.tsbuildinfo
+.vercel-rebuild
+
+# Cursor IDE files
+.cursor/
+
 # Application logs
 logs/
 *.log
