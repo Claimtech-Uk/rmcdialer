@@ -63,9 +63,9 @@ class CallOutcomeLogicTester {
     // UPDATED LOGICAL SCORES from modules/call-outcomes/services/
     const scoreMap: Record<CallOutcomeType, number> = {
       'completed_form': 0,       // UPDATED: Form completed - no score change, user removed if signature validates
-      'going_to_complete': 0,    // UPDATED: User will complete - reset score, callback time set by agent
-      'might_complete': 0,       // UPDATED: Might complete - reset score, 5-day delay prevents over-calling
-      'call_back': -15,          // UNCHANGED: User requested callback
+          'going_to_complete': 3,    // UPDATED: User will complete - add 3 to score
+    'might_complete': 3,       // UPDATED: Might complete - add 3 to score  
+    'call_back': 3,            // UPDATED: User requested callback - add 3 to score
       'missed_call': 0,          // UPDATED: Customer called us - reset score, immediate callback scheduled
       'no_answer': 10,           // UNCHANGED: No answer - slightly harder to reach
       'hung_up': 25,             // UNCHANGED: User hung up

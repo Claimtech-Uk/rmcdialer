@@ -56,7 +56,7 @@ finalScore += attemptFactor.value
 ## Outcome Score Adjustments (from hung-up.outcome.ts)
 - `hung_up`: +25 (lower priority - negative outcome)
 - `no_answer`: +10 (slightly lower priority)
-- `call_back`: -15 (higher priority - positive outcome)
+- `call_back`: 3 (add 3 to current score - positive outcome)
 - `bad_number`: +50 (much lower priority)
 - `not_interested`: +100 (very low priority)
 - `no_claim`: +200 (conversion - remove from queue)

@@ -85,11 +85,12 @@ async function testScoringBehavior() {
   console.log('\n📊 Summary of Scoring Behavior:');
   console.log('================================');
   console.log('✅ ADDITIVE OUTCOMES (penalty/bonus added to current score):');
-  console.log('   • hung_up (+25), no_answer (+10), bad_number (+50), not_interested (+100), call_back (-15)');
+  console.log('   • hung_up (+25), no_answer (+10), bad_number (+50), not_interested (+100)');
+  console.log('   • going_to_complete (+3), might_complete (+3), call_back (+3)');
   console.log('   • These outcomes properly ADD to the existing user score');
   
-  console.log('\n✅ RESET OUTCOMES (score stays same - no penalty):');
-  console.log('   • completed_form (0), going_to_complete (0), might_complete (0), missed_call (0)');
+  console.log('\n✅ NEUTRAL OUTCOMES (score stays same - no penalty):');
+  console.log('   • completed_form (0), missed_call (0)');
   console.log('   • These outcomes don\'t add penalties - user keeps current score');
   
   console.log('\n✅ CONVERSION OUTCOMES (capped at 200 for removal):');

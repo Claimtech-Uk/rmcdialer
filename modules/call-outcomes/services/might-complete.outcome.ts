@@ -12,10 +12,10 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
   readonly description = 'Customer showed interest but made no firm commitment';
   readonly category = 'positive' as const;  // Changed to positive - this is engagement
   
-  // Scoring: Reset score to baseline - 5 day delay prevents over-calling
+  // Scoring: Add 3 to current score - customer showed interest
   readonly scoringRules = {
-    scoreAdjustment: 0,
-    description: 'Customer showed interest - callback time set by agent',
+    scoreAdjustment: 3,
+    description: 'Customer showed interest - add 3 to current score',
     shouldTriggerConversion: false
   };
   

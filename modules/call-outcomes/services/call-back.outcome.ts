@@ -12,10 +12,10 @@ export class CallBackOutcome implements CallOutcomeHandler {
   readonly description = 'Customer requested a callback at a specific time';
   readonly category = 'positive' as const;
   
-  // Scoring: Excellent outcome, customer wants to engage
+  // Scoring: Add 3 to current score - customer requested callback
   readonly scoringRules = {
-    scoreAdjustment: -15,
-    description: 'Customer requested callback - high priority',
+    scoreAdjustment: 3,
+    description: 'Customer requested callback - add 3 to current score',
     shouldTriggerConversion: false
   };
   

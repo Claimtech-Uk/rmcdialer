@@ -9,9 +9,9 @@ The user reported that call outcomes are "resetting users to scores instead of c
 | Outcome Type | Score Adjustment | Description |
 |--------------|------------------|-------------|
 | `completed_form` | 0 | No change, triggers conversion |
-| `going_to_complete` | 0 | No change, reset score |
-| `might_complete` | 0 | No change, reset score |
-| `call_back` | -15 | Bonus - higher priority |
+| `going_to_complete` | 3 | Add 3 to current score |
+| `might_complete` | 3 | Add 3 to current score |
+| `call_back` | 3 | Add 3 to current score |
 | `missed_call` | 0 | No change, immediate callback |
 | `no_answer` | +10 | Penalty - slightly lower priority |
 | `hung_up` | +25 | Penalty - lower priority |

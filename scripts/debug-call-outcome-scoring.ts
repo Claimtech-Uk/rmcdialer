@@ -11,9 +11,9 @@ const prisma = new PrismaClient();
 // All call outcome types with their expected score adjustments
 const EXPECTED_SCORE_ADJUSTMENTS: Record<CallOutcomeType, number> = {
   'completed_form': 0,       // No change, triggers conversion
-  'going_to_complete': 0,    // No change
-  'might_complete': 0,       // No change
-  'call_back': -15,          // Bonus - higher priority
+  'going_to_complete': 3,    // Add 3 to current score
+  'might_complete': 3,       // Add 3 to current score
+  'call_back': 3,            // Add 3 to current score
   'missed_call': 0,          // No change
   'no_answer': 10,           // Penalty - slightly lower priority
   'hung_up': 25,             // Penalty - lower priority
