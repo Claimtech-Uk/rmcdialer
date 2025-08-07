@@ -532,4 +532,4 @@ This project is proprietary to Resolve My Claim Ltd.
 
 **Questions?** The system is fully operational and production-ready. Check `/docs/` for additional implementation guides and troubleshooting information.
 
-**Need support?** All monitoring endpoints are live and the system includes comprehensive health checks and auto-healing capabilities. 
+**Need support?** All monitoring endpoints are live and the system includes comprehensive health checks and auto-healing capabilities. # Force rebuild with updated schema Thu Aug  7 21:24:05 SAST 2025
