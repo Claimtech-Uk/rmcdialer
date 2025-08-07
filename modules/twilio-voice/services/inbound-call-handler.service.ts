@@ -11,6 +11,7 @@ import {
   triggerBackgroundCallerLookup 
 } from './caller-lookup.service';
 import { createMissedCallSession } from './call-session.service';
+import { createMissedCallService } from '@/modules/missed-calls/services/missed-call.service';
 import { normalizePhoneNumber, calculateCallerPriority } from '../utils';
 import { getWebhookBaseUrl } from '../utils/twiml.utils';
 import { NameInfo, CallerInfo } from '../types/twilio-voice.types';
@@ -20,8 +21,9 @@ import { createInboundCallQueueService } from '@/modules/call-queue/services/inb
 import { INBOUND_CALL_FLAGS } from '@/lib/config/features';
 
 /**
- * Handle inbound calls with proper call session creation and agent routing
- * This is the main business logic for processing incoming calls
+ * 🎯 SIMPLIFIED: Handle inbound calls with 2 simple options
+ * 1. Out of hours → Play out of hours message and log missed call
+ * 2. In hours → Play busy message and log missed call
  */
 export async function handleInboundCall(
   callSid: string, 
@@ -30,224 +32,103 @@ export async function handleInboundCall(
   webhookData: any
 ): Promise<NextResponse> {
   try {
-    console.log(`📞 Processing inbound call from ${from} to ${to}`);
+    console.log(`📞 SIMPLIFIED: Processing inbound call from ${from} to ${to}`);
     
-    // 1. BUSINESS HOURS CHECK FIRST (for maximum efficiency)
+    // Business hours check
     const withinBusinessHours = isWithinBusinessHours();
     const businessStatus = businessHoursService.getBusinessHoursStatus();
     
-    console.log(`📅 Business hours check: ${withinBusinessHours ? 'OPEN' : 'CLOSED'} (${businessStatus.reason})`);
+    console.log(`📅 Business hours: ${withinBusinessHours ? 'OPEN' : 'CLOSED'} (${businessStatus.reason})`);
     
-    // 2. OUT-OF-HOURS FAST PATH - Lightweight processing for maximum speed
     if (!withinBusinessHours) {
+      // OUT OF HOURS: Play out of hours message and log missed call
+      console.log(`🕐 OUT OF HOURS: Playing out of hours message`);
       return await handleOutOfHoursCall(from, callSid);
-    }
-    
-    // 3. BUSINESS HOURS OPTIMIZED PATH - Lightweight lookup + background processing
-    console.log(`⏰ BUSINESS HOURS OPTIMIZED PATH: Fast name lookup + background full data`);
-    
-    // Lightweight name lookup for greeting personalization only
-    let nameInfo: NameInfo | null = null;
-    try {
-      nameInfo = await performLightweightNameLookup(from);
-    } catch (error) {
-      console.warn(`⚠️ Lightweight name lookup failed:`, error);
-    }
-    
-    const firstName = nameInfo?.firstName || '';
-    const callerName = nameInfo ? `${nameInfo.firstName} ${nameInfo.lastName}` : '';
-    const userId = nameInfo?.userId || null;
-    
-    if (nameInfo) {
-      console.log(`👤 Caller name found: ${callerName} (ID: ${userId}) - lightweight lookup`);
     } else {
-      console.log(`👤 Unknown caller: ${from} - will use generic greeting`);
+      // IN HOURS: Play busy message and log missed call
+      console.log(`⏰ IN HOURS: Playing busy message - everyone is busy`);
+      return await handleBusyHoursCall(from, callSid);
     }
-    
-    // Create minimal caller info for fast processing
-    const callerInfo = nameInfo ? {
-      user: {
-        id: nameInfo.userId!,
-        first_name: nameInfo.firstName,
-        last_name: nameInfo.lastName
-      },
-      priorityScore: 50 // Default priority for fast path
-    } : null;
-    
-    // Enhanced agent discovery with heartbeat and device validation
-    const validatedAgent = await findTrulyAvailableAgent();
-    console.log(`👥 Validated available agents: ${validatedAgent ? 1 : 0}`);
-    
-    // Determine the right message type based on agent availability
-    let messageType: 'connecting' | 'busy' | 'out_of_hours';
-    
-    if (!withinBusinessHours) {
-      messageType = 'out_of_hours';
-    } else if (validatedAgent) {
-      messageType = 'connecting'; 
-    } else {
-      messageType = 'busy';
-    }
-    
-    console.log(`🎵 Message type determined: ${messageType} (Hours: ${withinBusinessHours}, Agent: ${!!validatedAgent})`);
 
-    // 4. Determine call routing strategy based on feature flags and agent availability
-    if (INBOUND_CALL_FLAGS.ENHANCED_INBOUND_QUEUE && withinBusinessHours) {
-      // Use queue-based routing (Phase 2)
-      console.log('🔧 Using queue-based call routing');
-      return await routeCallThroughQueue(
-        from,
-        callSid,
-        firstName,
-        callerName,
-        callerInfo,
-        validatedAgent,
-        userId
-      );
-    } else {
-      // Use legacy direct routing (Phase 1)
-      console.log('🔧 Using legacy direct call routing');
-      
-      // Create call session for legacy routing
-      const callSession = await createCallSession(userId, callerInfo, from, callSid, validatedAgent);
-      
-      if (!validatedAgent) {
-        // No agents available during business hours
-        return await handleNoAgentsAvailable(from, firstName, callerName, userId, callSession);
-      }
-      
-      // Agents are available - proceed with direct call routing
-      return await routeCallToAgent(
-        from, 
-        callSid, 
-        firstName, 
-        callerName,
-        callerInfo,
-        validatedAgent,
-        callSession
-      );
+  } catch (error) {
+    console.error(`❌ Simplified inbound call handler error for ${callSid}:`, error);
+    
+    // Emergency missed call logging
+    try {
+      await createMissedCallSession(from, callSid, null, 'handler_error');
+      console.log('✅ Emergency missed call session created after handler error');
+    } catch (sessionError) {
+      console.error('❌ Failed to create emergency missed call session:', sessionError);
     }
     
-  } catch (error) {
-    console.error('❌ Error handling inbound call:', error);
-    
-    // Try to use Hume TTS even for error messages
-    try {
-      const errorHumeTTSService = new SimpleHumeTTSService();
-      const errorAudio = await errorHumeTTSService.generateBusyGreeting(); // Reuse busy greeting for errors
-      
-      return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Play>${errorAudio}</Play>
-    <Hangup/>
-</Response>`, {
-        status: 200,
-        headers: { 'Content-Type': 'application/xml' }
-      });
-    } catch (errorTTSError) {
-      console.error(`❌ Error message Hume TTS failed:`, errorTTSError);
-      
-      // Absolute emergency fallback
-      return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+    // Graceful error recovery with simple pause and hangup
+    return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Pause length="2"/>
     <Hangup/>
 </Response>`, {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/xml',
-        },
-      });
-    }
+      status: 200,
+      headers: {
+        'Content-Type': 'application/xml',
+      },
+    });
   }
 }
 
 // Helper functions
 
 /**
- * Enhanced agent discovery with heartbeat and device validation
- * Uses new heartbeat and device connectivity services when feature flags are enabled
+ * 🎯 FINAL BOSS: Agent discovery with comprehensive heartbeat validation
+ * Uses our new agent polling service with multi-tier heartbeat validation
  */
-async function findTrulyAvailableAgent(): Promise<any> {
+async function findTrulyAvailableAgentWithHeartbeat(): Promise<any> {
   try {
-    // If enhanced discovery is disabled, fall back to original logic
-    if (!INBOUND_CALL_FLAGS.ENHANCED_AGENT_DISCOVERY) {
-      console.log('🔧 Using legacy agent discovery (enhanced discovery disabled)');
-      return await findAvailableAgentLegacy();
-    }
+    console.log('🏆 FINAL BOSS: Using comprehensive heartbeat-validated agent discovery');
 
-    console.log('🔍 Using enhanced agent discovery with heartbeat and device validation');
-
-    // Get basic available agents from database
-    const candidateAgents = await prisma.agentSession.findMany({
-      where: {
-        status: 'available',
-        logoutAt: null,
-        agent: { isActive: true }
-      },
-      include: {
-        agent: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            isActive: true
+    // Use our enhanced agent polling service with heartbeat validation
+    const { createAgentPollingService } = await import('@/modules/agents/services/agent-polling.service');
+    const agentPollingService = createAgentPollingService(prisma);
+    
+    // This already includes our comprehensive heartbeat validation from findBestAgent
+    const bestAgent = await agentPollingService.findBestAgent([]);
+    
+    if (bestAgent) {
+      console.log(`🎯 FINAL BOSS: Found heartbeat-validated agent ${bestAgent.agentId}`, {
+        agentId: bestAgent.agentId,
+        readinessScore: bestAgent.readinessScore,
+        availability: bestAgent.availability,
+        currentCalls: bestAgent.currentCalls,
+        heartbeatValidated: true
+      });
+      
+      // Convert to format expected by routing functions
+      const agentSession = await prisma.agentSession.findFirst({
+        where: {
+          agentId: bestAgent.agentId,
+          logoutAt: null,
+          status: 'available'
+        },
+        include: {
+          agent: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              isActive: true
+            }
           }
         }
-      },
-      orderBy: { lastActivity: 'asc' },
-      take: 5 // Get top 5 candidates for validation
-    });
-
-    if (candidateAgents.length === 0) {
-      console.log('📭 No candidate agents found in database');
-      return null;
+      });
+      
+      return agentSession;
     }
 
-    console.log(`🔍 Found ${candidateAgents.length} candidate agents, validating readiness...`);
-
-    // Enhanced validation with heartbeat and device connectivity
-    const deviceConnectivityService = createDeviceConnectivityService(prisma);
-    
-    // Validate each candidate agent
-    for (const candidateAgent of candidateAgents) {
-      try {
-        const readiness = await deviceConnectivityService.validateAgentReadiness(candidateAgent.agentId);
-        
-        console.log(`🔍 Agent ${candidateAgent.agentId} readiness check:`, {
-          agentName: `${candidateAgent.agent.firstName} ${candidateAgent.agent.lastName}`,
-          isReady: readiness.isReady,
-          readinessScore: readiness.readinessScore,
-          deviceConnected: readiness.deviceConnected,
-          issues: readiness.issues
-        });
-
-        if (readiness.isReady && readiness.readinessScore >= INBOUND_CALL_FLAGS.AGENT_READINESS_THRESHOLD) {
-          console.log(`✅ Agent ${candidateAgent.agentId} (${candidateAgent.agent.firstName} ${candidateAgent.agent.lastName}) passed enhanced validation`);
-          return candidateAgent;
-        } else {
-          console.log(`❌ Agent ${candidateAgent.agentId} failed validation: ${readiness.issues.join(', ')}`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ Validation failed for agent ${candidateAgent.agentId}:`, error);
-        // Continue to next agent
-      }
-    }
-
-    console.log('📭 No agents passed enhanced validation, checking if we should fallback');
-
-    // If no agents pass enhanced validation but we have candidates, 
-    // decide whether to use fallback or return null
-    if (INBOUND_CALL_FLAGS.ENHANCED_AGENT_HEARTBEAT && candidateAgents.length > 0) {
-      console.log('🔄 Enhanced validation failed, falling back to legacy agent selection');
-      return candidateAgents[0]; // Use first candidate as fallback
-    }
-
+    console.log('📭 FINAL BOSS: No heartbeat-validated agents available');
     return null;
 
   } catch (error) {
-    console.error('❌ Enhanced agent discovery failed:', error);
+    console.error('❌ FINAL BOSS agent discovery failed:', error);
     console.log('🔄 Falling back to legacy agent discovery');
     return await findAvailableAgentLegacy();
   }
@@ -282,19 +163,19 @@ async function findAvailableAgentLegacy(): Promise<any> {
 }
 
 /**
- * Route call through queue system (Phase 2)
+ * 🎯 ALIGNED: Add call to queue and start continuous polling for agents
+ * Queue is ONLY for waiting callers - no fast-tracking or immediate assignments
  */
-async function routeCallThroughQueue(
+async function addToQueueAndStartPolling(
   from: string,
   callSid: string,
   firstName: string,
   callerName: string,
   callerInfo: any,
-  validatedAgent: any,
   userId: number | null
 ): Promise<NextResponse> {
   try {
-    console.log(`📋 Routing call ${callSid} through queue system`);
+    console.log(`📋 ALIGNED: Adding call ${callSid} to queue - no agents available`);
     
     // Initialize queue service
     const queueService = createInboundCallQueueService(prisma);
@@ -310,58 +191,42 @@ async function routeCallThroughQueue(
         firstName,
         originalTimestamp: new Date().toISOString(),
         businessHours: true,
-        agentAvailable: !!validatedAgent
+        waitingForAgent: true  // This caller is waiting for an agent to become available
       }
     };
 
-    if (validatedAgent) {
-      // Agent available - fast track through queue with immediate assignment
-      console.log(`⚡ Fast-tracking call ${callSid} - agent ${validatedAgent.agentId} available`);
-      
-      // Add to queue
-      const queuePosition = await queueService.enqueueCall(callInfo);
-      
-      // Immediately dequeue for assignment
-      const queuedCall = await queueService.dequeueNextCall();
-      
-      if (queuedCall) {
-        // Mark as assigned to the available agent
-        await prisma.inboundCallQueue.update({
-          where: { id: queuedCall.id },
-          data: {
-            status: 'connecting',
-            assignedToAgentId: validatedAgent.agentId,
-            assignedAt: new Date()
-          }
-        });
-
-        // Generate immediate connection TwiML
-        return await generateQueuedCallTwiML(queuedCall, validatedAgent, firstName);
-      }
-    }
-
-    // No immediate agent available - enter queue with hold music
-    console.log(`📋 Adding call ${callSid} to queue - no immediate agent available`);
-    
+    // Add to queue (ONLY waiting calls go in queue)
     const queuePosition = await queueService.enqueueCall(callInfo);
     
-    console.log(`📍 Call ${callSid} queued at position ${queuePosition.position}, estimated wait: ${queuePosition.estimatedWaitSeconds}s`);
+    console.log(`📍 ALIGNED: Call ${callSid} queued at position ${queuePosition.position} - continuous agent polling will begin`);
 
-    // Generate queue entry TwiML with welcome message and hold music
+    // Generate queue entry TwiML with hold music (caller waits here)
+    // The queue processor cron job will continuously poll for agents and assign when available
     return await generateQueueEntryTwiML(firstName, callerName, queuePosition);
 
   } catch (error) {
-    console.error('❌ Queue routing failed, falling back to legacy routing:', error);
+    console.error(`❌ Queue addition failed for call ${callSid}:`, error);
     
-    // Fallback to legacy routing on any queue error
-    const callSession = await createCallSession(userId, callerInfo, from, callSid, validatedAgent);
-    
-    if (validatedAgent) {
-      return await routeCallToAgent(from, callSid, firstName, callerName, callerInfo, validatedAgent, callSession);
-    } else {
-      return await handleNoAgentsAvailable(from, firstName, callerName, userId, callSession);
-    }
+    // Fall back to technical difficulties message
+    return new NextResponse(generateTechnicalDifficultiesTwiML(), {
+      status: 200,
+      headers: { 'Content-Type': 'application/xml' },
+    });
   }
+}
+
+/**
+ * 🎯 ALIGNED: Generate technical difficulties TwiML for fallback scenarios
+ */
+function generateTechnicalDifficultiesTwiML(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Amy">
+    We apologize, but we are currently experiencing technical difficulties. 
+    Please try calling again in a few minutes or contact us via our website.
+  </Say>
+  <Hangup/>
+</Response>`;
 }
 
 /**
@@ -919,6 +784,23 @@ async function handleOutOfHoursCall(from: string, callSid: string): Promise<Next
     console.error('❌ Failed to create out-of-hours missed call session:', sessionError);
     // Continue with greeting anyway
   }
+
+  // 🎯 NEW: Create missed call entry for priority callback system
+  try {
+    const missedCallService = createMissedCallService(prisma);
+    await missedCallService.createMissedCall({
+      phoneNumber: from,
+      callerName: callerName || undefined,
+      userId: nameInfo?.userId ? BigInt(nameInfo.userId) : undefined,
+      reason: 'out_of_hours',
+      twilioCallSid: callSid,
+      sessionId: undefined // Will be set when call session is created
+    });
+    console.log('✅ Out-of-hours missed call entry created for priority callback');
+  } catch (missedCallError) {
+    console.error('❌ Failed to create missed call entry:', missedCallError);
+    // Continue with greeting anyway
+  }
   
   // Generate out-of-hours greeting and hangup
   try {
@@ -985,4 +867,115 @@ async function handleOutOfHoursCall(from: string, callSid: string): Promise<Next
       }
     }
   }
-} 
+} /**
+ * 🎯 SIMPLIFIED: Handle busy hours calls (everyone is busy) with Hume TTS
+ * Always log as missed call for callback prioritization
+ */
+async function handleBusyHoursCall(from: string, callSid: string): Promise<NextResponse> {
+  console.log(`⏰ BUSY HOURS: Everyone is busy - playing busy message`);
+  
+  // Lightweight name lookup for greeting personalization only
+  let nameInfo: NameInfo | null = null;
+  try {
+    nameInfo = await performLightweightNameLookup(from);
+  } catch (error) {
+    console.warn(`⚠️ Lightweight name lookup failed:`, error);
+  }
+  
+  const firstName = nameInfo?.firstName || '';
+  const callerName = nameInfo ? `${nameInfo.firstName} ${nameInfo.lastName}` : '';
+  
+  console.log(`🎵 Generating busy greeting for ${callerName || from}`);
+  
+  // Create missed call session for proper tracking - this ensures callback prioritization
+  try {
+    await createMissedCallSession(from, callSid, nameInfo, 'agents_busy');
+    console.log('✅ Busy hours missed call logged successfully - will be prioritized for callback');
+  } catch (sessionError) {
+    console.error('❌ Failed to create busy hours missed call session:', sessionError);
+    // Continue with greeting anyway
+  }
+
+  // 🎯 NEW: Create missed call entry for priority callback system
+  try {
+    const missedCallService = createMissedCallService(prisma);
+    await missedCallService.createMissedCall({
+      phoneNumber: from,
+      callerName: callerName || undefined,
+      userId: nameInfo?.userId ? BigInt(nameInfo.userId) : undefined,
+      reason: 'agents_busy',
+      twilioCallSid: callSid,
+      sessionId: undefined // Will be set when call session is created
+    });
+    console.log('✅ Busy hours missed call entry created for priority callback');
+  } catch (missedCallError) {
+    console.error('❌ Failed to create missed call entry:', missedCallError);
+    // Continue with greeting anyway
+  }
+  
+  // Generate busy greeting and hangup
+  try {
+    const humeTTSService = new SimpleHumeTTSService();
+    const audioBase64 = await humeTTSService.generateBusyGreeting(firstName);
+    
+    console.log('✅ Busy hours Hume TTS greeting generated - hanging up');
+    return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>${audioBase64}</Play>
+    <Hangup/>
+</Response>`, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/xml',
+      },
+    });
+  } catch (error) {
+    console.warn(`⚠️ Hume TTS busy greeting failed, trying fallback:`, error instanceof Error ? error.message : String(error));
+    
+    // Fallback - try to generate basic Hume TTS without personalization
+    try {
+      const humeTTSService = new SimpleHumeTTSService();
+      const fallbackAudio = await humeTTSService.generateBusyGreeting(); // No caller name
+      
+      return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>${fallbackAudio}</Play>
+    <Hangup/>
+</Response>`, {
+        status: 200,
+        headers: { 'Content-Type': 'application/xml' }
+      });
+    } catch (fallbackError) {
+      console.error(`❌ Hume TTS fallback also failed:`, fallbackError);
+      
+      // Final fallback - still try basic Hume TTS
+      try {
+        const basicHumeTTSService = new SimpleHumeTTSService();
+        const basicAudio = await basicHumeTTSService.generateBusyGreeting(); // Basic version
+        
+        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Play>${basicAudio}</Play>
+    <Hangup/>
+</Response>`, {
+          status: 200,
+          headers: { 'Content-Type': 'application/xml' }
+        });
+      } catch (finalError) {
+        console.error(`❌ All Hume TTS attempts failed:`, finalError);
+        
+        // Absolute final fallback - emergency message
+        return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Pause length="1"/>
+    <Hangup/>
+</Response>`, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml',
+          },
+        });
+      }
+    }
+  }
+}

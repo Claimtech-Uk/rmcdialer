@@ -12,17 +12,17 @@ export async function GET(request: NextRequest) {
 
     const now = new Date();
     
-    // Clean up sessions that are clearly abandoned (no activity for 2+ hours)
+    // 🎯 ENHANCED: Clean up sessions that are clearly abandoned (no activity for 2+ hours)
     const result = await prisma.agentSession.updateMany({
       where: {
         logoutAt: null, // Only active sessions
-        status: { in: ['available', 'break'] }, // Don't touch on_call sessions
+        status: { in: ['available', 'break', 'on_call'] }, // Include stuck on_call sessions
         lastActivity: {
           lt: new Date(now.getTime() - 2 * 60 * 60 * 1000) // 2 hours old
         }
       },
       data: {
-        status: 'offline',
+        status: 'ended',  // Use proper ended status
         logoutAt: now,
         currentCallSessionId: null // Clear any stuck call references
       }

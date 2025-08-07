@@ -69,7 +69,9 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
       }
       
       // 3. User invalid - mark inactive and try next
-      await this.markUserInactive(user.userId, 'No longer has pending requirements or missing signature');
+      // Check if this should trigger a conversion (user completed requirements)
+      const shouldCheckConversion = await this.shouldLogConversionForUser(user.userId);
+      await this.markUserInactive(user.userId, 'No longer has pending requirements or missing signature', shouldCheckConversion);
       this.logger.warn(`⚠️ User ${user.userId} no longer qualifies for outstanding requests queue, trying next...`);
     }
     
@@ -89,7 +91,9 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
         where: { id: userId },
         include: {
           claims: {
-            include: {
+            select: {
+              id: true,
+              status: true,
               requirements: { 
                 where: { status: 'PENDING' },
                 select: { 
@@ -111,6 +115,16 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
       if (!userData.is_enabled) {
         this.logger.warn(`⚠️ User ${userId} is disabled`);
         return false;
+      }
+      
+      // Check if ALL claims are cancelled
+      if (userData.claims.length > 0) {
+        const allClaimsCancelled = userData.claims.every(claim => claim.status === 'cancelled');
+        if (allClaimsCancelled) {
+          this.logger.warn(`⚠️ User ${userId} has all claims cancelled (${userData.claims.length} claims) - adding penalty and skipping`);
+          await this.penalizeUserForCancelledClaims(userId);
+          return false;
+        }
       }
       
       const hasSignature = !!userData.current_signature_file_id;
@@ -158,9 +172,66 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
   }
 
   /**
-   * Mark user as inactive in user_call_scores AND remove from queue to prevent future pickup
+   * Check if user should trigger a conversion (completed requirements)
    */
-  private async markUserInactive(userId: bigint, reason: string): Promise<void> {
+  private async shouldLogConversionForUser(userId: bigint): Promise<{ hasSignature: boolean; pendingRequirements: number } | null> {
+    try {
+      const userData = await replicaDb.user.findUnique({
+        where: { id: userId },
+        select: { 
+          current_signature_file_id: true,
+          is_enabled: true,
+          claims: {
+            select: {
+              requirements: {
+                where: { status: 'PENDING' }
+              }
+            }
+          }
+        }
+      });
+      
+      if (!userData || !userData.is_enabled) {
+        return null;
+      }
+
+      const hasSignature = userData.current_signature_file_id !== null;
+      
+      // Count pending requirements (excluding standard filtered types)
+      const EXCLUDED_TYPES = [
+        'signature',
+        'vehicle_registration',
+        'cfa',
+        'solicitor_letter_of_authority',
+        'letter_of_authority'
+      ];
+      
+      const pendingRequirements = userData.claims.reduce((acc, claim) => {
+        const validRequirements = claim.requirements.filter(req => {
+          if (EXCLUDED_TYPES.includes(req.type || '')) {
+            return false;
+          }
+          if (req.type === 'id_document' && req.claim_requirement_reason === 'base requirement for claim.') {
+            return false;
+          }
+          return true;
+        });
+        return acc + validRequirements.length;
+      }, 0);
+
+      return { hasSignature, pendingRequirements };
+      
+    } catch (error) {
+      this.logger.error(`❌ Failed to check conversion status for user ${userId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Mark user as inactive in user_call_scores AND remove from queue to prevent future pickup
+   * ENHANCED: Now logs conversions when appropriate
+   */
+  private async markUserInactive(userId: bigint, reason: string, userStatus?: { hasSignature: boolean; pendingRequirements: number } | null): Promise<void> {
     try {
       // Update user_call_scores
       await this.prisma.userCallScore.updateMany({
@@ -188,8 +259,65 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
       
       this.logger.info(`🚫 Marked user ${userId} as inactive: ${reason}`);
       
+      // ENHANCEMENT: Log conversion if user completed all requirements
+      if (userStatus) {
+        const { ConversionLoggingService } = await import('../../discovery/services/conversion-logging.service');
+        const conversionCheck = ConversionLoggingService.shouldLogConversion(
+          'outstanding_requests',
+          null, // User is being removed from queue (moving to null)
+          userStatus
+        );
+
+        if (conversionCheck.shouldLog) {
+          await ConversionLoggingService.logConversion({
+            userId,
+            previousQueueType: 'outstanding_requests',
+            conversionType: conversionCheck.conversionType!,
+            conversionReason: conversionCheck.reason!,
+            source: 'pre_call_validation'
+          });
+        }
+      }
+      
     } catch (error) {
       this.logger.error(`❌ Failed to mark user ${userId} as inactive:`, error);
+      // Don't throw - this is cleanup, continue with next user
+    }
+  }
+
+  /**
+   * Add penalty score for users with all cancelled claims
+   */
+  private async penalizeUserForCancelledClaims(userId: bigint): Promise<void> {
+    try {
+      // Update user_call_scores - add 200 penalty points
+      await this.prisma.userCallScore.updateMany({
+        where: { userId: userId },
+        data: {
+          currentScore: { increment: 200 },
+          lastOutcome: 'All claims cancelled',
+          updatedAt: new Date()
+        }
+      });
+
+      // Also mark in queue as inactive to prevent future attempts
+      await this.prisma.outstandingRequestsQueue.updateMany({
+        where: { 
+          userId: userId,
+          status: 'pending'
+        },
+        data: {
+          status: 'inactive',
+          assignedToAgent: null,
+          assignedAt: null,
+          updatedAt: new Date()
+        }
+      });
+      
+      this.logger.info(`📈 Added 200 penalty points to user ${userId} for all cancelled claims`);
+      
+    } catch (error) {
+      this.logger.error(`❌ Failed to penalize user ${userId} for cancelled claims:`, error);
       // Don't throw - this is cleanup, continue with next user
     }
   }
@@ -387,8 +515,9 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
 
   /**
    * Remove user from queue (called by pre-call validation only)
+   * ENHANCED: Now logs conversions when users are removed due to completing requirements
    */
-  async removeUserFromQueue(userId: bigint): Promise<boolean> {
+  async removeUserFromQueue(userId: bigint, userStatus?: { hasSignature: boolean; pendingRequirements: number }): Promise<boolean> {
     this.logger.info(`🗑️ Removing user ${userId} from outstanding requests queue`);
 
     try {
@@ -400,6 +529,26 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
       
       if (removed) {
         this.logger.info(`✅ User ${userId} removed from outstanding requests queue`);
+        
+        // ENHANCEMENT: Log conversion if user completed all requirements
+        if (userStatus) {
+          const { ConversionLoggingService } = await import('../../discovery/services/conversion-logging.service');
+          const conversionCheck = ConversionLoggingService.shouldLogConversion(
+            'outstanding_requests',
+            null, // User is being removed from queue (moving to null)
+            userStatus
+          );
+
+          if (conversionCheck.shouldLog) {
+            await ConversionLoggingService.logConversion({
+              userId,
+              previousQueueType: 'outstanding_requests',
+              conversionType: conversionCheck.conversionType!,
+              conversionReason: conversionCheck.reason!,
+              source: 'pre_call_validation'
+            });
+          }
+        }
       } else {
         this.logger.warn(`⚠️ User ${userId} was not found in outstanding requests queue`);
       }

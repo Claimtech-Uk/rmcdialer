@@ -1,59 +1,52 @@
-// =============================================================================
-// Agent Heartbeat Service - Agents Module
-// =============================================================================
-// Tracks real-time agent availability and connectivity for inbound call routing
+import { PrismaClient } from '@prisma/client';
 
-import { PrismaClient, Prisma } from '@prisma/client';
-import { logger } from '@/modules/core';
-import { INBOUND_CALL_FLAGS } from '@/lib/config/features';
-
-// Dependencies that will be injected
-interface AgentHeartbeatDependencies {
-  prisma: PrismaClient;
-  logger: typeof logger;
-}
+/**
+ * Simplified Agent Heartbeat Service
+ * Adapted to work with production schema (no lastHeartbeat/deviceConnected fields)
+ */
 
 export interface AgentHeartbeatInfo {
   agentId: number;
-  isOnline: boolean;
-  lastHeartbeat: Date;
-  deviceConnected: boolean;
-  currentCallSessionId: string | null;
-  status: string;
+  lastActivity: Date;
 }
 
-export interface AgentReadinessCheck {
+export interface AgentValidationResult {
+  isValid: boolean;
   agentId: number;
-  isReady: boolean;
-  reasonIfNotReady: string | null;
-  lastHeartbeat: Date | null;
-  deviceConnected: boolean;
-  currentStatus: string;
+  lastActivity: Date | null;
+  reason: string;
+}
+
+interface AgentHeartbeatServiceDependencies {
+  prisma: PrismaClient;
+  logger?: any;
 }
 
 export class AgentHeartbeatService {
+  private deps: AgentHeartbeatServiceDependencies;
   private heartbeatCache = new Map<number, AgentHeartbeatInfo>();
-  private readonly HEARTBEAT_TIMEOUT = INBOUND_CALL_FLAGS.AGENT_HEARTBEAT_INTERVAL * 1000; // Convert to milliseconds
-  private readonly CACHE_TTL = 5000; // 5 seconds cache for performance
 
-  constructor(private deps: AgentHeartbeatDependencies) {}
+  constructor(deps: AgentHeartbeatServiceDependencies) {
+    this.deps = {
+      ...deps,
+      logger: deps.logger || console,
+    };
+  }
 
   /**
-   * Update agent heartbeat - called by frontend/agent applications
+   * Update agent heartbeat (simplified to only update lastActivity)
    */
-  async updateHeartbeat(agentId: number, deviceConnected: boolean = true): Promise<void> {
+  async updateHeartbeat(agentId: number): Promise<void> {
     const now = new Date();
-    
+
     try {
-      // Update database with heartbeat
+      // Update only active sessions with lastActivity
       await this.deps.prisma.agentSession.updateMany({
         where: {
           agentId,
           logoutAt: null, // Only update active sessions
         },
         data: {
-          lastHeartbeat: now,
-          deviceConnected,
           lastActivity: now
         }
       });
@@ -61,363 +54,127 @@ export class AgentHeartbeatService {
       // Update cache
       const heartbeatInfo: AgentHeartbeatInfo = {
         agentId,
-        isOnline: true,
-        lastHeartbeat: now,
-        deviceConnected,
-        currentCallSessionId: null, // Will be populated from DB if needed
-        status: 'available' // Will be updated from actual status
+        lastActivity: now,
       };
 
       this.heartbeatCache.set(agentId, heartbeatInfo);
+      this.deps.logger.info(`💓 Heartbeat updated for agent ${agentId}`);
 
-      if (INBOUND_CALL_FLAGS.INBOUND_CALL_DEBUG) {
-        this.deps.logger.info('Agent heartbeat updated', {
-          agentId,
-          deviceConnected,
-          timestamp: now.toISOString()
-        });
-      }
     } catch (error) {
-      this.deps.logger.error('Failed to update agent heartbeat', {
-        agentId,
-        error: error instanceof Error ? error.message : String(error)
-      });
+      this.deps.logger.error(`❌ Failed to update heartbeat for agent ${agentId}:`, error);
       throw error;
     }
   }
 
   /**
-   * Get all currently online agents based on recent heartbeats
+   * Validate agent heartbeat (simplified to check lastActivity)
    */
-  async getOnlineAgents(): Promise<AgentHeartbeatInfo[]> {
+  async validateAgentHeartbeat(agentId: number): Promise<AgentValidationResult> {
     try {
-      const heartbeatThreshold = new Date(Date.now() - this.HEARTBEAT_TIMEOUT);
-      
-      const onlineAgentSessions = await this.deps.prisma.agentSession.findMany({
+      const session = await this.deps.prisma.agentSession.findFirst({
         where: {
-          logoutAt: null,
-          lastHeartbeat: {
-            gte: heartbeatThreshold
-          },
-          agent: {
-            isActive: true
-          }
-        },
-        include: {
-          agent: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              isActive: true
-            }
-          }
+          agentId,
+          logoutAt: null, // Only check active sessions
         },
         orderBy: {
-          lastHeartbeat: 'desc'
+          lastActivity: 'desc'
         }
       });
 
-      const onlineAgents: AgentHeartbeatInfo[] = onlineAgentSessions.map(session => ({
-        agentId: session.agentId,
-        isOnline: true,
-        lastHeartbeat: session.lastHeartbeat || session.lastActivity,
-        deviceConnected: session.deviceConnected || false,
-        currentCallSessionId: session.currentCallSessionId,
-        status: session.status
-      }));
+      if (!session) {
+        return {
+          isValid: false,
+          agentId,
+          lastActivity: null,
+          reason: 'No active session found',
+        };
+      }
 
-      // Update cache
-      onlineAgents.forEach(agent => {
-        this.heartbeatCache.set(agent.agentId, agent);
-      });
+      const heartbeatThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes
+      const lastActivity = session.lastActivity;
+      const isValid = lastActivity >= heartbeatThreshold;
 
-      return onlineAgents;
+      return {
+        isValid,
+        agentId,
+        lastActivity,
+        reason: isValid ? 'Valid' : `Activity stale (${Math.round((Date.now() - lastActivity.getTime()) / 1000)}s ago)`,
+      };
+
     } catch (error) {
-      this.deps.logger.error('Failed to get online agents', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      throw error;
+      this.deps.logger.error(`❌ Failed to validate heartbeat for agent ${agentId}:`, error);
+      return {
+        isValid: false,
+        agentId,
+        lastActivity: null,
+        reason: 'Validation error',
+      };
     }
   }
 
   /**
-   * Check if specific agent is ready to take calls
+   * Get all agents with recent activity
    */
-  async isAgentReady(agentId: number): Promise<AgentReadinessCheck> {
+  async getActiveAgents(): Promise<AgentValidationResult[]> {
     try {
-      const heartbeatThreshold = new Date(Date.now() - this.HEARTBEAT_TIMEOUT);
-      
-      const agentSession = await this.deps.prisma.agentSession.findFirst({
+      const heartbeatThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes
+
+      const sessions = await this.deps.prisma.agentSession.findMany({
         where: {
-          agentId,
           logoutAt: null,
+          lastActivity: {
+            gte: heartbeatThreshold
+          }
         },
         include: {
-          agent: {
-            select: {
-              id: true,
-              isActive: true,
-              firstName: true,
-              lastName: true
-            }
-          }
+          agent: true
         }
       });
 
-      if (!agentSession) {
-        return {
-          agentId,
-          isReady: false,
-          reasonIfNotReady: 'No active session found',
-          lastHeartbeat: null,
-          deviceConnected: false,
-          currentStatus: 'offline'
-        };
-      }
-
-      if (!agentSession.agent.isActive) {
-        return {
-          agentId,
-          isReady: false,
-          reasonIfNotReady: 'Agent is inactive',
-          lastHeartbeat: agentSession.lastHeartbeat,
-          deviceConnected: agentSession.deviceConnected || false,
-          currentStatus: agentSession.status
-        };
-      }
-
-      const lastHeartbeat = agentSession.lastHeartbeat || agentSession.lastActivity;
-      const isHeartbeatRecent = lastHeartbeat >= heartbeatThreshold;
-      
-      if (!isHeartbeatRecent) {
-        return {
-          agentId,
-          isReady: false,
-          reasonIfNotReady: 'Heartbeat timeout - agent may be offline',
-          lastHeartbeat,
-          deviceConnected: agentSession.deviceConnected || false,
-          currentStatus: agentSession.status
-        };
-      }
-
-      if (agentSession.status !== 'available') {
-        return {
-          agentId,
-          isReady: false,
-          reasonIfNotReady: `Agent status is ${agentSession.status}`,
-          lastHeartbeat,
-          deviceConnected: agentSession.deviceConnected || false,
-          currentStatus: agentSession.status
-        };
-      }
-
-      if (!agentSession.deviceConnected) {
-        return {
-          agentId,
-          isReady: false,
-          reasonIfNotReady: 'Device not connected',
-          lastHeartbeat,
-          deviceConnected: false,
-          currentStatus: agentSession.status
-        };
-      }
-
-      // Agent is ready!
-      return {
-        agentId,
-        isReady: true,
-        reasonIfNotReady: null,
-        lastHeartbeat,
-        deviceConnected: true,
-        currentStatus: agentSession.status
-      };
+      return sessions.map(session => ({
+        isValid: true,
+        agentId: session.agentId,
+        lastActivity: session.lastActivity,
+        reason: 'Active'
+      }));
 
     } catch (error) {
-      this.deps.logger.error('Failed to check agent readiness', {
-        agentId,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      
-      return {
-        agentId,
-        isReady: false,
-        reasonIfNotReady: 'System error during readiness check',
-        lastHeartbeat: null,
-        deviceConnected: false,
-        currentStatus: 'unknown'
-      };
+      this.deps.logger.error('❌ Failed to get active agents:', error);
+      return [];
     }
   }
 
   /**
-   * Mark agent as offline due to timeout or explicit logout
+   * Cleanup stale sessions (simplified)
    */
-  async markAgentOffline(agentId: number, reason: string = 'heartbeat_timeout'): Promise<void> {
+  async cleanupStaleSessions(): Promise<{ cleaned: number }> {
     try {
-      await this.deps.prisma.agentSession.updateMany({
+      const staleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours
+
+      const result = await this.deps.prisma.agentSession.updateMany({
         where: {
-          agentId,
-          logoutAt: null,
+          lastActivity: {
+            lt: staleThreshold
+          },
+          logoutAt: null
         },
         data: {
-          status: 'offline',
-          deviceConnected: false,
-          lastActivity: new Date()
+          status: 'ended',
+          logoutAt: new Date()
         }
       });
 
-      // Remove from cache
-      this.heartbeatCache.delete(agentId);
+      this.deps.logger.info(`🧹 Cleaned up ${result.count} stale agent sessions`);
+      return { cleaned: result.count };
 
-      this.deps.logger.info('Agent marked offline', {
-        agentId,
-        reason,
-        timestamp: new Date().toISOString()
-      });
     } catch (error) {
-      this.deps.logger.error('Failed to mark agent offline', {
-        agentId,
-        reason,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Cleanup expired heartbeats - run periodically
-   */
-  async cleanupExpiredHeartbeats(): Promise<{ expiredCount: number }> {
-    try {
-      const heartbeatThreshold = new Date(Date.now() - this.HEARTBEAT_TIMEOUT);
-      
-      const expiredSessions = await this.deps.prisma.agentSession.findMany({
-        where: {
-          logoutAt: null,
-          status: { not: 'offline' },
-          OR: [
-            { lastHeartbeat: { lt: heartbeatThreshold } },
-            { lastHeartbeat: null, lastActivity: { lt: heartbeatThreshold } }
-          ]
-        },
-        select: {
-          agentId: true,
-          lastHeartbeat: true,
-          lastActivity: true
-        }
-      });
-
-      if (expiredSessions.length > 0) {
-        // Mark expired sessions as offline
-        const agentIds = expiredSessions.map(s => s.agentId);
-        
-        await this.deps.prisma.agentSession.updateMany({
-          where: {
-            agentId: { in: agentIds },
-            logoutAt: null
-          },
-          data: {
-            status: 'offline',
-            deviceConnected: false,
-            logoutAt: new Date(), // CRITICAL FIX: Set logout timestamp for proper session closure
-            lastActivity: new Date()
-          }
-        });
-
-        // Remove from cache
-        agentIds.forEach(agentId => {
-          this.heartbeatCache.delete(agentId);
-        });
-
-        this.deps.logger.info('Cleaned up expired agent heartbeats', {
-          expiredCount: expiredSessions.length,
-          agentIds,
-          heartbeatThreshold: heartbeatThreshold.toISOString()
-        });
-      }
-
-      return { expiredCount: expiredSessions.length };
-    } catch (error) {
-      this.deps.logger.error('Failed to cleanup expired heartbeats', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Get heartbeat statistics for monitoring
-   */
-  async getHeartbeatStats(): Promise<{
-    totalAgents: number;
-    onlineAgents: number;
-    availableAgents: number;
-    onCallAgents: number;
-    offlineAgents: number;
-  }> {
-    try {
-      const heartbeatThreshold = new Date(Date.now() - this.HEARTBEAT_TIMEOUT);
-      
-      const [totalAgents, onlineAgents, availableAgents, onCallAgents] = await Promise.all([
-        this.deps.prisma.agent.count({
-          where: { isActive: true }
-        }),
-        this.deps.prisma.agentSession.count({
-          where: {
-            logoutAt: null,
-            agent: { isActive: true },
-            OR: [
-              { lastHeartbeat: { gte: heartbeatThreshold } },
-              { lastHeartbeat: null, lastActivity: { gte: heartbeatThreshold } }
-            ]
-          }
-        }),
-        this.deps.prisma.agentSession.count({
-          where: {
-            logoutAt: null,
-            status: 'available',
-            agent: { isActive: true },
-            OR: [
-              { lastHeartbeat: { gte: heartbeatThreshold } },
-              { lastHeartbeat: null, lastActivity: { gte: heartbeatThreshold } }
-            ]
-          }
-        }),
-        this.deps.prisma.agentSession.count({
-          where: {
-            logoutAt: null,
-            status: 'on_call',
-            agent: { isActive: true },
-            OR: [
-              { lastHeartbeat: { gte: heartbeatThreshold } },
-              { lastHeartbeat: null, lastActivity: { gte: heartbeatThreshold } }
-            ]
-          }
-        })
-      ]);
-
-      return {
-        totalAgents,
-        onlineAgents,
-        availableAgents,
-        onCallAgents,
-        offlineAgents: totalAgents - onlineAgents
-      };
-    } catch (error) {
-      this.deps.logger.error('Failed to get heartbeat stats', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      throw error;
+      this.deps.logger.error('❌ Failed to cleanup stale sessions:', error);
+      return { cleaned: 0 };
     }
   }
 }
 
-// Factory function for dependency injection
+// Factory function
 export function createAgentHeartbeatService(prisma: PrismaClient): AgentHeartbeatService {
-  return new AgentHeartbeatService({
-    prisma,
-    logger
-  });
+  return new AgentHeartbeatService({ prisma });
 }

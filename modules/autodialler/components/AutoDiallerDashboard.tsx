@@ -300,6 +300,35 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
 
         {isActive && state === 'user_loaded' && currentUser && !isCallInterfaceActive && (
           <div className="max-w-5xl mx-auto space-y-6">
+            {/* 🚨 MISSED CALL PRIORITY ALERT - FULL WIDTH TOP BANNER */}
+            {(currentUser as any)?.isMissedCallCallback && (
+              <div className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white p-6 rounded-2xl shadow-2xl border-2 border-red-300 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-white/20 p-3 rounded-full">
+                      <RefreshCw className="w-8 h-8 text-white animate-spin-slow" />
+                    </div>
+                    <div>
+                      <div className="text-2xl font-black uppercase tracking-wide">
+                        🚨 PRIORITY: MISSED CALL CALLBACK
+                      </div>
+                      <div className="text-lg font-semibold mt-1 opacity-90">
+                        Customer called {(currentUser as any)?.missedCallData?.missedAt && 
+                          `${Math.round((Date.now() - new Date((currentUser as any).missedCallData.missedAt).getTime()) / (1000 * 60))} minutes ago`}
+                        {' '}• Reason: {(currentUser as any)?.missedCallData?.reason === 'out_of_hours' ? 'Called outside business hours' : 'All agents were busy'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="bg-white/30 px-6 py-3 rounded-xl border-2 border-white/40">
+                      <div className="text-xl font-black uppercase tracking-wider">URGENT</div>
+                      <div className="text-sm font-bold opacity-90">Call Back Now</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* User Header Card */}
             <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm">
               <CardHeader className={`bg-gradient-to-r ${teamConfig.color.gradient} text-white py-10 border-b-2 border-white/20 relative overflow-hidden`}>
@@ -326,7 +355,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                     </div>
                   </div>
                   
-                  {/* Quick Stats */}
+                  {/* Quick Stats - No overlap now that missed call banner is separate */}
                   <div className="text-right">
                     <div className="bg-white/40 rounded-2xl p-6 backdrop-blur-sm shadow-2xl border-3 border-white/50">
                       <div className="text-sm text-white font-black mb-2 uppercase tracking-wider drop-shadow-lg">Active Claims</div>

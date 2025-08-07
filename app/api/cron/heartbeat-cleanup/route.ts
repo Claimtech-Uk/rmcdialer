@@ -22,22 +22,27 @@ export async function GET(request: NextRequest) {
 
     const heartbeatService = createAgentHeartbeatService(prisma);
 
-    // Cleanup expired heartbeats
-    const result = await heartbeatService.cleanupExpiredHeartbeats();
+    // 🎯 SIMPLIFIED: Basic stale session cleanup
+    const result = await heartbeatService.cleanupStaleSessions();
 
-    console.log(`✅ Heartbeat cleanup completed`, {
-      expiredCount: result.expiredCount,
+    const totalCleaned = result.cleaned;
+    
+    console.log(`✅ Simplified heartbeat cleanup completed`, {
+      cleaned: result.cleaned,
+      totalCleaned,
       timestamp: new Date().toISOString()
     });
 
-    // Get updated stats after cleanup
-    const stats = await heartbeatService.getHeartbeatStats();
+    // Get updated stats after cleanup (simplified)
+    const activeAgents = await heartbeatService.getActiveAgents();
+    const stats = { active: activeAgents.length, total: activeAgents.length };
 
     return NextResponse.json({
       success: true,
-      message: 'Heartbeat cleanup completed successfully',
+      message: 'Enhanced heartbeat cleanup completed successfully',
       result: {
-        expiredAgentsCleanedUp: result.expiredCount,
+        cleaned: result.cleaned,
+        totalCleaned,
         currentStats: stats,
         timestamp: new Date().toISOString()
       }

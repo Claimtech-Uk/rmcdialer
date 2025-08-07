@@ -50,7 +50,9 @@ const InitiateCallSchema = z.object({
   queueId: z.string().uuid().optional(),
   phoneNumber: z.string().optional(),
   direction: z.enum(['outbound', 'inbound']).default('outbound'),
-  twilioCallSid: z.string().optional() // For matching existing webhook sessions
+  twilioCallSid: z.string().optional(), // For matching existing webhook sessions
+  callSource: z.string().optional(), // 🎯 NEW: 'missed_call', 'queue', 'manual'
+  missedCallId: z.string().uuid().optional() // 🎯 NEW: For missed call tracking
 });
 
 // Enhanced schema with UUID validation
@@ -162,7 +164,9 @@ export const callsRouter = createTRPCRouter({
           agentId: ctx.agent.id,
           queueId: input.queueId,
           direction: input.direction,
-          phoneNumber: input.phoneNumber
+          phoneNumber: input.phoneNumber,
+          callSource: input.callSource,
+          missedCallId: input.missedCallId
         };
 
         logger.info('Calling callService.initiateCall with options:', callOptions);

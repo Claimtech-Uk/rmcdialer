@@ -590,11 +590,25 @@ export function CallInterface({
         
         console.log(`📋 Creating session - Direction: ${direction}, CallSid: ${twilioCallSid}`);
         
+        // 🎯 MISSED CALL: Check if this is a missed call callback and prepare context
+        const isMissedCallCallback = (userContext as any)?.isMissedCallCallback;
+        const missedCallData = (userContext as any)?.missedCallData;
+        
+        if (isMissedCallCallback) {
+          console.log('🔄 MISSED CALL CALLBACK: Creating session with missed call context', {
+            missedCallId: missedCallData?.id,
+            reason: missedCallData?.reason,
+            missedAt: missedCallData?.missedAt
+          });
+        }
+        
         initiateCallMutation.mutate({
           userId,
           direction,
           phoneNumber,
-          twilioCallSid // Pass CallSid to help backend find existing session
+          twilioCallSid, // Pass CallSid to help backend find existing session
+          callSource: isMissedCallCallback ? 'missed_call' : undefined, // 🎯 Set call source
+          missedCallId: missedCallData?.id // 🎯 Pass missed call ID for cleanup
         });
       }
     }
@@ -856,7 +870,43 @@ export function CallInterface({
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* 🚨 MISSED CALL CALLBACK BANNER - ENHANCED */}
+      {(userContext as any)?.isMissedCallCallback && (
+        <div className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white p-6 rounded-2xl shadow-2xl border-4 border-red-300 mb-8 animate-pulse">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="bg-white/20 p-3 rounded-full">
+                <RefreshCw className="h-8 w-8 text-white animate-spin-slow" />
+              </div>
+              <div>
+                <div className="flex items-center gap-3 text-2xl font-black uppercase tracking-wide mb-2">
+                  🚨 URGENT: MISSED CALL CALLBACK
+                </div>
+                <div className="text-lg font-semibold opacity-90">
+                  Customer called {(userContext as any)?.missedCallData?.missedAt && 
+                    `${Math.round((Date.now() - new Date((userContext as any).missedCallData.missedAt).getTime()) / (1000 * 60))} minutes ago`}
+                  {' '}• {(userContext as any)?.missedCallData?.reason === 'out_of_hours' ? 'Called outside business hours' : 'All agents were busy'}
+                </div>
+                <div className="text-base font-medium mt-1 opacity-80">
+                  Priority callback - They are expecting our call
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="bg-white/30 px-6 py-4 rounded-xl border-2 border-white/40">
+                <div className="text-xl font-black uppercase tracking-wider">TOP PRIORITY</div>
+                <div className="text-sm font-bold opacity-90 mt-1">Handle Immediately</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div 
+        className="grid grid-cols-1 lg:grid-cols-3 gap-6 call-interface"
+        data-in-call={isInCall ? 'true' : 'false'}
+        data-call-active={isInCall ? 'true' : 'false'}
+      >
         {/* Main Content Panel */}
         <div className="lg:col-span-2 space-y-6">
           {/* Customer Information */}

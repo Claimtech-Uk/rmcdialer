@@ -117,12 +117,17 @@ export const authRouter = createTRPCRouter({
       }
     }),
 
-  // Logout agent and end session
+  // 🎯 ENHANCED: Logout agent with availability-preserving logic
   logout: protectedProcedure
-    .mutation(async ({ ctx }) => {
+    .input(z.object({ forceOffline: z.boolean().optional().default(false) }))
+    .mutation(async ({ input, ctx }) => {
       try {
-        await authService.logout(ctx.agent.id)
-        return { success: true }
+        await authService.logout(ctx.agent.id, input.forceOffline)
+        return { 
+          success: true,
+          status: input.forceOffline ? 'offline' : 'break',
+          preservedSession: !input.forceOffline
+        }
       } catch (error) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',

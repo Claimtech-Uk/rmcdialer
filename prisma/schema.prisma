@@ -8,34 +8,37 @@ datasource db {
 }
 
 model Agent {
-  id                  Int                    @id @default(autoincrement())
-  email               String                 @unique
-  passwordHash        String                 @map("password_hash")
-  firstName           String                 @map("first_name")
-  lastName            String                 @map("last_name")
-  role                String                 @default("agent")
-  team                String                 @default("general") // NEW: Team assignment
-  allowedQueues       Json                   @default("[\"unsigned_users\", \"outstanding_requests\"]") @map("allowed_queues") // NEW: Queue access control
-  isActive            Boolean                @default(true) @map("is_active")
-  isAiAgent           Boolean                @default(false) @map("is_ai_agent")
-  twilioWorkerSid     String?                @map("twilio_worker_sid")
-  createdAt           DateTime               @default(now()) @map("created_at")
-  updatedAt           DateTime               @updatedAt @map("updated_at")
-  sessions            AgentSession[]
-  callOutcomes        CallOutcome[]
-  assignedCalls       CallQueue[]            @relation("AssignedAgent")
-  callSessions        CallSession[]
-  callSessionOutcomes CallSession[]          @relation("CallSessionLastOutcome")
-  callbacks           Callback[]
+  id                    Int                    @id @default(autoincrement())
+  email                 String                 @unique
+  passwordHash          String                 @map("password_hash")
+  firstName             String                 @map("first_name")
+  lastName              String                 @map("last_name")
+  role                  String                 @default("agent")
+  team                  String                 @default("general")
+  allowedQueues         Json                   @default("[\"unsigned_users\", \"outstanding_requests\"]") @map("allowed_queues")
+  isActive              Boolean                @default(true) @map("is_active")
+  isAiAgent             Boolean                @default(false) @map("is_ai_agent")
+  twilioWorkerSid       String?                @map("twilio_worker_sid")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  created_by            Int?
+  last_login_at         DateTime?
+  updated_by            Int?
+  sessions              AgentSession[]
+  autoDialerSettings    AutoDialerSettings?
+  callOutcomes          CallOutcome[]
+  assignedCalls         CallQueue[]            @relation("AssignedAgent")
+  callSessions          CallSession[]
+  callSessionOutcomes   CallSession[]          @relation("CallSessionLastOutcome")
   callbackNotifications CallbackNotification[]
-  primaryConversions  Conversion[]           @relation("PrimaryConversions")
-  magicLinkActivities MagicLinkActivity[]
-  shortUrls           ShortUrl[]
-  smsConversations    SmsConversation[]
-  autoDialerSettings  AutoDialerSettings?    // NEW: Auto-dialer preferences
-  // PHASE 2: Queue system relations
-  queueAssignments    InboundCallQueue[]     @relation("QueueAssignedAgent")
-  queueAttempts       InboundCallQueue[]     @relation("QueueLastAttemptAgent")
+  callbacks             Callback[]
+  primaryConversions    Conversion[]           @relation("PrimaryConversions")
+  magicLinkActivities   MagicLinkActivity[]
+  shortUrls             ShortUrl[]
+  smsConversations      SmsConversation[]
+
+  // MISSED CALLS: Priority callback system
+  assignedMissedCalls MissedCall[]           @relation("MissedCallAssignedAgent")
 
   @@map("agents")
 }
@@ -50,65 +53,13 @@ model AgentSession {
   lastActivity            DateTime  @default(now()) @map("last_activity")
   callsCompletedToday     Int       @default(0) @map("calls_completed_today")
   totalTalkTimeSeconds    Int       @default(0) @map("total_talk_time_seconds")
-  // NEW: Auto-dialer session fields
   autoDialerActive        Boolean   @default(false) @map("auto_dialer_active")
   autoDialerQueueType     String?   @map("auto_dialer_queue_type")
   lastAutoCallAt          DateTime? @map("last_auto_call_at")
   callsCompletedInSession Int       @default(0) @map("calls_completed_in_session")
-  // NEW: Enhanced agent availability fields
-  lastHeartbeat           DateTime? @map("last_heartbeat")
-  deviceConnected         Boolean   @default(false) @map("device_connected")
-  maxConcurrentCalls      Int       @default(1) @map("max_concurrent_calls")
   agent                   Agent     @relation(fields: [agentId], references: [id])
 
-  @@index([lastHeartbeat, deviceConnected, status], map: "idx_agent_sessions_heartbeat")
-  @@index([agentId, status, logoutAt, lastHeartbeat], map: "idx_agent_sessions_availability")
   @@map("agent_sessions")
-}
-
-// =============================================================================
-// PHASE 2: Queue-Based Call Holding System
-// =============================================================================
-
-model InboundCallQueue {
-  id                    String    @id @default(uuid()) @db.Uuid
-  twilioCallSid         String    @unique @map("twilio_call_sid")
-  callerPhone           String    @map("caller_phone")
-  callerName            String?   @map("caller_name")
-  userId                BigInt?   @map("user_id")
-  priorityScore         Int       @default(0) @map("priority_score")
-  queuePosition         Int?      @map("queue_position")
-  estimatedWaitSeconds  Int?      @map("estimated_wait_seconds")
-  enteredQueueAt        DateTime  @default(now()) @map("entered_queue_at")
-  assignedToAgentId     Int?      @map("assigned_to_agent_id")
-  assignedAt            DateTime? @map("assigned_at")
-  status                String    @default("waiting") // waiting, assigned, connecting, connected, abandoned, completed
-  attemptsCount         Int       @default(0) @map("attempts_count")
-  lastAttemptAt         DateTime? @map("last_attempt_at")
-  lastAttemptAgentId    Int?      @map("last_attempt_agent_id")
-  abandonedAt           DateTime? @map("abandoned_at")
-  connectedAt           DateTime? @map("connected_at")
-  completedAt           DateTime? @map("completed_at")
-  totalWaitSeconds      Int?      @map("total_wait_seconds")
-  maxWaitReached        Boolean   @default(false) @map("max_wait_reached")
-  callbackOffered       Boolean   @default(false) @map("callback_offered")
-  callbackAccepted      Boolean   @default(false) @map("callback_accepted")
-  metadata              Json?     // Store additional call context
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
-
-  // Relations (optional - not enforced to maintain data safety)
-  assignedAgent         Agent?    @relation("QueueAssignedAgent", fields: [assignedToAgentId], references: [id], onDelete: SetNull)
-  lastAttemptAgent      Agent?    @relation("QueueLastAttemptAgent", fields: [lastAttemptAgentId], references: [id], onDelete: SetNull)
-
-  // Indexes for efficient queue operations
-  @@index([status, priorityScore], map: "idx_queue_status_priority")
-  @@index([queuePosition], map: "idx_queue_position")
-  @@index([callerPhone], map: "idx_queue_caller_phone")
-  @@index([enteredQueueAt, status], map: "idx_queue_entry_time")
-  @@index([assignedToAgentId, status], map: "idx_queue_agent_assignment")
-  @@index([twilioCallSid], map: "idx_queue_twilio_sid")
-  @@map("inbound_call_queue")
 }
 
 model UserCallScore {
@@ -137,26 +88,22 @@ model UserCallScore {
   @@map("user_call_scores")
 }
 
-// New separated queue tables (will be created after main migration)
 model UnsignedUsersQueue {
-  id                    String          @id @default(uuid()) @db.Uuid
-  userId                BigInt          @unique @map("user_id")
-  claimId               BigInt?         @map("claim_id")
-  priorityScore         Int             @default(0) @map("priority_score")
-  queuePosition         Int             @map("queue_position")
-  status                String          @default("pending")
-  queueReason           String?         @map("queue_reason")
-  
-  // Unsigned-specific fields
-  signatureMissingSince DateTime?       @map("signature_missing_since")
-  signatureType         String?         @map("signature_type") // 'initial', 'correction', 'amendment'
-  
-  availableFrom         DateTime        @default(now()) @map("available_from")
-  assignedToAgent       Int?            @map("assigned_to_agent")
-  assignedAt            DateTime?       @map("assigned_at")
-  createdAt             DateTime        @default(now()) @map("created_at")
-  updatedAt             DateTime        @updatedAt @map("updated_at")
-  
+  id                    String    @id @default(uuid()) @db.Uuid
+  userId                BigInt    @unique @map("user_id")
+  claimId               BigInt?   @map("claim_id")
+  priorityScore         Int       @default(0) @map("priority_score")
+  queuePosition         Int       @map("queue_position")
+  status                String    @default("pending")
+  queueReason           String?   @map("queue_reason")
+  signatureMissingSince DateTime? @map("signature_missing_since")
+  signatureType         String?   @map("signature_type")
+  availableFrom         DateTime  @default(now()) @map("available_from")
+  assignedToAgent       Int?      @map("assigned_to_agent")
+  assignedAt            DateTime? @map("assigned_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
   @@index([status, priorityScore])
   @@index([availableFrom])
   @@index([queuePosition])
@@ -164,27 +111,24 @@ model UnsignedUsersQueue {
 }
 
 model OutstandingRequestsQueue {
-  id                    String          @id @default(uuid()) @db.Uuid
-  userId                BigInt          @unique @map("user_id")
-  claimId               BigInt?         @map("claim_id")
-  priorityScore         Int             @default(0) @map("priority_score")
-  queuePosition         Int             @map("queue_position")
-  status                String          @default("pending")
-  queueReason           String?         @map("queue_reason")
-  
-  // Outstanding requests specific fields
-  requirementTypes      Json            @default("[]") @map("requirement_types") // Array of requirement types
-  totalRequirements     Int             @default(0) @map("total_requirements")
-  pendingRequirements   Int             @default(0) @map("pending_requirements")
-  completedRequirements Int             @default(0) @map("completed_requirements")
-  oldestRequirementDate DateTime?       @map("oldest_requirement_date")
-  
-  availableFrom         DateTime        @default(now()) @map("available_from")
-  assignedToAgent       Int?            @map("assigned_to_agent")
-  assignedAt            DateTime?       @map("assigned_at")
-  createdAt             DateTime        @default(now()) @map("created_at")
-  updatedAt             DateTime        @updatedAt @map("updated_at")
-  
+  id                    String    @id @default(uuid()) @db.Uuid
+  userId                BigInt    @unique @map("user_id")
+  claimId               BigInt?   @map("claim_id")
+  priorityScore         Int       @default(0) @map("priority_score")
+  queuePosition         Int       @map("queue_position")
+  status                String    @default("pending")
+  queueReason           String?   @map("queue_reason")
+  requirementTypes      Json      @default("[]") @map("requirement_types")
+  totalRequirements     Int       @default(0) @map("total_requirements")
+  pendingRequirements   Int       @default(0) @map("pending_requirements")
+  completedRequirements Int       @default(0) @map("completed_requirements")
+  oldestRequirementDate DateTime? @map("oldest_requirement_date")
+  availableFrom         DateTime  @default(now()) @map("available_from")
+  assignedToAgent       Int?      @map("assigned_to_agent")
+  assignedAt            DateTime? @map("assigned_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
   @@index([status, priorityScore])
   @@index([availableFrom])
   @@index([queuePosition])
@@ -262,7 +206,6 @@ model CallSession {
   agent                    Agent               @relation(fields: [agentId], references: [id])
   callQueue                CallQueue           @relation(fields: [callQueueId], references: [id])
   lastOutcomeAgent         Agent?              @relation("CallSessionLastOutcome", fields: [lastOutcomeAgentId], references: [id])
-  originatedCallbacks      Callback[]          @relation("CallbackOrigin")
   magicLinkActivities      MagicLinkActivity[]
 
   @@index([createdAt])
@@ -301,9 +244,8 @@ model Callback {
   completedCallSessionId String?                @map("completed_call_session_id") @db.Uuid
   createdAt              DateTime               @default(now()) @map("created_at")
   callQueue              CallQueue[]
-  preferredAgent         Agent?                 @relation(fields: [preferredAgentId], references: [id])
-  originalCallSession    CallSession            @relation("CallbackOrigin", fields: [originalCallSessionId], references: [id])
   notifications          CallbackNotification[]
+  preferredAgent         Agent?                 @relation(fields: [preferredAgentId], references: [id])
 
   @@index([scheduledFor])
   @@index([status])
@@ -311,16 +253,16 @@ model Callback {
 }
 
 model CallbackNotification {
-  id               String   @id @default(uuid()) @db.Uuid
-  callbackId       String   @map("callback_id") @db.Uuid
-  agentId          Int?     @map("agent_id")
-  notificationType String   @map("notification_type") // 'five_minute_reminder', 'immediate_queue', etc.
-  status           String   @default("pending") // 'pending', 'sent', 'failed'
+  id               String    @id @default(uuid()) @db.Uuid
+  callbackId       String    @map("callback_id") @db.Uuid
+  agentId          Int?      @map("agent_id")
+  notificationType String    @map("notification_type")
+  status           String    @default("pending")
   sentAt           DateTime? @map("sent_at")
-  errorMessage     String?  @map("error_message")
-  createdAt        DateTime @default(now()) @map("created_at")
-  callback         Callback @relation(fields: [callbackId], references: [id], onDelete: Cascade)
-  agent            Agent?   @relation(fields: [agentId], references: [id])
+  errorMessage     String?   @map("error_message")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  agent            Agent?    @relation(fields: [agentId], references: [id])
+  callback         Callback  @relation(fields: [callbackId], references: [id], onDelete: Cascade)
 
   @@index([callbackId])
   @@index([agentId])
@@ -451,4 +393,35 @@ model AutoDialerSettings {
   @@map("auto_dialer_settings")
 }
 
+// =============================================================================
+// MISSED CALLS PRIORITY SYSTEM
+// =============================================================================
 
+model MissedCall {
+  id                  String    @id @default(uuid()) @db.Uuid
+  phoneNumber         String    @map("phone_number") @db.VarChar(20)
+  callerName          String?   @map("caller_name") @db.VarChar(255)
+  userId              BigInt?   @map("user_id")
+  missedAt            DateTime  @default(now()) @map("missed_at")
+  reason              String    @map("reason") @db.VarChar(50) // 'out_of_hours', 'agents_busy'
+  
+  // State management (simplified: only pending or assigned)
+  status              String    @default("pending") @map("status") @db.VarChar(20) // 'pending', 'assigned'
+  assignedToAgentId   Int?      @map("assigned_to_agent_id")
+  assignedAt          DateTime? @map("assigned_at")
+  
+  // Reference tracking
+  twilioCallSid       String?   @map("twilio_call_sid") @db.VarChar(255)
+  sessionId           String?   @map("session_id") @db.VarChar(255)
+  
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  assignedAgent       Agent?    @relation("MissedCallAssignedAgent", fields: [assignedToAgentId], references: [id], onDelete: SetNull)
+
+  // Indexes for performance
+  @@index([status, missedAt], map: "idx_missed_calls_status_missed_at")
+  @@index([assignedToAgentId], map: "idx_missed_calls_assigned_agent")
+  @@index([phoneNumber], map: "idx_missed_calls_phone_number")
+  @@map("missed_calls")
+}

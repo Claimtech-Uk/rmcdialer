@@ -131,20 +131,23 @@ export class AgentPollingService {
 
       for (const session of agentSessions) {
         try {
-          // Get readiness score using enhanced validation
+          // 🎯 FINAL BOSS: Enhanced validation with heartbeat + device connectivity
           const readiness = await deviceConnectivityService.validateAgentReadiness(session.agentId);
+          
+          // 🎯 FINAL BOSS: Additional heartbeat validation for double-checking
+          const heartbeatValidation = await heartbeatService.validateAgentHeartbeat(session.agentId);
           
           // Get current call count
           const currentCalls = await this.getCurrentCallCount(session.agentId);
           
           // Determine availability level
           let availability: 'excellent' | 'good' | 'fair' | 'poor' = 'poor';
-          if (readiness.readinessScore >= 90) availability = 'excellent';
-          else if (readiness.readinessScore >= 80) availability = 'good';
-          else if (readiness.readinessScore >= 70) availability = 'fair';
+          if (readiness.readinessScore >= 90 && heartbeatValidation.isValid) availability = 'excellent';
+          else if (readiness.readinessScore >= 80 && heartbeatValidation.isValid) availability = 'good';
+          else if (readiness.readinessScore >= 70 && heartbeatValidation.isValid) availability = 'fair';
 
-          // Only include agents that meet minimum readiness threshold
-          if (readiness.isReady && readiness.readinessScore >= this.READINESS_THRESHOLD) {
+          // 🎯 FINAL BOSS: Only include agents that pass BOTH validations
+          if (readiness.isReady && heartbeatValidation.isValid && readiness.readinessScore >= this.READINESS_THRESHOLD) {
             availableAgents.push({
               agentId: session.agentId,
               agentSessionId: session.id,
@@ -158,10 +161,13 @@ export class AgentPollingService {
             });
           } else {
             if (INBOUND_CALL_FLAGS.INBOUND_CALL_DEBUG) {
-              console.log(`❌ Agent ${session.agentId} failed readiness check`, {
-                isReady: readiness.isReady,
-                score: readiness.readinessScore,
-                threshold: this.READINESS_THRESHOLD
+              console.log(`❌ FINAL BOSS: Agent ${session.agentId} failed validation`, {
+                deviceReady: readiness.isReady,
+                readinessScore: readiness.readinessScore,
+                threshold: this.READINESS_THRESHOLD,
+                heartbeatValid: heartbeatValidation.isValid,
+                heartbeatReason: heartbeatValidation.reason,
+                heartbeatLastSeen: heartbeatValidation.lastHeartbeat?.toISOString()
               });
             }
           }
@@ -193,7 +199,7 @@ export class AgentPollingService {
   }
 
   /**
-   * Find the best agent for assignment with multi-agent fallback
+   * 🎯 ENHANCED: Find the best agent with comprehensive heartbeat validation
    */
   async findBestAgent(excludeAgentIds: number[] = []): Promise<AvailableAgent | null> {
     try {
@@ -210,20 +216,64 @@ export class AgentPollingService {
         return null;
       }
 
-      // Return the highest scoring available agent
-      const bestAgent = eligibleAgents[0];
+      // 🎯 NEW: Comprehensive heartbeat validation for eligible agents
+      const heartbeatService = createAgentHeartbeatService(this.deps.prisma);
+      const agentIds = eligibleAgents.map(a => a.agentId);
+      const heartbeatValidations = await heartbeatService.validateMultipleAgentHeartbeats(agentIds);
+
+      // Filter agents by heartbeat validation
+      const heartbeatValidAgents = eligibleAgents.filter(agent => {
+        const validation = heartbeatValidations.get(agent.agentId);
+        
+        if (!validation?.isValid) {
+          if (INBOUND_CALL_FLAGS.INBOUND_CALL_DEBUG) {
+            console.log(`⚠️ Agent ${agent.agentId} excluded due to heartbeat validation: ${validation?.reason}`);
+          }
+          return false;
+        }
+
+        // Warn about agents close to timeout but still include them
+        if (validation.timeoutWarning) {
+          console.log(`⏰ Agent ${agent.agentId} has timeout warning but is still valid`);
+        }
+
+        return true;
+      });
+
+      if (heartbeatValidAgents.length === 0) {
+        console.log('💔 No agents passed heartbeat validation - all agents may be experiencing connectivity issues');
+        
+        // Log detailed validation results for debugging
+        if (INBOUND_CALL_FLAGS.INBOUND_CALL_DEBUG) {
+          eligibleAgents.forEach(agent => {
+            const validation = heartbeatValidations.get(agent.agentId);
+            console.log(`  Agent ${agent.agentId}: ${validation?.isValid ? 'VALID' : 'INVALID'} - ${validation?.reason || 'No reason'}`);
+          });
+        }
+        
+        return null;
+      }
+
+      // Return the highest scoring heartbeat-validated agent
+      const bestAgent = heartbeatValidAgents[0];
+      const bestAgentValidation = heartbeatValidations.get(bestAgent.agentId);
       
-      console.log(`🎯 Best agent selected: ${bestAgent.agentId}`, {
+      console.log(`🎯 Best agent selected (with heartbeat validation): ${bestAgent.agentId}`, {
         readinessScore: bestAgent.readinessScore,
         availability: bestAgent.availability,
         currentCalls: bestAgent.currentCalls,
-        maxCalls: bestAgent.maxConcurrentCalls
+        maxCalls: bestAgent.maxConcurrentCalls,
+        heartbeatValid: bestAgentValidation?.isValid,
+        lastHeartbeat: bestAgentValidation?.lastHeartbeat?.toISOString(),
+        timeoutWarning: bestAgentValidation?.timeoutWarning,
+        totalEligible: eligibleAgents.length,
+        heartbeatValidCount: heartbeatValidAgents.length
       });
 
       return bestAgent;
 
     } catch (error) {
-      this.deps.logger.error('Failed to find best agent', {
+      this.deps.logger.error('Failed to find best agent with heartbeat validation', {
         error: error instanceof Error ? error.message : String(error)
       });
       return null;

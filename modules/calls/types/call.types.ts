@@ -50,6 +50,8 @@ export interface CallSessionOptions {
   direction?: 'outbound' | 'inbound';
   phoneNumber?: string;
   twilioCallSid?: string; // For matching existing webhook sessions
+  callSource?: string; // 🎯 NEW: Explicit call source ('missed_call', 'queue', 'manual')
+  missedCallId?: string; // 🎯 NEW: For tracking missed call callbacks
 }
 
 export interface CallUpdateOptions {

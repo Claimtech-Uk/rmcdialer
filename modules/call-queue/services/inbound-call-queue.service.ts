@@ -4,13 +4,19 @@
 // Manages queue-based call holding with position tracking and wait time estimation
 
 import { PrismaClient, Prisma } from '@prisma/client';
-import { logger } from '@/modules/core';
 import { INBOUND_CALL_FLAGS } from '@/lib/config/features';
+
+// Simple logger interface to avoid winston import issues
+interface Logger {
+  info: (message: string, meta?: any) => void;
+  error: (message: string, meta?: any) => void;
+  warn: (message: string, meta?: any) => void;
+}
 
 // Dependencies that will be injected
 interface InboundCallQueueDependencies {
   prisma: PrismaClient;
-  logger: typeof logger;
+  logger: Logger;
 }
 
 export interface InboundCallInfo {
@@ -326,6 +332,17 @@ export class InboundCallQueueService {
     try {
       const now = new Date();
       
+      // Get the queue entry to extract caller info
+      const queueEntry = await this.deps.prisma.inboundCallQueue.findUnique({
+        where: { twilioCallSid: callSid }
+      });
+
+      if (!queueEntry) {
+        this.deps.logger.warn('Queue entry not found for abandoned call', { callSid });
+        return;
+      }
+
+      // Update queue status
       await this.deps.prisma.inboundCallQueue.update({
         where: { twilioCallSid: callSid },
         data: {
@@ -338,18 +355,116 @@ export class InboundCallQueueService {
         }
       });
 
+      // **NEW: Create a missed call session for tracking**
+      await this.createMissedCallSession(queueEntry, reason);
+
       // Reorder remaining queue positions
       await this.reorderQueuePositions();
 
-      this.deps.logger.info('Call abandoned from queue', {
+      this.deps.logger.info('Call abandoned from queue and logged as missed call', {
         callSid,
-        reason
+        reason,
+        userId: queueEntry.userId
       });
 
     } catch (error) {
       this.deps.logger.error('Failed to mark call as abandoned', {
         callSid,
         reason,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  /**
+   * Create a missed call session when a caller abandons the queue
+   */
+  private async createMissedCallSession(queueEntry: any, reason: string): Promise<void> {
+    try {
+      // Check if call session already exists
+      const existingSession = await this.deps.prisma.callSession.findFirst({
+        where: { twilioCallSid: queueEntry.twilioCallSid }
+      });
+
+      if (existingSession) {
+        // Update existing session to missed call
+        await this.deps.prisma.callSession.update({
+          where: { id: existingSession.id },
+          data: {
+            status: 'missed_call',
+            endedAt: new Date(),
+            lastOutcomeType: 'missed_call',
+            lastOutcomeNotes: `Caller hung up while waiting in queue: ${reason}`,
+            lastOutcomeAt: new Date()
+          }
+        });
+        this.deps.logger.info('Updated existing call session to missed call', {
+          sessionId: existingSession.id,
+          callSid: queueEntry.twilioCallSid
+        });
+        return;
+      }
+
+      // Find a valid agent for session tracking
+      const fallbackAgent = await this.deps.prisma.agent.findFirst({
+        where: { isActive: true },
+        select: { id: true }
+      });
+
+      if (!fallbackAgent) {
+        this.deps.logger.error('No active agents found for missed call session tracking');
+        return;
+      }
+
+      // Create new missed call session
+      const userId = queueEntry.userId || 999999; // Use special ID for unknown callers
+
+      // Create a call queue entry for the missed call
+      const callQueue = await this.deps.prisma.callQueue.create({
+        data: {
+          userId: BigInt(userId),
+          queueType: 'inbound_call',
+          priorityScore: 0,
+          status: 'missed',
+          queueReason: `Abandoned call: ${reason}`,
+          assignedToAgentId: null,
+          assignedAt: null,
+        }
+      });
+      
+      const callSession = await this.deps.prisma.callSession.create({
+        data: {
+          userId: BigInt(userId),
+          agentId: fallbackAgent.id,
+          callQueueId: callQueue.id,
+          twilioCallSid: queueEntry.twilioCallSid,
+          status: 'missed_call',
+          direction: 'inbound',
+          startedAt: queueEntry.enteredQueueAt,
+          endedAt: new Date(),
+          callSource: 'inbound_queue_abandoned',
+          lastOutcomeType: 'missed_call',
+          lastOutcomeNotes: `Caller hung up while waiting in queue: ${reason}`,
+          lastOutcomeAt: new Date(),
+          userClaimsContext: JSON.stringify({
+            callerName: queueEntry.callerName || 'Unknown Caller',
+            phoneNumber: queueEntry.callerPhone,
+            queueWaitTime: Math.floor((Date.now() - queueEntry.enteredQueueAt.getTime()) / 1000),
+            abandonReason: reason
+          })
+        }
+      });
+
+      this.deps.logger.info('Created missed call session for abandoned queue call', {
+        sessionId: callSession.id,
+        callSid: queueEntry.twilioCallSid,
+        userId,
+        waitTime: Math.floor((Date.now() - queueEntry.enteredQueueAt.getTime()) / 1000)
+      });
+
+    } catch (error) {
+      this.deps.logger.error('Failed to create missed call session for abandoned call', {
+        callSid: queueEntry.twilioCallSid,
         error: error instanceof Error ? error.message : String(error)
       });
     }
@@ -438,11 +553,15 @@ export class InboundCallQueueService {
 
   /**
    * Clean up old queue entries (completed, abandoned, etc.)
+   * Since queue is not needed for historical storage, we clean aggressively
    */
-  async cleanupOldEntries(olderThanHours: number = 24): Promise<{ cleanedCount: number }> {
+  async cleanupOldEntries(olderThanHours: number = 1): Promise<{ cleanedCount: number }> {
     try {
       const cutoffTime = new Date(Date.now() - (olderThanHours * 60 * 60 * 1000));
       
+      // Clean up all non-active queue entries older than specified time
+      // Active statuses: 'waiting', 'assigned', 'connecting'
+      // Clean statuses: 'completed', 'abandoned'
       const deletedEntries = await this.deps.prisma.inboundCallQueue.deleteMany({
         where: {
           status: { in: ['completed', 'abandoned'] },
@@ -452,13 +571,41 @@ export class InboundCallQueueService {
 
       this.deps.logger.info('Cleaned up old queue entries', {
         cleanedCount: deletedEntries.count,
-        olderThanHours
+        olderThanHours,
+        timestamp: new Date().toISOString()
       });
 
       return { cleanedCount: deletedEntries.count };
 
     } catch (error) {
       this.deps.logger.error('Failed to cleanup old queue entries', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return { cleanedCount: 0 };
+    }
+  }
+
+  /**
+   * Aggressive cleanup - removes ALL completed and abandoned entries regardless of age
+   * Use this when queue gets too large and historical data is not needed
+   */
+  async aggressiveCleanup(): Promise<{ cleanedCount: number }> {
+    try {
+      const deletedEntries = await this.deps.prisma.inboundCallQueue.deleteMany({
+        where: {
+          status: { in: ['completed', 'abandoned'] }
+        }
+      });
+
+      this.deps.logger.info('Aggressive queue cleanup completed', {
+        cleanedCount: deletedEntries.count,
+        timestamp: new Date().toISOString()
+      });
+
+      return { cleanedCount: deletedEntries.count };
+
+    } catch (error) {
+      this.deps.logger.error('Failed to perform aggressive cleanup', {
         error: error instanceof Error ? error.message : String(error)
       });
       return { cleanedCount: 0 };
@@ -603,8 +750,14 @@ export class InboundCallQueueService {
 
 // Factory function for dependency injection
 export function createInboundCallQueueService(prisma: PrismaClient): InboundCallQueueService {
+  const simpleLogger: Logger = {
+    info: (message: string, meta?: any) => console.log(`[InboundQueue] ${message}`, meta || ''),
+    error: (message: string, meta?: any) => console.error(`[InboundQueue ERROR] ${message}`, meta || ''),
+    warn: (message: string, meta?: any) => console.warn(`[InboundQueue WARN] ${message}`, meta || '')
+  };
+
   return new InboundCallQueueService({
     prisma,
-    logger
+    logger: simpleLogger
   });
 }

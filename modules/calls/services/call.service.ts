@@ -23,6 +23,7 @@ import { UserService } from '../../users/services/user.service';
 import { PriorityScoringService } from '../../scoring/services/priority-scoring.service';
 import { CallOutcomeManager } from '@/modules/call-outcomes/services/call-outcome-manager.service'
 import type { CallOutcomeContext } from '@/modules/call-outcomes/types/call-outcome.types'
+import { createMissedCallService } from '@/modules/missed-calls/services/missed-call.service';
 
 // Dependencies that will be injected
 interface CallServiceDependencies {
@@ -50,7 +51,7 @@ export class CallService {
    * Initiate a new call session
    */
   async initiateCall(options: CallSessionOptions): Promise<InitiateCallResponse> {
-    const { userId, agentId, queueId, direction = 'outbound', phoneNumber, twilioCallSid } = options;
+    const { userId, agentId, queueId, direction = 'outbound', phoneNumber, twilioCallSid, callSource, missedCallId } = options;
 
     return await this.deps.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // For inbound calls with CallSid, first check if session already exists from webhook
@@ -156,13 +157,17 @@ export class CallService {
           userPriorityScore: queueContext?.priorityScore || null,
           queuePosition: queueContext?.queuePosition || null,
           callAttemptNumber: previousAttempts + 1,
-          callSource: queueId ? 'queue' : 'manual'
+          callSource: callSource || (queueId ? 'queue' : 'manual')
         }
       });
 
-      // Update agent session to "on_call" if not already
+      // 🎯 FIXED: Update agent session to "on_call" (only active sessions)
       await tx.agentSession.updateMany({
-        where: { agentId, status: { in: ['available', 'break'] } },
+        where: { 
+          agentId, 
+          status: { in: ['available', 'break'] },
+          logoutAt: null  // Only update ACTIVE sessions
+        },
         data: { 
           status: 'on_call',
           currentCallSessionId: callSession.id,
@@ -257,16 +262,18 @@ export class CallService {
         }
       });
 
-      // Clear agent session
+      // 🎯 FIXED: Clear agent session (only active sessions)
       await tx.agentSession.updateMany({
         where: { 
           agentId: agentId,
-          currentCallSessionId: sessionId 
+          currentCallSessionId: sessionId,
+          logoutAt: null  // Only update ACTIVE sessions
         },
         data: { 
           status: 'available',
           currentCallSessionId: null,
-          lastActivity: new Date()
+          lastActivity: new Date(),
+          lastHeartbeat: new Date() // 🚀 CRITICAL: Update heartbeat when manually ending call
         }
       });
 
@@ -328,19 +335,29 @@ export class CallService {
       }
     });
 
-    // Auto-cleanup agent session if call ended
+    // 🎯 FIXED: Auto-cleanup agent session if call ended (only active sessions)
     if (updateData.status && ['completed', 'failed', 'no_answer'].includes(updateData.status)) {
       await this.deps.prisma.agentSession.updateMany({
         where: { 
           agentId: session.agentId,
-          currentCallSessionId: session.id 
+          currentCallSessionId: session.id,
+          logoutAt: null  // Only update ACTIVE sessions
         },
         data: { 
           status: 'available',
           currentCallSessionId: null,
-          lastActivity: new Date()
+          lastActivity: new Date(),
+          lastHeartbeat: new Date() // 🚀 CRITICAL: Update heartbeat when call service ends call
         }
       });
+
+      // 🚀 REAL-TIME CLEANUP: Immediately clean up queue entries when call ends
+      await this.performCallEndQueueCleanup(session, updateData.status);
+
+      // 🎯 MISSED CALL CLEANUP: Delete missed call entry after callback attempt
+      if (session.callSource === 'missed_call') {
+        await this.cleanupMissedCallAfterAttempt(session, updateData.status);
+      }
     }
 
     this.deps.logger.info('Call status updated', {
@@ -1216,5 +1233,157 @@ export class CallService {
       recordedByAgentId: dbOutcome.recordedByAgentId,
       createdAt: dbOutcome.createdAt
     };
+  }
+
+  /**
+   * 🚀 REAL-TIME CLEANUP: Clean up queue entries when call sessions end
+   */
+  private async performCallEndQueueCleanup(session: any, endStatus: string): Promise<void> {
+    try {
+      // Only clean up if this was an inbound call that went through the queue
+      if (session.direction !== 'inbound' || !session.twilioCallSid) {
+        return;
+      }
+
+      // Find the queue entry for this call
+      const queueEntry = await this.deps.prisma.inboundCallQueue.findUnique({
+        where: { twilioCallSid: session.twilioCallSid }
+      });
+
+      if (!queueEntry) {
+        // Not all inbound calls go through the queue (legacy direct routing)
+        this.deps.logger.info('No queue entry found for ended call', { 
+          sessionId: session.id, 
+          twilioCallSid: session.twilioCallSid 
+        });
+        return;
+      }
+
+      this.deps.logger.info('🔄 Performing real-time queue cleanup for ended call', {
+        sessionId: session.id,
+        twilioCallSid: session.twilioCallSid,
+        endStatus,
+        queueEntryId: queueEntry.id,
+        currentQueueStatus: queueEntry.status
+      });
+
+      // Import queue service for cleanup
+      const { createInboundCallQueueService } = await import('@/modules/call-queue/services/inbound-call-queue.service');
+      const queueService = createInboundCallQueueService(this.deps.prisma);
+
+      // Determine if call was successful based on status and talk time
+      const talkTimeSeconds = session.talkTimeSeconds || 0;
+      const wasSuccessful = endStatus === 'completed' && talkTimeSeconds > 5;
+
+      if (wasSuccessful) {
+        // Call was successfully completed with meaningful talk time
+        await queueService.markCallCompleted(session.twilioCallSid, session.durationSeconds);
+        this.deps.logger.info('✅ Marked queue entry as completed via call session cleanup', {
+          sessionId: session.id,
+          talkTime: talkTimeSeconds
+        });
+      } else {
+        // Call ended without successful completion
+        const abandonReason = this.getAbandonReasonFromStatus(endStatus, talkTimeSeconds);
+        await queueService.markCallAbandoned(session.twilioCallSid, abandonReason);
+        this.deps.logger.info('📞 Marked queue entry as abandoned via call session cleanup', {
+          sessionId: session.id,
+          endStatus,
+          abandonReason
+        });
+      }
+
+    } catch (error) {
+      this.deps.logger.error('Failed to perform call end queue cleanup', {
+        sessionId: session.id,
+        endStatus,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - we don't want to fail the call status update if cleanup fails
+    }
+  }
+
+  /**
+   * Convert call end status to meaningful abandon reason
+   */
+  private getAbandonReasonFromStatus(endStatus: string, talkTimeSeconds: number): string {
+    switch (endStatus) {
+      case 'completed':
+        return talkTimeSeconds <= 5 ? 'call_too_short' : 'call_ended_early';
+      case 'failed':
+        return 'call_failed';
+      case 'no_answer':
+        return 'no_answer';
+      default:
+        return `call_ended_${endStatus}`;
+    }
+  }
+
+  // ============================================================================
+  // MISSED CALL CLEANUP
+  // ============================================================================
+
+  /**
+   * 🎯 Clean up missed call entry after callback attempt
+   * This prevents the same missed call from being attempted again
+   */
+  private async cleanupMissedCallAfterAttempt(session: any, callStatus: string): Promise<void> {
+    try {
+      this.deps.logger.info('🎯 Cleaning up missed call after callback attempt', {
+        sessionId: session.id,
+        callStatus,
+        callSource: session.callSource
+      });
+
+      // Extract missed call ID from userClaimsContext or queueEntryId
+      let missedCallId: string | null = null;
+      
+      // Try to find missed call ID from userClaimsContext if available
+      if (session.userClaimsContext) {
+        try {
+          const context = JSON.parse(session.userClaimsContext);
+          if (context.missedCallData?.id) {
+            missedCallId = context.missedCallData.id;
+          }
+        } catch (parseError) {
+          this.deps.logger.warn('Could not parse userClaimsContext for missed call ID', parseError);
+        }
+      }
+
+      // Check queueEntryId if userClaimsContext fails
+      if (!missedCallId && session.queueEntryId) {
+        if (session.queueEntryId.startsWith('missed-call-')) {
+          missedCallId = session.queueEntryId.replace('missed-call-', '');
+        }
+      }
+
+      if (!missedCallId) {
+        this.deps.logger.warn('Could not determine missed call ID for cleanup', {
+          sessionId: session.id,
+          userClaimsContext: session.userClaimsContext
+        });
+        return;
+      }
+
+      // Use MissedCallService to delete the entry
+      const missedCallService = createMissedCallService(this.deps.prisma);
+      await missedCallService.deleteAfterAttempt(
+        missedCallId, 
+        `callback_${callStatus}_${new Date().toISOString()}`
+      );
+
+      this.deps.logger.info('✅ Successfully cleaned up missed call after callback attempt', {
+        missedCallId,
+        sessionId: session.id,
+        callStatus
+      });
+
+    } catch (error) {
+      this.deps.logger.error('❌ Failed to clean up missed call after callback attempt', {
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - we don't want to fail the call status update if cleanup fails
+    }
   }
 } 

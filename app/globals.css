@@ -154,4 +154,20 @@
       grid-template-columns: repeat(1, minmax(0, 1fr));
     }
   }
+}
+
+/* Custom animations for missed call alerts */
+@layer utilities {
+  .animate-spin-slow {
+    animation: spin 3s linear infinite;
+  }
+  
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
 } 

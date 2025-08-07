@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { UserService } from '@/modules/users/services/user.service';
 import type { QueueType } from '../types/queue.types';
 import type { QueueAdapterService } from './queue-adapter.service';
+import { createMissedCallService } from '@/modules/missed-calls/services/missed-call.service';
 
 export interface PreCallValidationResult {
   isValid: boolean;
@@ -48,6 +49,44 @@ export class PreCallValidationService {
   }
 
   /**
+   * Add penalty score for users with all cancelled claims
+   */
+  private async penalizeUserForCancelledClaims(userId: number): Promise<void> {
+    try {
+      // Update user_call_scores - add 200 penalty points
+      await prisma.userCallScore.updateMany({
+        where: { userId: BigInt(userId) },
+        data: {
+          currentScore: { increment: 200 },
+          lastOutcome: 'All claims cancelled',
+          updatedAt: new Date()
+        }
+      });
+
+      // Also mark in both queue tables as inactive to prevent future attempts
+      await Promise.all([
+        prisma.callQueue.updateMany({
+          where: { 
+            userId: BigInt(userId),
+            status: 'pending'
+          },
+          data: {
+            status: 'invalid',
+            queueReason: 'All claims cancelled',
+            updatedAt: new Date()
+          }
+        })
+      ]);
+      
+      console.log(`📈 Added 200 penalty points to user ${userId} for all cancelled claims`);
+      
+    } catch (error) {
+      console.error(`❌ Failed to penalize user ${userId} for cancelled claims:`, error);
+      // Don't throw - this is cleanup, continue with validation
+    }
+  }
+
+  /**
    * Validate user is still eligible for calling RIGHT NOW
    * This is called immediately before agent dials the number
    */
@@ -60,7 +99,9 @@ export class PreCallValidationService {
         where: { id: BigInt(userId) },
         include: {
           claims: {
-            include: {
+            select: {
+              id: true,
+              status: true,
               requirements: {
                 where: { status: 'PENDING' }
               }
@@ -99,7 +140,27 @@ export class PreCallValidationService {
         };
       }
 
-      // 2. Check for scheduled callbacks that take priority
+      // 2. Check if ALL claims are cancelled
+      if (userData.claims.length > 0) {
+        const allClaimsCancelled = userData.claims.every(claim => claim.status === 'cancelled');
+        if (allClaimsCancelled) {
+          console.log(`❌ User ${userId} has all claims cancelled (${userData.claims.length} claims) - adding penalty and skipping`);
+          await this.penalizeUserForCancelledClaims(userId);
+          return {
+            isValid: false,
+            reason: 'All claims cancelled',
+            userStatus: {
+              hasSignature: !!userData.current_signature_file_id,
+              pendingRequirements: 0,
+              hasScheduledCallback: false,
+              isEnabled: true,
+              userExists: true
+            }
+          };
+        }
+      }
+
+      // 3. Check for scheduled callbacks that take priority
       const scheduledCallback = await prisma.callback.findFirst({
         where: {
           userId: BigInt(userId),
@@ -108,7 +169,7 @@ export class PreCallValidationService {
         }
       });
 
-      // 3. Determine current eligibility
+      // 4. Determine current eligibility
       const hasSignature = userData.current_signature_file_id !== null;
       
       // Define excluded requirement types (same as discovery services)
@@ -144,7 +205,7 @@ export class PreCallValidationService {
         userExists: true
       };
 
-      // 4. Determine current queue type based on actual state
+      // 5. Determine current queue type based on actual state
       let currentQueueType: QueueType | null = null;
       
       if (scheduledCallback) {
@@ -164,7 +225,7 @@ export class PreCallValidationService {
         currentQueueType = null; // User doesn't need to be in any queue
       }
 
-      // 5. Validate against expected queue type
+      // 6. Validate against expected queue type
       const isValid = currentQueueType === expectedQueueType;
 
       if (isValid) {
@@ -198,11 +259,24 @@ export class PreCallValidationService {
 
   /**
    * Get the next valid user from queue for calling
+   * 🎯 PRIORITY: Check missed calls FIRST, then regular queues
    * Uses QueueAdapterService when available, falls back to legacy CallQueue
    */
   async getNextValidUserForCall(queueType: QueueType, agentId?: number): Promise<NextUserForCallResult | null> {
     try {
       console.log(`🔍 Finding next valid user for ${queueType} queue...`);
+      
+      // 🎯 PRIORITY 1: Check for missed calls first (if agent ID provided)
+      if (agentId) {
+        const missedCallResult = await this.getNextMissedCallForAgent(agentId);
+        if (missedCallResult) {
+          console.log(`🚀 PRIORITY: Found missed call for agent ${agentId}`);
+          return missedCallResult;
+        }
+      }
+      
+      // 🎯 PRIORITY 2: Use regular queue system
+      console.log(`📋 No missed calls available, checking ${queueType} queue...`);
       
       // Use new queue adapter if available
       if (this.queueAdapter) {
@@ -654,5 +728,123 @@ export class PreCallValidationService {
       queueEntryId: `replica-${userData.id}`, // Synthetic queue entry ID
       validationResult: validation
     };
+  }
+
+  // ============================================================================
+  // MISSED CALLS PRIORITY SYSTEM
+  // ============================================================================
+
+  /**
+   * 🎯 Get next missed call for agent (PRIORITY over regular queue)
+   * Returns formatted result compatible with NextUserForCallResult
+   */
+  private async getNextMissedCallForAgent(agentId: number): Promise<NextUserForCallResult | null> {
+    try {
+      console.log(`🔍 PRIORITY: Checking for missed calls for agent ${agentId}...`);
+      
+      const missedCallService = createMissedCallService(prisma);
+      const missedCall = await missedCallService.findAndAssignNextMissedCall(agentId);
+      
+      if (!missedCall) {
+        console.log(`📭 No missed calls available for agent ${agentId}`);
+        return null;
+      }
+
+      console.log(`🚀 PRIORITY: Found missed call for ${missedCall.phoneNumber}, reason: ${missedCall.reason}`);
+      
+      // Get user context from replica DB if userId is available
+      let userContext = null;
+      let validatedUserId = null;
+
+      if (missedCall.userId) {
+        try {
+          // Query replica DB to get complete user context
+          const userData = await replicaDb.user.findUnique({
+            where: { id: BigInt(missedCall.userId) },
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email_address: true,
+              phone_number: true
+            }
+          });
+
+          if (userData) {
+            validatedUserId = Number(userData.id);
+            
+            // Build user context similar to regular queue
+            userContext = {
+              userId: validatedUserId,
+              firstName: userData.first_name || '',
+              lastName: userData.last_name || '',
+              email: userData.email_address || '',
+              phone: missedCall.phoneNumber,
+              claimCount: 0, // Will be filled by validation if needed
+              claims: [],
+              addresses: []
+            };
+            
+            console.log(`✅ Found user context for missed call: ${userData.first_name} ${userData.last_name}`);
+          }
+        } catch (error) {
+          console.warn(`⚠️ Failed to get user context for missed call userId ${missedCall.userId}:`, error);
+        }
+      }
+
+      // If no user context from DB, create minimal context from missed call data
+      if (!userContext) {
+        // Try to extract name parts if available
+        const nameParts = missedCall.callerName ? missedCall.callerName.split(' ') : [];
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        
+        userContext = {
+          userId: validatedUserId || 999999, // Special ID for unknown callers
+          firstName,
+          lastName,
+          email: '',
+          phone: missedCall.phoneNumber,
+          claimCount: 0,
+          claims: [],
+          addresses: []
+        };
+        
+        console.log(`📝 Created minimal user context for missed call: ${firstName} ${lastName}`);
+      }
+
+      // Return in NextUserForCallResult format with special markers for missed calls
+      return {
+        userId: userContext.userId,
+        userContext: {
+          ...userContext,
+          // 🎯 SPECIAL MARKERS for missed call callbacks
+          isMissedCallCallback: true,
+          missedCallData: {
+            id: missedCall.id,
+            reason: missedCall.reason,
+            missedAt: missedCall.missedAt,
+            originalCallSid: missedCall.twilioCallSid
+          }
+        },
+        queuePosition: 0, // Missed calls always have highest priority
+        queueEntryId: `missed-call-${missedCall.id}`,
+        validationResult: {
+          isValid: true,
+          reason: 'Missed call callback - skipping validation',
+          userStatus: {
+            hasSignature: true, // Skip signature checks for missed calls
+            pendingRequirements: 0,
+            hasScheduledCallback: false,
+            isEnabled: true,
+            userExists: true // Missed calls always come from real users
+          }
+        }
+      };
+
+    } catch (error) {
+      console.error(`❌ Error getting missed call for agent ${agentId}:`, error);
+      return null;
+    }
   }
 } 

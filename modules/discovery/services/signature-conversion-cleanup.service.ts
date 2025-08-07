@@ -257,6 +257,7 @@ export class SignatureConversionCleanupService {
     }
 
     // Update users who got signatures: set queue to null and score to 0
+    // IMPROVED: Handle both users still in queue AND users already removed from queue
     let updated = 0
     for (const conversion of conversions) {
       try {
@@ -268,11 +269,18 @@ export class SignatureConversionCleanupService {
             totalAttempts: true,
             lastCallAt: true,
             // @ts-ignore - currentQueueType exists in database
-            currentQueueType: true
+            currentQueueType: true,
+            // @ts-ignore - lastQueueCheck exists in database
+            lastQueueCheck: true
           }
         })
 
-        // Update user call score
+        if (!currentUserScore) {
+          logger.warn(`⚠️ User ${conversion.userId} not found in user_call_scores, skipping conversion`)
+          continue
+        }
+
+        // Update user call score only if still in unsigned_users queue
         const updateResult = await prisma.userCallScore.updateMany({
           where: { 
             userId: conversion.userId,
@@ -291,41 +299,25 @@ export class SignatureConversionCleanupService {
 
         if (updateResult.count > 0) {
           updated += updateResult.count
+          logger.info(`✅ User ${conversion.userId} updated - was still in unsigned queue`)
 
-          // Check if a conversion already exists for this user within the last hour
-          // to prevent race conditions with live call outcomes
-          const recentConversion = await prisma.conversion.findFirst({
-            where: {
-              userId: conversion.userId,
-              convertedAt: {
-                gte: new Date(Date.now() - 60 * 60 * 1000) // Last hour
-              }
-            }
-          });
-
-          if (recentConversion) {
-            logger.info(`⏭️ [SKIP] User ${conversion.userId} already has recent conversion ${recentConversion.id}, skipping duplicate`);
-          } else {
-            // Create conversion record in database
-            await prisma.conversion.create({
-              data: {
-                userId: conversion.userId,
-                previousQueueType: 'unsigned_users',
-                conversionType: 'signature_obtained',
-                conversionReason: 'User provided signature - moved from unsigned queue',
-                finalScore: currentUserScore?.currentScore || 0,
-                totalCallAttempts: currentUserScore?.totalAttempts || 0,
-                lastCallAt: currentUserScore?.lastCallAt,
-                signatureObtained: true,
-                convertedAt: conversion.convertedAt
-              }
-            })
-
-            logger.info(`📝 [CONVERSION] Created conversion record for user ${conversion.userId}`)
-          }
+          // Create conversion record using shared service
+          // NOTE: If user was already removed by pre-call validation, that process 
+          // would have already logged the conversion, so we only log for users still in queue
+          const { ConversionLoggingService } = await import('./conversion-logging.service');
+          await ConversionLoggingService.logConversion({
+            userId: conversion.userId,
+            previousQueueType: 'unsigned_users',
+            conversionType: 'signature_obtained',
+            conversionReason: 'User provided signature - moved from unsigned queue',
+            convertedAt: conversion.convertedAt,
+            source: 'cleanup_cron'
+          })
+        } else {
+          logger.info(`⏭️ [SKIP] User ${conversion.userId} was already processed (not in unsigned queue) - conversion likely logged by pre-call validation`)
         }
       } catch (error: any) {
-        logger.error(`❌ Failed to update user ${conversion.userId}:`, error)
+        logger.error(`❌ Failed to process user ${conversion.userId}:`, error)
       }
     }
 

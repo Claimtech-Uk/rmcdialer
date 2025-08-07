@@ -217,56 +217,36 @@ export async function POST(request: NextRequest) {
       endedAt: updateData.endedAt
     });
 
-    // CRITICAL FIX: Handle inbound call queue completion
-    if (['completed', 'busy', 'failed', 'no-answer', 'canceled'].includes(effectiveStatus)) {
-      try {
-        const queueEntry = await prisma.inboundCallQueue.findUnique({
-          where: { twilioCallSid: CallSid }
-        });
-        
-        if (queueEntry) {
-          const { createInboundCallQueueService } = await import('@/modules/call-queue/services/inbound-call-queue.service');
-          const queueService = createInboundCallQueueService(prisma);
-          
-          if (effectiveStatus === 'completed' && updateData.talkTimeSeconds && updateData.talkTimeSeconds > 5) {
-            // Call was successfully completed with meaningful talk time
-            await queueService.markCallCompleted(CallSid, updateData.durationSeconds);
-            console.log(`✅ Marked queue entry ${queueEntry.id} as completed (talk time: ${updateData.talkTimeSeconds}s)`);
-          } else {
-            // Call ended without meaningful completion - mark as abandoned
-            await queueService.markCallAbandoned(CallSid, `call_ended_${effectiveStatus}`);
-            console.log(`📞 Marked queue entry ${queueEntry.id} as abandoned (status: ${effectiveStatus})`);
-          }
-        }
-      } catch (queueError) {
-        console.error(`❌ Failed to update queue entry for call ${CallSid}:`, queueError);
-      }
-    }
+    // ✅ SIMPLIFIED: Inbound call queue system removed - using missed calls system
+    // No queue cleanup needed as inbound calls now create missed call entries directly
 
-    // Update agent session based on effective call status (prioritizing dial status for inbound calls)
+    // 🎯 FIXED: Update agent session based on effective call status (only active sessions)
     if (['answered', 'in-progress'].includes(effectiveStatus)) {
       // Call connected - now mark agent as on_call (this fixes the race condition)
       await prisma.agentSession.updateMany({
         where: { 
           agentId: callSession.agentId,
-          status: 'available' // Only update if currently available
+          status: 'available', // Only update if currently available
+          logoutAt: null  // Only update ACTIVE sessions
         },
         data: { 
           status: 'on_call',
           currentCallSessionId: callSession.id,
-          lastActivity: new Date()
+          lastActivity: new Date(),
+          // lastHeartbeat field removed from schema
         }
       });
       
       console.log(`👤 Agent ${callSession.agentId} marked as on_call - call successfully connected`);
     }
 
-    // Update agent session if call completed
+    // 🎯 FIXED: Update agent session if call completed (only active sessions)
     if (['completed', 'failed', 'no_answer'].includes(ourStatus)) {
       await prisma.agentSession.updateMany({
         where: { 
           agentId: callSession.agentId,
-          currentCallSessionId: callSession.id 
+          currentCallSessionId: callSession.id,
+          logoutAt: null  // Only update ACTIVE sessions
         },
         data: { 
           status: 'available',
@@ -275,7 +255,8 @@ export async function POST(request: NextRequest) {
           totalTalkTimeSeconds: { 
             increment: updateData.talkTimeSeconds || 0 
           },
-          lastActivity: new Date()
+          lastActivity: new Date(),
+          // lastHeartbeat field removed from schema
         }
       });
       
@@ -311,16 +292,18 @@ export async function POST(request: NextRequest) {
         console.log(`📋 Updated queue entry ${callSession.callQueueId} status to ${callSession.direction === 'inbound' ? 'missed' : 'no_answer'}`);
       }
 
-      // Reset agent session to available (they should be able to take the next call)
+      // 🎯 FIXED: Reset agent session to available (only active sessions)
       if (callSession.agentId) {
         const updatedSessions = await prisma.agentSession.updateMany({
           where: { 
-            agentId: callSession.agentId
+            agentId: callSession.agentId,
+            logoutAt: null  // Only update ACTIVE sessions
           },
           data: { 
             status: 'available', // Ensure agent is available for next call
             currentCallSessionId: null,
-            lastActivity: new Date()
+            lastActivity: new Date(),
+            // lastHeartbeat field removed from schema
           }
         });
         

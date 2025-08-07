@@ -10,7 +10,7 @@ export async function createMissedCallSession(
   from: string, 
   callSid: string, 
   nameInfo: NameInfo | null,
-  reason: 'out_of_hours' | 'no_agents_available'
+  reason: 'out_of_hours' | 'no_agents_available' | 'agents_busy' | 'handler_error'
 ): Promise<string> {
   try {
     let userId = nameInfo?.userId || null;
@@ -31,7 +31,12 @@ export async function createMissedCallSession(
         queueType: 'inbound_call',
         priorityScore: 0,
         status: 'missed',
-        queueReason: `Missed call: ${reason === 'out_of_hours' ? 'Called outside business hours' : 'No agents available'}`,
+        queueReason: `Missed call: ${
+          reason === 'out_of_hours' ? 'Called outside business hours' : 
+          reason === 'agents_busy' ? 'All agents busy' :
+          reason === 'handler_error' ? 'System error' :
+          'No agents available'
+        }`,
         assignedToAgentId: null,
         assignedAt: null,
       }
@@ -65,7 +70,11 @@ export async function createMissedCallSession(
           missedCallReason: reason,
           lookupStatus: 'complete',
           outcome: 'missed_call',
-          outcomeNotes: reason === 'out_of_hours' ? 'Called outside business hours' : 'No agents available'
+          outcomeNotes: 
+            reason === 'out_of_hours' ? 'Called outside business hours' : 
+            reason === 'agents_busy' ? 'All agents busy during business hours' :
+            reason === 'handler_error' ? 'System error occurred' :
+            'No agents available'
         })
       }
     });
@@ -86,7 +95,11 @@ export async function createMissedCallSession(
         'missed_call',
         outcomeContext,
         { 
-          notes: reason === 'out_of_hours' ? 'Called outside business hours' : 'No agents available',
+          notes: 
+            reason === 'out_of_hours' ? 'Called outside business hours' : 
+            reason === 'agents_busy' ? 'All agents busy during business hours' :
+            reason === 'handler_error' ? 'System error occurred during call processing' :
+            'No agents available',
           missedCallTime: new Date().toISOString() // Required field for missed call validation
         }
       );

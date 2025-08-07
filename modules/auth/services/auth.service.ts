@@ -83,12 +83,19 @@ export class AuthService {
   }
 
   /**
-   * Logout agent and update session
+   * 🎯 ENHANCED: Logout agent with availability-preserving logic
    */
-  async logout(agentId: number): Promise<void> {
+  async logout(agentId: number, forceOffline: boolean = false): Promise<void> {
     try {
-      await this.setAgentStatus(agentId, { status: 'offline' });
-      this.deps.logger.info('Agent logged out', { agentId });
+      // 🚀 AVAILABILITY-PRESERVING: Use break for temporary logouts, offline for permanent
+      const status = forceOffline ? 'offline' : 'break';
+      await this.setAgentStatus(agentId, { status });
+      
+      this.deps.logger.info('Agent logged out', { 
+        agentId, 
+        status,
+        preserveSession: !forceOffline 
+      });
     } catch (error) {
       this.deps.logger.error('Logout failed', { agentId, error });
       throw error;
@@ -144,16 +151,12 @@ export class AuthService {
         throw new Error('Agent not found or inactive');
       }
 
-      // Get or create agent session for today
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
+      // 🎯 FIXED: Get active session using unique constraint
+      // Look for the ONLY active session (logoutAt: null) per agent
       let agentSession = await tx.agentSession.findFirst({
         where: {
           agentId,
-          loginAt: {
-            gte: today
-          }
+          logoutAt: null  // Active session = no logout timestamp
         }
       });
 
@@ -189,15 +192,47 @@ export class AuthService {
         // Handle different status changes with proper cleanup
         switch (statusUpdate.status) {
           case 'offline':
+            // 🎯 ENHANCED: Proper session termination with new schema
+            updateData.status = 'ended';  // Set proper ended status
             updateData.logoutAt = new Date();
+            updateData.endedAt = new Date();  // Use new endedAt field
             updateData.currentCallSessionId = null; // Clear any stuck call sessions
-            this.deps.logger.info('Agent going offline - clearing session', { agentId });
+            
+            // 🚀 REAL-TIME CLEANUP: Immediately clear queue assignments for offline agents
+            await this.performAgentQueueCleanup(tx, agentId, 'agent_offline');
+            
+            this.deps.logger.info('Agent session properly terminated - clearing session and queue assignments', { 
+              agentId, 
+              sessionId: agentSession.id,
+              terminationTime: updateData.endedAt
+            });
             break;
             
           case 'break':
-            // Agent on break - should not receive calls, but keep session active
-            updateData.currentCallSessionId = null; // Clear calls when on break
-            this.deps.logger.info('Agent going on break - clearing calls', { agentId });
+            // 🎯 FIXED: Agent on break - preserve active calls but prevent new assignments
+            // Don't clear currentCallSessionId if agent is actually on a call
+            const activeCallSession = await tx.callSession.findFirst({
+              where: {
+                agentId,
+                status: { in: ['initiated', 'ringing', 'connecting', 'connected'] },
+                endedAt: null
+              }
+            });
+            
+            if (activeCallSession) {
+              this.deps.logger.info('Agent going on break but has active call - preserving call session', { 
+                agentId, 
+                callSessionId: activeCallSession.id 
+              });
+              // Keep the currentCallSessionId for active calls
+            } else {
+              this.deps.logger.info('Agent going on break with no active calls - clearing call session', { agentId });
+              updateData.currentCallSessionId = null; // Only clear if no active calls
+            }
+            
+            // 🚀 REAL-TIME CLEANUP: Clear queue assignments for agents on break (but not active calls)
+            await this.performAgentQueueCleanup(tx, agentId, 'agent_break');
+            
             break;
             
           case 'available':
@@ -815,5 +850,152 @@ export class AuthService {
       callsCompletedToday: dbSession.callsCompletedToday,
       totalTalkTimeSeconds: dbSession.totalTalkTimeSeconds
     };
+  }
+
+  /**
+   * 🚀 REAL-TIME CLEANUP: Immediately clear queue assignments when agents become unavailable
+   */
+  private async performAgentQueueCleanup(
+    tx: Prisma.TransactionClient, 
+    agentId: number, 
+    reason: string
+  ): Promise<void> {
+    try {
+      // Find all queue entries assigned to this agent
+      const assignedCalls = await tx.inboundCallQueue.findMany({
+        where: {
+          assignedToAgentId: agentId,
+          status: { in: ['assigned', 'connecting'] }
+        }
+      });
+
+      if (assignedCalls.length === 0) {
+        this.deps.logger.info('No queue assignments to clear for agent', { agentId, reason });
+        return;
+      }
+
+      this.deps.logger.info(`🔄 Clearing ${assignedCalls.length} queue assignments for agent`, { 
+        agentId, 
+        reason,
+        callIds: assignedCalls.map(c => c.twilioCallSid)
+      });
+
+      // Return calls to waiting status for reassignment
+      const updatedCalls = await tx.inboundCallQueue.updateMany({
+        where: {
+          assignedToAgentId: agentId,
+          status: { in: ['assigned', 'connecting'] }
+        },
+        data: {
+          status: 'waiting',
+          assignedToAgentId: null,
+          assignedAt: null,
+          // Increment attempts to track failed assignments
+          attemptsCount: { increment: 1 },
+          lastAttemptAt: new Date(),
+          lastAttemptAgentId: agentId,
+          // Add metadata about why the assignment failed
+          metadata: JSON.stringify({
+            previousAgent: agentId,
+            reassignReason: reason,
+            reassignedAt: new Date().toISOString()
+          })
+        }
+      });
+
+      this.deps.logger.info(`✅ Successfully cleared ${updatedCalls.count} queue assignments`, { 
+        agentId, 
+        reason,
+        updatedCount: updatedCalls.count
+      });
+
+      // 📊 Create missed call sessions for calls that were connecting
+      for (const call of assignedCalls) {
+        if (call.status === 'connecting') {
+          await this.createMissedCallSessionForAgentUnavailable(tx, call, agentId, reason);
+        }
+      }
+
+    } catch (error) {
+      this.deps.logger.error('Failed to perform agent queue cleanup', {
+        agentId,
+        reason,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // Don't throw - we don't want to fail the status update if cleanup fails
+    }
+  }
+
+  /**
+   * Create missed call session when agent becomes unavailable during call
+   */
+  private async createMissedCallSessionForAgentUnavailable(
+    tx: Prisma.TransactionClient,
+    queueEntry: any,
+    agentId: number,
+    reason: string
+  ): Promise<void> {
+    try {
+      if (!queueEntry.userId) {
+        this.deps.logger.warn('Cannot create missed call session - no userId', { 
+          callSid: queueEntry.twilioCallSid 
+        });
+        return;
+      }
+
+      // Find a fallback agent for the missed call session
+      const fallbackAgent = await tx.agent.findFirst({
+        where: { isActive: true, id: { not: agentId } },
+        orderBy: { id: 'asc' }
+      });
+
+      if (!fallbackAgent) {
+        this.deps.logger.warn('No fallback agent available for missed call session');
+        return;
+      }
+
+      // Create missed call session
+      const waitTimeSeconds = Math.floor((Date.now() - queueEntry.enteredQueueAt.getTime()) / 1000);
+      
+      await tx.callSession.create({
+        data: {
+          userId: BigInt(queueEntry.userId),
+          agentId: fallbackAgent.id,
+          callQueueId: queueEntry.id,
+          twilioCallSid: queueEntry.twilioCallSid,
+          status: 'missed_call',
+          direction: 'inbound',
+          startedAt: queueEntry.enteredQueueAt,
+          endedAt: new Date(),
+          callSource: 'inbound_queue_agent_unavailable',
+          lastOutcomeType: 'missed_call',
+          lastOutcomeNotes: `Agent became unavailable (${reason}) while call was connecting. Wait time: ${Math.floor(waitTimeSeconds / 60)}m ${waitTimeSeconds % 60}s`,
+          lastOutcomeAt: new Date(),
+          userClaimsContext: JSON.stringify({
+            callerName: queueEntry.callerName || 'Unknown Caller',
+            phoneNumber: queueEntry.callerPhone,
+            queueWaitTime: waitTimeSeconds,
+            agentUnavailableReason: reason,
+            originalAgentId: agentId
+          })
+        }
+      });
+
+      this.deps.logger.info('Created missed call session for agent unavailable scenario', {
+        callSid: queueEntry.twilioCallSid,
+        userId: queueEntry.userId,
+        agentId,
+        reason,
+        waitTimeSeconds
+      });
+
+    } catch (error) {
+      this.deps.logger.error('Failed to create missed call session for agent unavailable', {
+        callSid: queueEntry.twilioCallSid,
+        agentId,
+        reason,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
 } 

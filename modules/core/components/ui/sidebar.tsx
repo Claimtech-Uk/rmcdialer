@@ -45,7 +45,7 @@ export default function Sidebar({ children }: SidebarProps) {
   });
 
   const handleLogout = () => {
-    logoutMutation.mutate();
+    logoutMutation.mutate({ forceOffline: false }); // Use soft logout for regular user sessions
   };
 
   // Close mobile menu when route changes

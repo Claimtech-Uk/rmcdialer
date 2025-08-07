@@ -39,7 +39,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   });
 
   const handleLogout = () => {
-    logoutMutation.mutate();
+    // Use forceOffline: true for admin logout to ensure complete session termination
+    logoutMutation.mutate({ forceOffline: true });
   };
 
   // Close mobile menu when route changes

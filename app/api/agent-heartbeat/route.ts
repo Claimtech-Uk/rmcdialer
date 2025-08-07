@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const heartbeatService = createAgentHeartbeatService(prisma);
 
     // Update heartbeat
-    await heartbeatService.updateHeartbeat(agentId, deviceConnected);
+    await heartbeatService.updateHeartbeat(agentId);
 
     // If status update is provided, update agent session status
     if (currentStatus) {
@@ -103,20 +103,25 @@ export async function GET(request: NextRequest) {
     const heartbeatService = createAgentHeartbeatService(prisma);
 
     if (agentId) {
-      // Get specific agent readiness
-      const readiness = await heartbeatService.isAgentReady(parseInt(agentId));
+      // Get specific agent validation (simplified)
+      const validation = await heartbeatService.validateAgentHeartbeat(parseInt(agentId));
       return NextResponse.json({
         success: true,
-        agentReadiness: readiness
+        agentReadiness: {
+          agentId: validation.agentId,
+          isReady: validation.isValid,
+          reason: validation.reason,
+          lastActivity: validation.lastActivity
+        }
       });
     } else {
-      // Get all online agents
-      const onlineAgents = await heartbeatService.getOnlineAgents();
-      const stats = await heartbeatService.getHeartbeatStats();
+      // Get all active agents (simplified)
+      const activeAgents = await heartbeatService.getActiveAgents();
+      const stats = { active: activeAgents.length, total: activeAgents.length };
       
       return NextResponse.json({
         success: true,
-        onlineAgents,
+        activeAgents,
         stats
       });
     }
