@@ -20,15 +20,37 @@ export const createTRPCContext = async (opts: CreateContextOptions) => {
   // Extract token from request if available
   let agent = null
   if (req) {
+    // Check both Authorization header and cookies
+    let token = null
+    
+    // First try Authorization header
     const authHeader = req.headers.get('authorization')
     if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.replace('Bearer ', '')
+    }
+    
+    // If no header token, try cookies
+    if (!token) {
+      const cookieHeader = req.headers.get('cookie')
+      if (cookieHeader) {
+        const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+          const [key, value] = cookie.trim().split('=')
+          acc[key] = value
+          return acc
+        }, {} as Record<string, string>)
+        token = cookies['auth-token']
+      }
+    }
+    
+    // Verify token if found
+    if (token) {
       try {
-        const token = authHeader.replace('Bearer ', '')
         const jwtSecret = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || 'fallback-secret-for-build'
         const decoded = jwt.verify(token, jwtSecret) as any
         agent = decoded
       } catch (error) {
         // Invalid token, continue without agent
+        console.warn('Invalid JWT token in TRPC context:', error instanceof Error ? error.message : 'Unknown error')
       }
     }
   }
