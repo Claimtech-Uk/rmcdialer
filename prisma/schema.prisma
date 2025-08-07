@@ -21,9 +21,6 @@ model Agent {
   twilioWorkerSid       String?                @map("twilio_worker_sid")
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @updatedAt @map("updated_at")
-  created_by            Int?
-  last_login_at         DateTime?
-  updated_by            Int?
   sessions              AgentSession[]
   autoDialerSettings    AutoDialerSettings?
   callOutcomes          CallOutcome[]
