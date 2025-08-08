@@ -77,8 +77,10 @@ export function CallbackIcon() {
     };
   }) : [];
 
-  // Show all callbacks for agent role too; server already filters appropriately
-  const callbacks = allCallbacks;
+  // Client-side safeguard: agents only see callbacks they booked
+  const callbacks = agent?.role === 'agent'
+    ? allCallbacks.filter(cb => cb.bookingAgent?.id === agent.id)
+    : allCallbacks;
 
   // Close dropdown when clicking outside
   useEffect(() => {

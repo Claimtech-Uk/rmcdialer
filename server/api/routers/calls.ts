@@ -343,12 +343,11 @@ export const callsRouter = createTRPCRouter({
     .input(CallbackFiltersSchema)
     .query(async ({ input, ctx }) => {
       try {
-        // If not admin/supervisor, limit to callbacks created by this agent
+        // If not admin/supervisor, limit to callbacks created by this agent (originating from their sessions)
         const filters = { ...input } as GetCallbacksOptions;
         if (ctx.agent.role === 'agent') {
-          // Agents only see callbacks explicitly assigned to them
-          (filters as any).agentId = ctx.agent.id;
-          (filters as any).assignedOnly = true;
+          (filters as any).createdByAgentId = ctx.agent.id;
+          delete (filters as any).agentId;
         }
 
         const callbacks = await callService.getCallbacks(filters);
