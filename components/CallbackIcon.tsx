@@ -77,10 +77,8 @@ export function CallbackIcon() {
     };
   }) : [];
 
-  // Filter callbacks based on agent role
-  const callbacks = agent?.role === 'agent' 
-    ? allCallbacks.filter(cb => cb.bookingAgent?.id === agent.id)
-    : allCallbacks;
+  // Show all callbacks for agent role too; server already filters appropriately
+  const callbacks = allCallbacks;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -105,7 +103,7 @@ export function CallbackIcon() {
       const response = await fetch('/api/callbacks/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callbackId: callback.id })
+        body: JSON.stringify({ callbackId: callback.id, agentId: agent?.id })
       });
 
       if (response.ok) {

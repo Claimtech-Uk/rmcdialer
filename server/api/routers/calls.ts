@@ -88,7 +88,8 @@ const CallHistoryFiltersSchema = z.object({
   startDate: z.date().optional(),
   endDate: z.date().optional(),
   outcome: z.string().optional(),
-  status: z.string().optional()
+  status: z.string().optional(),
+  direction: z.enum(['inbound', 'outbound']).optional()
 });
 
 const CallAnalyticsFiltersSchema = z.object({
@@ -106,6 +107,12 @@ const CallbackFiltersSchema = z.object({
   status: z.enum(['pending', 'completed', 'cancelled']).optional(),
   scheduledFrom: z.date().optional(),
   scheduledTo: z.date().optional()
+});
+
+// Clear/complete a single callback
+const ClearCallbackSchema = z.object({
+  callbackId: z.string().uuid(),
+  action: z.enum(['cancel', 'complete']).default('cancel')
 });
 
 const FindSessionByCallSidSchema = z.object({
@@ -339,9 +346,9 @@ export const callsRouter = createTRPCRouter({
         // If not admin/supervisor, limit to callbacks created by this agent
         const filters = { ...input };
         if (ctx.agent.role === 'agent') {
-          // For agents, filter to only show callbacks they created
-          // This will be handled in the service layer by checking originalCallSession.agentId
-          filters.createdByAgentId = ctx.agent.id;
+          // For agents, show callbacks assigned to them or unassigned
+          // Service will include OR preferredAgentId = agent OR preferredAgentId is null
+          filters.agentId = ctx.agent.id;
         }
 
         const callbacks = await callService.getCallbacks(filters);
@@ -350,6 +357,24 @@ export const callsRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to get callbacks'
+        });
+      }
+    }),
+
+  // Clear (cancel/complete) a specific callback and clean related queue entries
+  clearCallback: protectedProcedure
+    .input(ClearCallbackSchema)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const result = await callService.clearCallback(input.callbackId, input.action, {
+          agentId: ctx.agent.id,
+          role: ctx.agent.role
+        });
+        return result;
+      } catch (error: any) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: error instanceof Error ? error.message : 'Failed to clear callback'
         });
       }
     }),
@@ -769,7 +794,8 @@ export const callsRouter = createTRPCRouter({
           ...(filters.userId && { userId: filters.userId }),
           ...(filters.startDate && { startedAt: { gte: filters.startDate } }),
           ...(filters.endDate && { startedAt: { lte: filters.endDate } }),
-          ...(filters.status && { status: filters.status })
+          ...(filters.status && { status: filters.status }),
+          ...(filters.direction && { direction: filters.direction })
         };
 
         // Outcome filter should return a page fully matching the outcome.

@@ -693,23 +693,18 @@ export class CallService {
     const [callbacks, total] = await Promise.all([
       this.deps.prisma.callback.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          userId: true,
+          scheduledFor: true,
+          callbackReason: true,
+          preferredAgentId: true,
+          originalCallSessionId: true,
+          status: true,
           preferredAgent: {
             select: {
               firstName: true,
               lastName: true
-            }
-          },
-          // Include the original call session to get the booking agent
-          originalCallSession: {
-            select: {
-              agentId: true,
-              agent: {
-                select: {
-                  firstName: true,
-                  lastName: true
-                }
-              }
             }
           }
         },
@@ -719,6 +714,23 @@ export class CallService {
       }),
       this.deps.prisma.callback.count({ where })
     ]);
+
+    // Batch load original call session agents for booking agent details
+    const sessionIds = callbacks
+      .map((cb: any) => cb.originalCallSessionId)
+      .filter((id: string | null | undefined): id is string => !!id);
+    const uniqueSessionIds = Array.from(new Set(sessionIds));
+    const sessions = uniqueSessionIds.length > 0
+      ? await this.deps.prisma.callSession.findMany({
+          where: { id: { in: uniqueSessionIds } },
+          select: {
+            id: true,
+            agentId: true,
+            agent: { select: { firstName: true, lastName: true } }
+          }
+        })
+      : [];
+    const bookingAgentBySessionId = new Map(sessions.map((s: any) => [s.id, s]));
 
     // Get user context for each callback
     const callbacksWithContext = await Promise.all(
@@ -732,12 +744,15 @@ export class CallService {
             phoneNumber: userContext.phoneNumber
           },
           preferredAgent: callback.preferredAgent,
-          // Add the booking agent information
-          bookingAgent: callback.originalCallSession?.agent ? {
-            id: callback.originalCallSession.agentId,
-            firstName: callback.originalCallSession.agent.firstName,
-            lastName: callback.originalCallSession.agent.lastName
-          } : null
+          // Add the booking agent information via original call session
+          bookingAgent: (() => {
+            const session = callback.originalCallSessionId ? bookingAgentBySessionId.get(callback.originalCallSessionId) : null;
+            return session?.agent ? {
+              id: session.agentId,
+              firstName: session.agent.firstName,
+              lastName: session.agent.lastName
+            } : null;
+          })()
         };
       })
     );
@@ -751,6 +766,62 @@ export class CallService {
         totalPages: Math.ceil(total / limit)
       }
     };
+  }
+
+  /**
+   * Clear a specific callback by ID: cancel or complete it, and clean up related queue entries
+   */
+  async clearCallback(
+    callbackId: string,
+    action: 'cancel' | 'complete' = 'cancel',
+    context: { agentId: number; role: string }
+  ): Promise<{ success: true; action: 'cancel' | 'complete' }>{
+    return await this.deps.prisma.$transaction(async (tx) => {
+      // Fetch callback with minimal fields
+      const callback = await tx.callback.findUnique({
+        where: { id: callbackId },
+        select: {
+          id: true,
+          userId: true,
+          status: true
+        }
+      });
+
+      if (!callback) {
+        throw new Error('Callback not found');
+      }
+
+      // Only allow clearing pending/accepted callbacks
+      if (!['pending', 'accepted'].includes(callback.status)) {
+        throw new Error(`Callback is already ${callback.status}`);
+      }
+
+      // Cancel or complete
+      const newStatus = action === 'complete' ? 'completed' : 'cancelled';
+      await tx.callback.update({
+        where: { id: callbackId },
+        data: {
+          status: newStatus,
+          ...(action === 'complete' ? { completedCallSessionId: null } : {})
+        }
+      });
+
+      // Clean related queue entries (pending/assigned) for this callback
+      await tx.callQueue.deleteMany({
+        where: {
+          callbackId: callbackId,
+          status: { in: ['pending', 'assigned'] }
+        }
+      });
+
+      this.deps.logger.info('Cleared callback', {
+        callbackId,
+        action,
+        byAgentId: context.agentId
+      });
+
+      return { success: true, action };
+    });
   }
 
   /**
@@ -1246,9 +1317,15 @@ export class CallService {
       }
 
       // Find the queue entry for this call
-      const queueEntry = await this.deps.prisma.inboundCallQueue.findUnique({
-        where: { twilioCallSid: session.twilioCallSid }
-      });
+      // Guard: inboundCallQueue model may not exist in Prisma schema; skip if not available
+      let queueEntry: any = null;
+      // @ts-expect-error - optional model in some deployments
+      if (this.deps.prisma.inboundCallQueue?.findUnique) {
+        // @ts-expect-error - optional model in some deployments
+        queueEntry = await this.deps.prisma.inboundCallQueue.findUnique({
+          where: { twilioCallSid: session.twilioCallSid }
+        });
+      }
 
       if (!queueEntry) {
         // Not all inbound calls go through the queue (legacy direct routing)
