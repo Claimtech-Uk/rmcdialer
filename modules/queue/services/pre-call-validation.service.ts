@@ -779,10 +779,18 @@ export class PreCallValidationService {
               firstName: userData.first_name || '',
               lastName: userData.last_name || '',
               email: userData.email_address || '',
+              // Ensure both for backward-compat, UI expects phoneNumber
               phone: missedCall.phoneNumber,
+              phoneNumber: missedCall.phoneNumber,
               claimCount: 0, // Will be filled by validation if needed
               claims: [],
-              addresses: []
+              addresses: [],
+              // Provide safe defaults so UI does not crash
+              callScore: {
+                currentScore: 50,
+                totalAttempts: 0,
+                lastOutcome: 'no_attempt'
+              }
             };
             
             console.log(`✅ Found user context for missed call: ${userData.first_name} ${userData.last_name}`);
@@ -804,10 +812,18 @@ export class PreCallValidationService {
           firstName,
           lastName,
           email: '',
+          // Ensure both for backward-compat, UI expects phoneNumber
           phone: missedCall.phoneNumber,
+          phoneNumber: missedCall.phoneNumber,
           claimCount: 0,
           claims: [],
-          addresses: []
+          addresses: [],
+          // Provide safe defaults so UI does not crash
+          callScore: {
+            currentScore: 50,
+            totalAttempts: 0,
+            lastOutcome: 'no_attempt'
+          }
         };
         
         console.log(`📝 Created minimal user context for missed call: ${firstName} ${lastName}`);

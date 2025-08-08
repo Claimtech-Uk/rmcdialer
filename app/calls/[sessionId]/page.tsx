@@ -399,12 +399,13 @@ export default function CallSessionPage() {
   // Transform the user context to match CallInterface expectations
   // Handle different data structures from getUserContext vs getCallSession
     const userData = (userContextData as any).user || userContextData; // Type assertion to handle union types
-const userContext = {
+  const userContext = {
     userId: userData.id || userData.userId,
     firstName: userData.firstName || 'Unknown',
     lastName: userData.lastName || 'User',
     email: userData.email || `user${userData.id || userData.userId}@unknown.com`,
-    phoneNumber: userData.phoneNumber || phoneNumber || '+44000000000',
+    // Ensure phoneNumber present even for minimal missed-call contexts
+    phoneNumber: userData.phoneNumber || (userData as any).phone || phoneNumber || '+44000000000',
     dateOfBirth: userData.dateOfBirth || userData.date_of_birth || null,
     createdAt: userData.createdAt || userData.created_at || null,
     address: userData.address ? {
@@ -447,11 +448,16 @@ const userContext = {
       totalAttempts: userContextData.callScore.totalAttempts,
       lastOutcome: userContextData.callScore.lastOutcome || undefined,
       lastCallAt: userContextData.callScore.lastCallAt || undefined
+    } : ((userContextData as any).callScore ? {
+      // Support minimal missed-call contexts that already provide a default callScore
+      currentScore: (userContextData as any).callScore.currentScore,
+      totalAttempts: (userContextData as any).callScore.totalAttempts,
+      lastOutcome: (userContextData as any).callScore.lastOutcome
     } : {
       currentScore: 75,
       totalAttempts: 1,
       lastCallAt: undefined
-    }
+    })
   };
 
   const handleCallComplete = (outcome: any) => {

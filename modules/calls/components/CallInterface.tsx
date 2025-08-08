@@ -1014,10 +1014,11 @@ export function CallInterface({
                     </Badge>
                   </div>
                   
-                  <div className="text-sm text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
-                    Score: {userContext.callScore.currentScore} | 
-                    Attempts: {userContext.callScore.totalAttempts}
-                  </div>
+                   <div className="text-sm text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
+                     {/* Guard against missing callScore for missed-call minimal contexts */}
+                     Score: {(userContext.callScore?.currentScore ?? 50)} | 
+                     Attempts: {(userContext.callScore?.totalAttempts ?? 0)}
+                   </div>
                 </div>
               </div>
             </CardContent>
