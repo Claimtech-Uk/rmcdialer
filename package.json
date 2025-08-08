@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "schema:diff:prod": "prisma migrate diff --from-url=\"$DATABASE_URL\" --to-schema=./prisma/schema.prisma",
-    "schema:diff:prod:sql": "prisma migrate diff --from-url=\"$DATABASE_URL\" --to-schema=./prisma/schema.prisma --script > scripts/diff-prod-to-schema.sql",
+    "schema:diff:prod": "bash -lc 'URL=${PROD_DATABASE_URL:-$DATABASE_URL}; if [ -z \"$URL\" ]; then echo Missing DATABASE_URL/PROD_DATABASE_URL; exit 1; fi; prisma migrate diff --from-url=\"$URL\" --to-schema-datamodel=./prisma/schema.prisma'",
+    "schema:diff:prod:sql": "bash -lc 'URL=${PROD_DATABASE_URL:-$DATABASE_URL}; if [ -z \"$URL\" ]; then echo Missing DATABASE_URL/PROD_DATABASE_URL; exit 1; fi; prisma migrate diff --from-url=\"$URL\" --to-schema-datamodel=./prisma/schema.prisma --script > scripts/diff-prod-to-schema.sql'",
     "schema:check": "node --env-file=.env scripts/check-production-schema.ts",
     "dev": "next dev",
     "build": "next build --no-lint",

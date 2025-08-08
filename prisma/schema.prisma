@@ -89,7 +89,7 @@ model UserCallScore {
 
 model UnsignedUsersQueue {
   id                    String    @id @default(uuid()) @db.Uuid
-  userId                BigInt    @unique @map("user_id")
+  userId                BigInt    @map("user_id")
   claimId               BigInt?   @map("claim_id")
   priorityScore         Int       @default(0) @map("priority_score")
   queuePosition         Int       @map("queue_position")
@@ -111,7 +111,7 @@ model UnsignedUsersQueue {
 
 model OutstandingRequestsQueue {
   id                    String    @id @default(uuid()) @db.Uuid
-  userId                BigInt    @unique @map("user_id")
+  userId                BigInt    @map("user_id")
   claimId               BigInt?   @map("claim_id")
   priorityScore         Int       @default(0) @map("priority_score")
   queuePosition         Int       @map("queue_position")
