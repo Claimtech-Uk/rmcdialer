@@ -37,7 +37,8 @@ class QueueMigrationGenerator {
     };
 
     this.originalSchemaPath = path.join(process.cwd(), 'prisma/schema.prisma');
-    this.newSchemaPath = path.join(process.cwd(), 'prisma/schema-new-queues.prisma');
+    // Archived draft schema. Kept only for historical reference.
+    this.newSchemaPath = path.join(process.cwd(), 'archive/prisma/schema-new-queues.prisma');
     this.backupSchemaPath = path.join(process.cwd(), 'prisma/schema.prisma.backup');
   }
 
