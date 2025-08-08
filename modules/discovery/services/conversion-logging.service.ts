@@ -57,6 +57,7 @@ export class ConversionLoggingService {
       });
 
       // Create conversion record
+      const convertedAtFinal = convertedAt || new Date()
       const conversion = await prisma.conversion.create({
         data: {
           userId,
@@ -67,11 +68,49 @@ export class ConversionLoggingService {
           totalCallAttempts: userCallScore?.totalAttempts || 0,
           lastCallAt: userCallScore?.lastCallAt,
           signatureObtained: conversionType === 'signature_obtained' || previousQueueType === 'outstanding_requests',
-          convertedAt: convertedAt || new Date()
+          convertedAt: convertedAtFinal
         }
       });
 
       logger.info(`📝 [CONVERSION] Created ${conversionType} record for user ${userId} via ${source} (ID: ${conversion.id})`);
+
+      // Inline Agent Attribution (most recent qualifying call in last 30 days)
+      const LOOKBACK_DAYS = 30
+      const MIN_TALK_TIME_SECONDS = 30
+      const lookbackDate = new Date(convertedAtFinal.getTime() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+
+      const callSessions = await prisma.callSession.findMany({
+        where: {
+          userId,
+          startedAt: { gte: lookbackDate, lte: convertedAtFinal },
+          talkTimeSeconds: { gt: MIN_TALK_TIME_SECONDS }
+        },
+        select: { agentId: true, startedAt: true },
+        orderBy: { startedAt: 'desc' }
+      })
+
+      const uniqueAgents: number[] = []
+      const seenAgents = new Set<number>()
+      for (const session of callSessions) {
+        if (session.agentId > 0 && !seenAgents.has(session.agentId)) {
+          uniqueAgents.push(session.agentId)
+          seenAgents.add(session.agentId)
+        }
+      }
+
+      if (uniqueAgents.length > 0) {
+        await prisma.conversion.update({
+          where: { id: conversion.id },
+          data: {
+            primaryAgentId: uniqueAgents[0],
+            contributingAgents: uniqueAgents.slice(1)
+          }
+        })
+        logger.info(`🏷️ [ATTRIBUTION] Inline attribution set for conversion ${conversion.id}: primary=${uniqueAgents[0]}, contributing=[${uniqueAgents.slice(1).join(',')}]`)
+      } else {
+        logger.info(`🔄 [ATTRIBUTION] No qualifying calls found for user ${userId} within ${LOOKBACK_DAYS} days (>${MIN_TALK_TIME_SECONDS}s). Leaving unattributed for cron backfill.`)
+      }
+
       return true;
 
     } catch (error: any) {
