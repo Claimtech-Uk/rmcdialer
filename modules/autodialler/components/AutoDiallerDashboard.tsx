@@ -331,19 +331,31 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
 
             {/* User Header Card */}
             <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm">
-              <CardHeader className={`bg-gradient-to-r ${teamConfig.color.gradient} text-white py-10 border-b-2 border-white/20 relative overflow-hidden`}>
+              <CardHeader
+                className={`bg-gradient-to-r ${teamConfig.color.gradient} text-white py-10 border-b-2 border-white/20 relative overflow-hidden ${
+                  (currentUser as any)?.isMissedCallCallback ? 'bg-black/60 backdrop-brightness-75' : ''
+                }`}
+              >
                 {/* Enhanced background overlay for better contrast */}
                 <div className="absolute inset-0 bg-black/20 backdrop-blur-sm"></div>
                 <div className="relative z-10 flex items-center justify-between">
                   <div className="flex items-center space-x-6">
-                    <div className="w-20 h-20 bg-white/40 rounded-2xl flex items-center justify-center shadow-2xl backdrop-blur-sm border-3 border-white/50">
-                      <Phone className="w-10 h-10 text-white drop-shadow-lg" />
+                      <div className={`w-20 h-20 ${
+                        (currentUser as any)?.isMissedCallCallback ? 'bg-red-600' : 'bg-white/40'
+                      } rounded-2xl flex items-center justify-center shadow-2xl backdrop-blur-sm border-3 border-white/50`}>
+                        <Phone className={`w-10 h-10 ${
+                          (currentUser as any)?.isMissedCallCallback ? 'text-white' : 'text-white'
+                        } drop-shadow-lg`} />
                     </div>
                     <div>
                       <CardTitle className="text-3xl font-black mb-2 text-white drop-shadow-xl tracking-wide">
                         {currentUser.firstName} {currentUser.lastName}
                       </CardTitle>
-                      <p className="text-xl text-white font-bold mb-1 drop-shadow-lg tracking-wide">{currentUser.phoneNumber}</p>
+                      <p className={`text-xl font-bold mb-1 drop-shadow-lg tracking-wide ${
+                        (currentUser as any)?.isMissedCallCallback ? 'text-white' : 'text-white'
+                      }`}>
+                        {currentUser.phoneNumber}
+                      </p>
                       <div className="flex items-center gap-3">
                         {currentUser.email && (
                           <p className="text-white font-semibold text-base drop-shadow-lg">{currentUser.email}</p>

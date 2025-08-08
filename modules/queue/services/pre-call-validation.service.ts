@@ -752,51 +752,66 @@ export class PreCallValidationService {
 
       console.log(`🚀 PRIORITY: Found missed call for ${missedCall.phoneNumber}, reason: ${missedCall.reason}`);
       
-      // Get user context from replica DB if userId is available
+      // Get user context from services if userId is available (FULL context with claims)
       let userContext = null;
       let validatedUserId = null;
 
       if (missedCall.userId) {
         try {
-          // Query replica DB to get complete user context
+          // Validate user exists quickly
           const userData = await replicaDb.user.findUnique({
             where: { id: BigInt(missedCall.userId) },
-            select: {
-              id: true,
-              first_name: true,
-              last_name: true,
-              email_address: true,
-              phone_number: true
-            }
+            select: { id: true }
           });
 
           if (userData) {
             validatedUserId = Number(userData.id);
-            
-            // Build user context similar to regular queue
-            userContext = {
-              userId: validatedUserId,
-              firstName: userData.first_name || '',
-              lastName: userData.last_name || '',
-              email: userData.email_address || '',
-              // Ensure both for backward-compat, UI expects phoneNumber
-              phone: missedCall.phoneNumber,
-              phoneNumber: missedCall.phoneNumber,
-              claimCount: 0, // Will be filled by validation if needed
-              claims: [],
-              addresses: [],
-              // Provide safe defaults so UI does not crash
-              callScore: {
-                currentScore: 50,
-                totalAttempts: 0,
-                lastOutcome: 'no_attempt'
-              }
-            };
-            
-            console.log(`✅ Found user context for missed call: ${userData.first_name} ${userData.last_name}`);
+            // Fetch full call context (includes claims, address, callScore)
+            const fullContext = await this.userService.getUserCallContext(validatedUserId);
+            if (fullContext) {
+              userContext = {
+                userId: fullContext.user.id,
+                firstName: fullContext.user.firstName || 'Unknown',
+                lastName: fullContext.user.lastName || 'User',
+                email: fullContext.user.email || `user${validatedUserId}@unknown.com`,
+                // Prefer missed call number if present
+                phoneNumber: missedCall.phoneNumber || fullContext.user.phoneNumber || '+44000000000',
+                // Keep compatibility fields some components might read
+                phone: missedCall.phoneNumber || fullContext.user.phoneNumber || '+44000000000',
+                createdAt: fullContext.user.createdAt,
+                address: fullContext.user.address ? {
+                  fullAddress: fullContext.user.address.fullAddress || '',
+                  postCode: fullContext.user.address.postCode || '',
+                  county: fullContext.user.address.county || ''
+                } : undefined,
+                claims: fullContext.claims.map(claim => ({
+                  id: claim.id,
+                  type: claim.type || 'unknown',
+                  status: claim.status || 'unknown',
+                  lender: claim.lender || 'unknown',
+                  value: 0,
+                  requirements: claim.requirements.map(req => ({
+                    id: req.id,
+                    type: req.type || 'unknown',
+                    status: req.status || 'unknown',
+                    reason: req.reason || 'No reason provided'
+                  }))
+                })),
+                callScore: fullContext.callScore ? {
+                  currentScore: fullContext.callScore.currentScore,
+                  totalAttempts: fullContext.callScore.totalAttempts,
+                  lastOutcome: fullContext.callScore.lastOutcome || 'no_attempt'
+                } : {
+                  currentScore: 50,
+                  totalAttempts: 0,
+                  lastOutcome: 'no_attempt'
+                }
+              };
+              console.log(`✅ Built full user context for missed call user ${fullContext.user.firstName} ${fullContext.user.lastName}`);
+            }
           }
         } catch (error) {
-          console.warn(`⚠️ Failed to get user context for missed call userId ${missedCall.userId}:`, error);
+          console.warn(`⚠️ Failed to get full user context for missed call userId ${missedCall.userId}:`, error);
         }
       }
 
