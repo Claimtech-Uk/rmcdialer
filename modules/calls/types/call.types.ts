@@ -242,6 +242,11 @@ export interface GetCallbacksOptions {
   status?: 'pending' | 'completed' | 'cancelled';
   scheduledFrom?: Date;
   scheduledTo?: Date;
+  /**
+   * When true and used with agentId, restricts results to callbacks explicitly assigned to that agent.
+   * When false/omitted, unassigned callbacks may be included (for supervisor/admin views).
+   */
+  assignedOnly?: boolean;
 }
 
 export interface CallbacksResult {

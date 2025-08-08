@@ -644,16 +644,22 @@ export class CallService {
    * Get callbacks with filtering and pagination
    */
   async getCallbacks(options: GetCallbacksOptions): Promise<CallbacksResult> {
-    const { page = 1, limit = 20, agentId, createdByAgentId, status, scheduledFrom, scheduledTo } = options;
+    const { page = 1, limit = 20, agentId, assignedOnly, createdByAgentId, status, scheduledFrom, scheduledTo } = options;
 
     const where: any = {};
     
-    // If filtering by agent, include both assigned callbacks AND unassigned callbacks
+    // If filtering by agent
     if (agentId) {
-      where.OR = [
-        { preferredAgentId: agentId },  // Callbacks assigned to this agent
-        { preferredAgentId: null }     // Unassigned callbacks (any agent can handle)
-      ];
+      if (assignedOnly) {
+        // Strict mode: only callbacks assigned to this agent
+        where.preferredAgentId = agentId;
+      } else {
+        // Default: include both assigned and unassigned callbacks
+        where.OR = [
+          { preferredAgentId: agentId },
+          { preferredAgentId: null }
+        ];
+      }
     }
     
     // If filtering by creator agent, only show callbacks created by that agent
