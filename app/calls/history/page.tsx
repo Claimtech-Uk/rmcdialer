@@ -6,6 +6,7 @@ import { api } from '@/lib/trpc/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card'
 import { Button } from '@/modules/core/components/ui/button'
 import { AlertCircle, BarChart3, Clock, Phone, TrendingUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { DateRangePicker } from '@/modules/core/components/ui/date-range-picker'
 
 export default function CallHistoryPage() {
   const [currentPage, setCurrentPage] = useState(1)
@@ -13,6 +14,7 @@ export default function CallHistoryPage() {
   const [selectedOutcome, setSelectedOutcome] = useState<string | undefined>(undefined)
   const [selectedAgentId, setSelectedAgentId] = useState<number | undefined>(undefined)
   const [datePreset, setDatePreset] = useState<'all' | 'today' | 'week' | 'month'>('all')
+  const [customRange, setCustomRange] = useState<{ startDate: Date; endDate: Date} | null>(null)
   const [missedOnly, setMissedOnly] = useState(false)
 
   const { 
@@ -26,14 +28,14 @@ export default function CallHistoryPage() {
     ...(selectedAgentId && { agentId: selectedAgentId }),
     ...(selectedOutcome && { outcome: selectedOutcome }),
     ...(missedOnly && { status: 'missed_call' as any }),
-    ...(datePreset !== 'all' && (() => {
+    ...(customRange ? { startDate: customRange.startDate, endDate: customRange.endDate } : (datePreset !== 'all' && (() => {
       const now = new Date()
       const start = new Date(now)
       if (datePreset === 'today') start.setDate(now.getDate() - 1)
       if (datePreset === 'week') start.setDate(now.getDate() - 7)
       if (datePreset === 'month') start.setDate(now.getDate() - 30)
       return { startDate: start }
-    })())
+    })()))
   })
 
   // Agents list for filter dropdown
@@ -83,7 +85,7 @@ export default function CallHistoryPage() {
           </CardHeader>
           <CardContent className="p-0 relative">
             {/* Server-driven Filters */}
-            <div className="p-4 flex flex-wrap gap-3 border-b bg-white/60">
+            <div className="p-4 flex flex-wrap items-center gap-3 border-b bg-white/60">
               {/* Quick toggles */}
               <div className="flex gap-2 mr-2">
                 <Button
@@ -133,6 +135,47 @@ export default function CallHistoryPage() {
                 <option value="month">This Month</option>
               </select>
 
+              {/* Custom date-time range (overrides preset when set) */}
+              <DateRangePicker
+                value={customRange ?? { startDate: new Date(Date.now() - 24*60*60*1000), endDate: new Date() }}
+                onChange={(range) => { setCustomRange(range); setCurrentPage(1) }}
+                className="ml-2"
+              />
+
+              {/* Fine time controls for quick tweaks */}
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <span>Time:</span>
+                <input
+                  type="datetime-local"
+                  className="border rounded px-1 py-0.5"
+                  value={customRange ? new Date(customRange.startDate.getTime() - customRange.startDate.getTimezoneOffset()*60000).toISOString().slice(0,16) : ''}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (!val) return
+                    const dt = new Date(val)
+                    const end = customRange?.endDate ?? new Date()
+                    setCustomRange({ startDate: dt, endDate: end })
+                    setCurrentPage(1)
+                  }}
+                  placeholder="Start"
+                />
+                <span>–</span>
+                <input
+                  type="datetime-local"
+                  className="border rounded px-1 py-0.5"
+                  value={customRange ? new Date(customRange.endDate.getTime() - customRange.endDate.getTimezoneOffset()*60000).toISOString().slice(0,16) : ''}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (!val) return
+                    const dt = new Date(val)
+                    const start = customRange?.startDate ?? new Date(Date.now() - 24*60*60*1000)
+                    setCustomRange({ startDate: start, endDate: dt })
+                    setCurrentPage(1)
+                  }}
+                  placeholder="End"
+                />
+              </div>
+
               {/* Agent */}
               <select
                 value={selectedAgentId ? String(selectedAgentId) : ''}
@@ -145,7 +188,7 @@ export default function CallHistoryPage() {
                 ))}
               </select>
 
-              <Button variant="outline" size="sm" onClick={() => { setSelectedOutcome(undefined); setSelectedAgentId(undefined); setDatePreset('all'); setCurrentPage(1) }}>Clear</Button>
+              <Button variant="outline" size="sm" onClick={() => { setSelectedOutcome(undefined); setSelectedAgentId(undefined); setDatePreset('all'); setCustomRange(null); setCurrentPage(1) }}>Clear</Button>
               <div className="ml-auto" />
             </div>
             {isLoading ? (
