@@ -13,7 +13,6 @@ export default function CallHistoryPage() {
   const [pageSize, setPageSize] = useState(50)
   const [selectedOutcome, setSelectedOutcome] = useState<string | undefined>(undefined)
   const [selectedAgentId, setSelectedAgentId] = useState<number | undefined>(undefined)
-  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'week' | 'month'>('all')
   const [customRange, setCustomRange] = useState<{ startDate: Date; endDate: Date} | null>(null)
   const [missedOnly, setMissedOnly] = useState(false)
 
@@ -28,19 +27,17 @@ export default function CallHistoryPage() {
     ...(selectedAgentId && { agentId: selectedAgentId }),
     ...(selectedOutcome && { outcome: selectedOutcome }),
     ...(missedOnly && { status: 'missed_call' as any }),
-    ...(customRange ? { startDate: customRange.startDate, endDate: customRange.endDate } : (datePreset !== 'all' && (() => {
-      const now = new Date()
-      const start = new Date(now)
-      if (datePreset === 'today') start.setDate(now.getDate() - 1)
-      if (datePreset === 'week') start.setDate(now.getDate() - 7)
-      if (datePreset === 'month') start.setDate(now.getDate() - 30)
-      return { startDate: start }
-    })()))
+    ...(customRange ? { startDate: customRange.startDate, endDate: customRange.endDate } : undefined)
   })
 
   // Agents list for filter dropdown
-  const { data: agentsData } = api.auth.getAllAgents.useQuery({ page: 1, limit: 200, isActive: true })
-  const agents = useMemo(() => agentsData?.agents || [], [agentsData])
+  const { data: agentsData } = api.auth.getAllAgents.useQuery({ page: 1, limit: 200, isActive: true }, { retry: 1, refetchOnWindowFocus: false })
+  const { data: me } = api.auth.me.useQuery(undefined, { retry: 1, refetchOnWindowFocus: false })
+  const agents = useMemo(() => {
+    if (agentsData?.agents?.length) return agentsData.agents
+    if (me?.agent) return [me.agent]
+    return []
+  }, [agentsData, me])
 
   if (error) {
     return (
@@ -123,21 +120,9 @@ export default function CallHistoryPage() {
                 <option value="do_not_contact">Do Not Contact</option>
               </select>
 
-              {/* Date preset */}
-              <select
-                value={datePreset}
-                onChange={(e) => { setDatePreset(e.target.value as any); setCurrentPage(1) }}
-                className="border rounded px-2 py-1 text-sm"
-              >
-                <option value="all">All Time</option>
-                <option value="today">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
-              </select>
-
-              {/* Custom date-time range (overrides preset when set) */}
+              {/* Custom date-time range */}
               <DateRangePicker
-                value={customRange ?? { startDate: new Date(Date.now() - 24*60*60*1000), endDate: new Date() }}
+                value={customRange ?? { startDate: new Date(Date.now() - 7*24*60*60*1000), endDate: new Date() }}
                 onChange={(range) => { setCustomRange(range); setCurrentPage(1) }}
                 className="ml-2"
               />
@@ -177,18 +162,30 @@ export default function CallHistoryPage() {
               </div>
 
               {/* Agent */}
-              <select
-                value={selectedAgentId ? String(selectedAgentId) : ''}
-                onChange={(e) => { setSelectedAgentId(e.target.value ? Number(e.target.value) : undefined); setCurrentPage(1) }}
-                className="border rounded px-2 py-1 text-sm"
-              >
-                <option value="">All Agents</option>
-                {agents.map((a: any) => (
-                  <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={selectedAgentId ? String(selectedAgentId) : ''}
+                  onChange={(e) => { setSelectedAgentId(e.target.value ? Number(e.target.value) : undefined); setCurrentPage(1) }}
+                  className="border rounded px-2 py-1 text-sm pr-7"
+                >
+                  <option value="">All Agents</option>
+                  {agents.map((a: any) => (
+                    <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>
+                  ))}
+                </select>
+                {selectedAgentId !== undefined && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="absolute right-[-52px] top-0 h-[30px]"
+                    onClick={() => { setSelectedAgentId(undefined); setCurrentPage(1) }}
+                  >
+                    ×
+                  </Button>
+                )}
+              </div>
 
-              <Button variant="outline" size="sm" onClick={() => { setSelectedOutcome(undefined); setSelectedAgentId(undefined); setDatePreset('all'); setCustomRange(null); setCurrentPage(1) }}>Clear</Button>
+              <Button variant="outline" size="sm" onClick={() => { setSelectedOutcome(undefined); setSelectedAgentId(undefined); setCustomRange(null); setCurrentPage(1) }}>Clear</Button>
               <div className="ml-auto" />
             </div>
             {isLoading ? (
