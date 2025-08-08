@@ -19,6 +19,10 @@ interface CallHistoryTableProps {
   isLoading?: boolean
   onRefresh?: () => void
   showUserInfo?: boolean
+  // When false, the table won't render its own filter controls and will not
+  // perform client-side filtering. Parent should provide already-filtered
+  // data from the server. Defaults to true to preserve existing behaviour.
+  enableLocalFilters?: boolean
 }
 
 interface Filters {
@@ -63,7 +67,8 @@ export function CallHistoryTable({
   calls, 
   isLoading, 
   onRefresh, 
-  showUserInfo = true 
+  showUserInfo = true,
+  enableLocalFilters = true
 }: CallHistoryTableProps) {
   const [filters, setFilters] = useState<Filters>({
     outcome: 'all',
@@ -184,7 +189,7 @@ export function CallHistoryTable({
     sendReviewSMSMutation.mutate(payload);
   };
 
-  // Recording Player Component
+  // Recording Player Component with scrubber and speed control
   const RecordingPlayer = ({ call }: { call: CallHistoryEntry }) => {
     const { data: recordingData, isLoading: recordingLoading, error: recordingError } = api.calls.getRecording.useQuery(
       { sessionId: call.id },
@@ -193,138 +198,14 @@ export function CallHistoryTable({
         staleTime: 10 * 60 * 1000 // Cache for 10 minutes
       }
     )
+    const [playbackRate, setPlaybackRate] = React.useState(1);
+    const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
-    const handlePlayRecording = async () => {
-      console.log('🎵 RecordingPlayer: Play recording clicked for call:', call.id)
-      console.log('🎵 Recording data:', recordingData)
-      
-      if (!recordingData?.hasRecording || !recordingData.recording?.streamUrl) {
-        console.warn('🎵 No recording data available:', { hasRecording: recordingData?.hasRecording, streamUrl: recordingData?.recording?.streamUrl })
-        return
+    React.useEffect(() => {
+      if (audioRef.current) {
+        audioRef.current.playbackRate = playbackRate;
       }
-
-      if (playingRecording === call.id) {
-        // Stop current recording
-        if (audioElement) {
-          console.log('🎵 Stopping current recording')
-          audioElement.pause()
-          audioElement.currentTime = 0
-        }
-        setPlayingRecording(null)
-        setAudioElement(null)
-        return
-      }
-
-      // Create new audio element with enhanced compatibility
-      const audio = new Audio()
-      
-      // Set audio properties for better compatibility
-      audio.preload = 'auto'
-      audio.crossOrigin = 'anonymous'
-      
-      // Add comprehensive event listeners for debugging
-      audio.addEventListener('loadstart', () => console.log('🎵 Audio loadstart'))
-      audio.addEventListener('canplay', () => console.log('🎵 Audio canplay'))
-      audio.addEventListener('canplaythrough', () => console.log('🎵 Audio canplaythrough'))
-      audio.addEventListener('playing', () => console.log('🎵 Audio playing'))
-      audio.addEventListener('ended', () => {
-        console.log('🎵 Audio ended')
-        setPlayingRecording(null)
-        setAudioElement(null)
-      })
-      
-      audio.addEventListener('error', (e) => {
-        console.error('🎵 Audio error event:', e)
-        const error = audio.error
-        if (error) {
-          console.error('🎵 Audio error details:', {
-            code: error.code,
-            message: error.message
-          })
-          
-          let errorMessage = 'Failed to play recording'
-          const { MEDIA_ERR_ABORTED, MEDIA_ERR_NETWORK, MEDIA_ERR_DECODE, MEDIA_ERR_SRC_NOT_SUPPORTED } = error
-          
-          switch (error.code) {
-            case MEDIA_ERR_ABORTED:
-              errorMessage = 'Recording playback was aborted'
-              break
-            case MEDIA_ERR_NETWORK:
-              errorMessage = 'Network error while loading recording'
-              break
-            case MEDIA_ERR_DECODE:
-              errorMessage = 'Recording format not supported by your browser'
-              break
-            case MEDIA_ERR_SRC_NOT_SUPPORTED:
-              errorMessage = 'Recording format not supported. Try downloading instead.'
-              break
-          }
-          
-          // Show user-friendly error with format-specific advice
-          const toast = (window as any).__toast__ || console.error
-          if (typeof toast === 'function') {
-            toast({
-              title: "Recording Playback Error",
-              description: errorMessage,
-              variant: "destructive"
-            })
-          }
-        }
-        setPlayingRecording(null)
-        setAudioElement(null)
-      })
-
-      // Try to set the audio source with the stream URL
-      console.log('🎵 Setting audio source:', recordingData.recording.streamUrl)
-      audio.src = recordingData.recording.streamUrl
-      
-      // Set as currently playing and store reference
-      setPlayingRecording(call.id)
-      setAudioElement(audio)
-
-      // Attempt to play with comprehensive error handling
-      try {
-        console.log('🎵 Attempting to play audio...')
-        const playPromise = audio.play()
-        
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              console.log('🎵 Audio playback started successfully')
-            })
-            .catch((error: unknown) => {
-              console.error('🎵 Play promise rejected:', error)
-              setPlayingRecording(null)
-              setAudioElement(null)
-              
-              const errorMessage = error instanceof Error ? error.message : String(error)
-              const toast = (window as any).__toast__ || console.error
-              if (typeof toast === 'function') {
-                toast({
-                  title: "Recording Playback Failed",
-                  description: `Unable to play recording: ${errorMessage}. Try downloading the recording instead.`,
-                  variant: "destructive"
-                })
-              }
-            })
-        }
-        
-      } catch (error: unknown) {
-        console.error('🎵 Error calling play():', error)
-        setPlayingRecording(null)
-        setAudioElement(null)
-        
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        const toast = (window as any).__toast__ || console.error
-        if (typeof toast === 'function') {
-          toast({
-            title: "Recording Playback Error",
-            description: `Failed to start playback: ${errorMessage}`,
-            variant: "destructive"
-          })
-        }
-      }
-    }
+    }, [playbackRate]);
 
     const handleDownloadRecording = () => {
       console.log('🎵 Download recording clicked')
@@ -367,20 +248,29 @@ export function CallHistoryTable({
 
     return (
       <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={handlePlayRecording}
-          className="h-6 w-6 hover:bg-blue-100 transition-colors"
-          title={playingRecording === call.id ? 'Stop recording' : 'Play recording'}
+        {/* Inline browser controls give us a scrubber, time, and volume */}
+        <audio
+          ref={audioRef}
+          controls
+          preload="metadata"
+          src={recordingData.recording?.streamUrl}
+          className="h-8 w-48"
+        />
+
+        {/* Speed selector */}
+        <select
+          aria-label="Playback speed"
+          className="text-xs border rounded px-1 py-0.5 text-slate-700"
+          value={playbackRate}
+          onChange={(e) => setPlaybackRate(Number(e.target.value))}
         >
-          {playingRecording === call.id ? (
-            <Pause className="h-3 w-3 text-blue-600" />
-          ) : (
-            <Play className="h-3 w-3 text-green-600" />
-          )}
-        </Button>
-        
+          <option value={0.75}>0.75x</option>
+          <option value={1}>1x</option>
+          <option value={1.25}>1.25x</option>
+          <option value={1.5}>1.5x</option>
+          <option value={2}>2x</option>
+        </select>
+
         <Button
           variant="ghost"
           size="icon-sm"
@@ -390,13 +280,6 @@ export function CallHistoryTable({
         >
           <Download className="h-3 w-3 text-gray-600" />
         </Button>
-
-        <span className="text-xs text-green-600 font-medium">
-          {recordingData.recording?.durationSeconds ? 
-            formatDuration(recordingData.recording.durationSeconds) : 
-            'Available'
-          }
-        </span>
       </div>
     )
   }
@@ -427,7 +310,7 @@ export function CallHistoryTable({
     return false
   }
 
-  // Filter and sort calls
+  // Filter and sort calls (local filtering mode)
   const filteredAndSortedCalls = useMemo(() => {
     let filtered = calls.filter(call => {
       // Quick filter
@@ -498,6 +381,27 @@ export function CallHistoryTable({
 
     return filtered
   }, [calls, filters, sortBy, sortOrder, quickFilter])
+
+  // Sort-only mode for server-filtered data
+  const sortedCallsOnly = useMemo(() => {
+    const copied = [...calls]
+    copied.sort((a, b) => {
+      let comparison = 0
+      switch (sortBy) {
+        case 'date':
+          comparison = new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
+          break
+        case 'duration':
+          comparison = (a.durationSeconds || 0) - (b.durationSeconds || 0)
+          break
+        case 'outcome':
+          comparison = a.outcome.localeCompare(b.outcome)
+          break
+      }
+      return sortOrder === 'desc' ? -comparison : comparison
+    })
+    return copied
+  }, [calls, sortBy, sortOrder])
 
   const formatDuration = (seconds: number | null | undefined) => {
     if (!seconds || seconds === 0) return 'N/A'
@@ -617,9 +521,9 @@ export function CallHistoryTable({
             <Clock className="h-5 w-5" />
             Call History
             <Badge variant="secondary">
-              {filteredAndSortedCalls.length} {quickFilter === 'missed' ? 'inbound missed' : ''} calls
+              {(enableLocalFilters ? filteredAndSortedCalls.length : calls.length)} {enableLocalFilters && quickFilter === 'missed' ? 'inbound missed' : ''} calls
             </Badge>
-            {quickFilter === 'missed' && (
+            {enableLocalFilters && quickFilter === 'missed' && (
               <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50">
                 <PhoneMissed className="h-3 w-3 mr-1" />
                 Inbound Missed Only
@@ -640,93 +544,97 @@ export function CallHistoryTable({
           )}
         </div>
 
-        {/* Quick Filter Tabs */}
-        <div className="flex gap-2 mt-4">
-          <Button
-            variant={quickFilter === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setQuickFilter('all')}
-            className={`transition-all duration-200 ${
-              quickFilter === 'all'
-                ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md text-white'
-                : 'hover:bg-blue-50 border-blue-200 text-blue-700'
-            }`}
-          >
-            <Phone className="h-4 w-4 mr-1" />
-            All Calls
-          </Button>
-          <Button
-            variant={quickFilter === 'missed' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setQuickFilter('missed')}
-            className={`transition-all duration-200 ${
-              quickFilter === 'missed'
-                ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-md text-white'
-                : 'hover:bg-red-50 border-red-200 text-red-700'
-            }`}
-          >
-            <PhoneMissed className="h-4 w-4 mr-1" />
-            Inbound Missed
-          </Button>
-        </div>
-
-        {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-          <div>
-            <Input
-              placeholder="Search calls..."
-              value={filters.search}
-              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-              className="w-full"
-            />
+        {/* Quick Filter Tabs (local filtering only) */}
+        {enableLocalFilters && (
+          <div className="flex gap-2 mt-4">
+            <Button
+              variant={quickFilter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setQuickFilter('all')}
+              className={`transition-all duration-200 ${
+                quickFilter === 'all'
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md text-white'
+                  : 'hover:bg-blue-50 border-blue-200 text-blue-700'
+              }`}
+            >
+              <Phone className="h-4 w-4 mr-1" />
+              All Calls
+            </Button>
+            <Button
+              variant={quickFilter === 'missed' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setQuickFilter('missed')}
+              className={`transition-all duration-200 ${
+                quickFilter === 'missed'
+                  ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-md text-white'
+                  : 'hover:bg-red-50 border-red-200 text-red-700'
+              }`}
+            >
+              <PhoneMissed className="h-4 w-4 mr-1" />
+              Inbound Missed
+            </Button>
           </div>
-          
-          <Select value={filters.outcome} onValueChange={(value) => setFilters(prev => ({ ...prev, outcome: value }))}>
-            <SelectTrigger>
-              <SelectValue placeholder="All Outcomes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Outcomes</SelectItem>
-              {uniqueOutcomes.map(outcome => (
-                <SelectItem key={outcome} value={outcome}>
-                  {getOutcomeDisplay(outcome)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        )}
 
-          <Select value={filters.dateRange} onValueChange={(value) => setFilters(prev => ({ ...prev, dateRange: value }))}>
-            <SelectTrigger>
-              <SelectValue placeholder="All Time" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Time</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="week">This Week</SelectItem>
-              <SelectItem value="month">This Month</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {uniqueAgents.length > 1 && (
-            <Select value={filters.agent} onValueChange={(value) => setFilters(prev => ({ ...prev, agent: value }))}>
+        {/* Filters (local filtering only) */}
+        {enableLocalFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+            <div>
+              <Input
+                placeholder="Search calls..."
+                value={filters.search}
+                onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                className="w-full"
+              />
+            </div>
+            
+            <Select value={filters.outcome} onValueChange={(value) => setFilters(prev => ({ ...prev, outcome: value }))}>
               <SelectTrigger>
-                <SelectValue placeholder="All Agents" />
+                <SelectValue placeholder="All Outcomes" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Agents</SelectItem>
-                {uniqueAgents.map(agent => (
-                  <SelectItem key={agent} value={agent!}>
-                    {agent}
+                <SelectItem value="all">All Outcomes</SelectItem>
+                {uniqueOutcomes.map(outcome => (
+                  <SelectItem key={outcome} value={outcome}>
+                    {getOutcomeDisplay(outcome)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          )}
-        </div>
+
+            <Select value={filters.dateRange} onValueChange={(value) => setFilters(prev => ({ ...prev, dateRange: value }))}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Time" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="week">This Week</SelectItem>
+                <SelectItem value="month">This Month</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {uniqueAgents.length > 1 && (
+              <Select value={filters.agent} onValueChange={(value) => setFilters(prev => ({ ...prev, agent: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Agents" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Agents</SelectItem>
+                  {uniqueAgents.map(agent => (
+                    <SelectItem key={agent} value={agent!}>
+                      {agent}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
       </CardHeader>
 
       <CardContent>
-        {filteredAndSortedCalls.length === 0 ? (
+        {(enableLocalFilters ? filteredAndSortedCalls : sortedCallsOnly).length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <Phone className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p className="text-lg font-medium">No call history found</p>
@@ -769,7 +677,7 @@ export function CallHistoryTable({
 
             {/* Call List */}
             <div className="space-y-3">
-              {filteredAndSortedCalls.map((call) => (
+              {(enableLocalFilters ? filteredAndSortedCalls : sortedCallsOnly).map((call) => (
                 <div key={call.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">

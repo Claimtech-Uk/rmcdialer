@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { CallHistoryTable } from '@/modules/calls'
 import { api } from '@/lib/trpc/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card'
@@ -10,6 +10,10 @@ import { AlertCircle, BarChart3, Clock, Phone, TrendingUp, ChevronLeft, ChevronR
 export default function CallHistoryPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
+  const [selectedOutcome, setSelectedOutcome] = useState<string | undefined>(undefined)
+  const [selectedAgentId, setSelectedAgentId] = useState<number | undefined>(undefined)
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'week' | 'month'>('all')
+  const [missedOnly, setMissedOnly] = useState(false)
 
   const { 
     data: callHistoryData, 
@@ -18,8 +22,23 @@ export default function CallHistoryPage() {
     refetch 
   } = api.calls.getCallHistoryTable.useQuery({
     page: currentPage,
-    limit: pageSize
+    limit: pageSize,
+    ...(selectedAgentId && { agentId: selectedAgentId }),
+    ...(selectedOutcome && { outcome: selectedOutcome }),
+    ...(missedOnly && { status: 'missed_call' as any }),
+    ...(datePreset !== 'all' && (() => {
+      const now = new Date()
+      const start = new Date(now)
+      if (datePreset === 'today') start.setDate(now.getDate() - 1)
+      if (datePreset === 'week') start.setDate(now.getDate() - 7)
+      if (datePreset === 'month') start.setDate(now.getDate() - 30)
+      return { startDate: start }
+    })())
   })
+
+  // Agents list for filter dropdown
+  const { data: agentsData } = api.auth.getAllAgents.useQuery({ page: 1, limit: 200, isActive: true })
+  const agents = useMemo(() => agentsData?.agents || [], [agentsData])
 
   if (error) {
     return (
@@ -63,6 +82,72 @@ export default function CallHistoryPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0 relative">
+            {/* Server-driven Filters */}
+            <div className="p-4 flex flex-wrap gap-3 border-b bg-white/60">
+              {/* Quick toggles */}
+              <div className="flex gap-2 mr-2">
+                <Button
+                  variant={missedOnly ? 'outline' : 'default'}
+                  size="sm"
+                  onClick={() => { setMissedOnly(false); setCurrentPage(1) }}
+                >
+                  All Calls
+                </Button>
+                <Button
+                  variant={missedOnly ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => { setMissedOnly(true); setCurrentPage(1) }}
+                >
+                  Inbound Missed
+                </Button>
+              </div>
+              {/* Outcome */}
+              <select
+                value={selectedOutcome || ''}
+                onChange={(e) => { setSelectedOutcome(e.target.value || undefined); setCurrentPage(1) }}
+                className="border rounded px-2 py-1 text-sm"
+              >
+                <option value="">All Outcomes</option>
+                <option value="completed_form">Completed Form</option>
+                <option value="going_to_complete">Going to Complete</option>
+                <option value="might_complete">Might Complete</option>
+                <option value="call_back">Callback Requested</option>
+                <option value="no_answer">No Answer</option>
+                <option value="missed_call">Missed Call</option>
+                <option value="hung_up">Hung Up</option>
+                <option value="bad_number">Bad Number</option>
+                <option value="no_claim">No Claim</option>
+                <option value="not_interested">Not Interested</option>
+                <option value="do_not_contact">Do Not Contact</option>
+              </select>
+
+              {/* Date preset */}
+              <select
+                value={datePreset}
+                onChange={(e) => { setDatePreset(e.target.value as any); setCurrentPage(1) }}
+                className="border rounded px-2 py-1 text-sm"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+              </select>
+
+              {/* Agent */}
+              <select
+                value={selectedAgentId ? String(selectedAgentId) : ''}
+                onChange={(e) => { setSelectedAgentId(e.target.value ? Number(e.target.value) : undefined); setCurrentPage(1) }}
+                className="border rounded px-2 py-1 text-sm"
+              >
+                <option value="">All Agents</option>
+                {agents.map((a: any) => (
+                  <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>
+                ))}
+              </select>
+
+              <Button variant="outline" size="sm" onClick={() => { setSelectedOutcome(undefined); setSelectedAgentId(undefined); setDatePreset('all'); setCurrentPage(1) }}>Clear</Button>
+              <div className="ml-auto" />
+            </div>
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-center">
@@ -77,6 +162,7 @@ export default function CallHistoryPage() {
                   isLoading={isLoading}
                   onRefresh={() => refetch()}
                   showUserInfo={true}
+                  enableLocalFilters={false}
                 />
                 {isLoading && (
                   <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-10">

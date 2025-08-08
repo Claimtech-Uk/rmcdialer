@@ -763,15 +763,27 @@ export const callsRouter = createTRPCRouter({
         // Allow all agents to see full call history for better user context
         const filters = { ...input };
 
+        // Build where clause once so both findMany and count stay in sync
+        const where: any = {
+          ...(filters.agentId && { agentId: filters.agentId }),
+          ...(filters.userId && { userId: filters.userId }),
+          ...(filters.startDate && { startedAt: { gte: filters.startDate } }),
+          ...(filters.endDate && { startedAt: { lte: filters.endDate } }),
+          ...(filters.status && { status: filters.status })
+        };
+
+        // Outcome filter should return a page fully matching the outcome.
+        // Prefer consolidated CallSession.lastOutcomeType, but fall back to CallOutcome relation
+        if (filters.outcome) {
+          where.OR = [
+            { lastOutcomeType: filters.outcome },
+            { callOutcomes: { some: { outcomeType: filters.outcome } } }
+          ];
+        }
+
         // Get call sessions with outcomes and user/agent details
         const callSessions = await prisma.callSession.findMany({
-          where: {
-            ...(filters.agentId && { agentId: filters.agentId }),
-            ...(filters.userId && { userId: filters.userId }),
-            ...(filters.startDate && { startedAt: { gte: filters.startDate } }),
-            ...(filters.endDate && { startedAt: { lte: filters.endDate } }),
-            ...(filters.status && { status: filters.status })
-          },
+          where,
           select: {
             id: true,
             userId: true,
@@ -926,15 +938,7 @@ export const callsRouter = createTRPCRouter({
           };
         });
 
-        const total = await prisma.callSession.count({
-          where: {
-            ...(filters.agentId && { agentId: filters.agentId }),
-            ...(filters.userId && { userId: filters.userId }),
-            ...(filters.startDate && { startedAt: { gte: filters.startDate } }),
-            ...(filters.endDate && { startedAt: { lte: filters.endDate } }),
-            ...(filters.status && { status: filters.status })
-          }
-        });
+        const total = await prisma.callSession.count({ where });
 
         return {
           calls: formattedCalls,
