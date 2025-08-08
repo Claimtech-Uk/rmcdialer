@@ -24,6 +24,8 @@ export interface SendSMSOptions {
   callSessionId?: string;
   messageType?: 'manual' | 'auto_response' | 'magic_link' | 'callback_confirmation' | 'review_request';
   templateId?: string;
+  /** Optional: override the Twilio sender number for this send (E.164) */
+  fromNumberOverride?: string;
 }
 
 export interface IncomingSMSData {

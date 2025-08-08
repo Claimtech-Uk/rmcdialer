@@ -1,6 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
+import { replicaDb } from '@/lib/mysql';
+import { normalizePhoneNumber } from '@/modules/twilio-voice/utils/phone.utils';
+import { FEATURE_FLAGS } from '@/lib/config/features';
+import { SmsAgentService } from '@/modules/ai-agents';
+import { SMSService, MagicLinkService } from '@/modules/communications';
+
+// Simple singleton for the SMS agent during runtime
+let smsAgentSingleton: SmsAgentService | null = null;
+function getSmsAgent(): SmsAgentService {
+  if (!smsAgentSingleton) {
+    smsAgentSingleton = new SmsAgentService(
+      new SMSService({
+        authService: { getCurrentAgent: async () => ({ id: 0, role: 'system' }) }
+      }),
+      new MagicLinkService({
+        authService: { getCurrentAgent: async () => ({ id: 0, role: 'system' }) }
+      })
+    );
+  }
+  return smsAgentSingleton;
+}
 
 // Twilio SMS Webhook Schema
 const TwilioSMSWebhookSchema = z.object({
@@ -49,9 +70,45 @@ export async function POST(request: NextRequest) {
     // Clean phone numbers (remove + prefix for consistency)
     const fromPhone = validatedData.From.replace(/^\+/, '');
     const toPhone = validatedData.To.replace(/^\+/, '');
+
+    // Only allow AI SMS agent auto-replies on the designated test number
+    const aiSmsTestNumberE164 = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
+    const isTestNumber = (validatedData.To === aiSmsTestNumberE164) || (toPhone === aiSmsTestNumberE164.replace(/^\+/, ''));
     
     // For inbound messages, the conversation is with the sender's phone number
     const conversationPhoneNumber = fromPhone;
+
+    // Try to match this phone number to an existing user in the replica DB
+    let matchedUserId: number | undefined = undefined;
+    try {
+      const phoneVariants = normalizePhoneNumber(validatedData.From);
+      const matchedUser = await replicaDb.user.findFirst({
+        where: {
+          AND: [
+            { phone_number: { in: phoneVariants } },
+            { is_enabled: true }
+          ]
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          phone_number: true
+        }
+      });
+
+      if (matchedUser) {
+        matchedUserId = Number(matchedUser.id);
+        console.log('🔗 Matched inbound SMS to user', {
+          userId: matchedUserId,
+          phone: matchedUser.phone_number
+        });
+      } else {
+        console.log('ℹ️ No user match for inbound SMS', { triedVariants: phoneVariants.join(', ') });
+      }
+    } catch (lookupError) {
+      console.error('❌ Failed to lookup user from phone for inbound SMS:', lookupError);
+    }
 
     try {
       // Find existing conversation - search for both formats (with and without + prefix)
@@ -69,6 +126,7 @@ export async function POST(request: NextRequest) {
         conversation = await prisma.smsConversation.create({
           data: {
             phoneNumber: conversationPhoneNumber,
+            ...(matchedUserId ? { userId: matchedUserId } : {}),
             status: 'active',
             lastMessageAt: new Date(),
             unreadCount: 1, // New inbound message
@@ -84,7 +142,8 @@ export async function POST(request: NextRequest) {
           data: {
             lastMessageAt: new Date(),
             unreadCount: { increment: 1 }, // Increment unread count
-            status: 'active' // Reactivate if it was closed
+            status: 'active', // Reactivate if it was closed
+            ...(matchedUserId && !conversation.userId ? { userId: matchedUserId } : {})
           }
         });
         
@@ -113,6 +172,20 @@ export async function POST(request: NextRequest) {
         Body: validatedData.Body,
         timestamp: new Date().toISOString()
       });
+
+      // Fire AI SMS auto-reply only for the test number and when feature is enabled
+      if (FEATURE_FLAGS.ENABLE_AI_SMS_AGENT && isTestNumber) {
+        try {
+          const agent = getSmsAgent();
+          void agent.handleInbound({
+            fromPhone: conversationPhoneNumber,
+            message: validatedData.Body,
+            replyFromE164: aiSmsTestNumberE164
+          });
+        } catch (agentError) {
+          console.error('AI SMS agent failed to handle inbound message:', agentError);
+        }
+      }
 
       return NextResponse.json({ 
         message: 'SMS processed and saved successfully',

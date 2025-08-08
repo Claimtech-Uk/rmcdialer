@@ -332,12 +332,14 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
             {/* User Header Card */}
             <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm">
               <CardHeader
-                className={`bg-gradient-to-r ${teamConfig.color.gradient} text-white py-10 border-b-2 border-white/20 relative overflow-hidden ${
-                  (currentUser as any)?.isMissedCallCallback ? 'bg-black/60 backdrop-brightness-75' : ''
-                }`}
+                className={`bg-gradient-to-r ${
+                  (currentUser as any)?.isMissedCallCallback ? 'from-slate-900 to-slate-800' : teamConfig.color.gradient
+                } text-white py-10 border-b-2 border-white/20 relative overflow-hidden`}
               >
                 {/* Enhanced background overlay for better contrast */}
-                <div className="absolute inset-0 bg-black/20 backdrop-blur-sm"></div>
+                <div className={`absolute inset-0 ${
+                  (currentUser as any)?.isMissedCallCallback ? 'bg-black/60' : 'bg-black/20'
+                } backdrop-blur-sm`}></div>
                 <div className="relative z-10 flex items-center justify-between">
                   <div className="flex items-center space-x-6">
                       <div className={`w-20 h-20 ${

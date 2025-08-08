@@ -96,13 +96,13 @@ export class SMSService {
       throw new Error('SMS service not initialized');
     }
 
-    const { phoneNumber, message, agentId, userId, messageType = 'manual' } = options;
+    const { phoneNumber, message, agentId, userId, messageType = 'manual', fromNumberOverride } = options;
 
     try {
       // Send via Twilio
       const twilioResponse = await this.twilioClient.messages.create({
         body: message,
-        from: this.fromNumber,
+        from: fromNumberOverride || this.fromNumber,
         to: phoneNumber,
         statusCallback: `${process.env.API_BASE_URL}/api/webhooks/sms/status`
       });

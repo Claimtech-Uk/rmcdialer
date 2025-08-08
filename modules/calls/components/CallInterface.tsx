@@ -911,8 +911,12 @@ export function CallInterface({
         <div className="lg:col-span-2 space-y-6">
           {/* Customer Information */}
           <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
-              <CardTitle className="flex items-center gap-2 text-slate-800">
+            <CardHeader className={`rounded-t-lg ${
+              (userContext as any)?.isMissedCallCallback ? 'bg-slate-900' : 'bg-gradient-to-r from-slate-50 to-slate-100'
+            }`}>
+              <CardTitle className={`flex items-center gap-2 ${
+                (userContext as any)?.isMissedCallCallback ? 'text-white' : 'text-slate-800'
+              }`}>
                 <User className="w-5 h-5 text-blue-600" />
                 Customer Information
               </CardTitle>
@@ -920,11 +924,17 @@ export function CallInterface({
             <CardContent className="space-y-4 p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <div className="text-2xl font-bold text-slate-900">
+                  <div className={`text-2xl font-bold ${
+                    (userContext as any)?.isMissedCallCallback ? 'text-white' : 'text-slate-900'
+                  }`}>
                     {userContext.firstName} {userContext.lastName}
                   </div>
-                  <div className="text-slate-600 flex items-center gap-2 mt-1">
-                    <Phone className="w-4 h-4 flex-shrink-0" />
+                  <div className={`flex items-center gap-2 mt-1 ${
+                    (userContext as any)?.isMissedCallCallback ? 'text-slate-200' : 'text-slate-600'
+                  }`}>
+                    <Phone className={`w-4 h-4 flex-shrink-0 ${
+                      (userContext as any)?.isMissedCallCallback ? 'text-slate-200' : ''
+                    }`} />
                     {userContext.phoneNumber}
                   </div>
                   
@@ -933,7 +943,7 @@ export function CallInterface({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                      className={`${(userContext as any)?.isMissedCallCallback ? 'text-white border-white/40 hover:bg-white/10' : 'text-blue-600 border-blue-200 hover:bg-blue-50'}`}
                       onClick={() => window.open(`https://claim.resolvemyclaim.co.uk/admin/users/${userContext.userId}`, '_blank')}
                     >
                       <ExternalLink className="w-4 h-4 mr-2" />
@@ -945,7 +955,7 @@ export function CallInterface({
                       disabled={sendReviewSMSMutation.isPending || !userContext.phoneNumber}
                       variant="outline"
                       size="sm"
-                      className="text-purple-600 border-purple-200 hover:bg-purple-50"
+                      className={`${(userContext as any)?.isMissedCallCallback ? 'text-white border-white/40 hover:bg-white/10' : 'text-purple-600 border-purple-200 hover:bg-purple-50'}`}
                       title={userContext.phoneNumber ? 'Send review request to customer' : 'No phone number available'}
                     >
                       <MessageSquare className="w-4 h-4 mr-2" />
@@ -1014,7 +1024,9 @@ export function CallInterface({
                     </Badge>
                   </div>
                   
-                   <div className="text-sm text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
+                   <div className={`text-sm px-3 py-2 rounded-lg ${
+                     (userContext as any)?.isMissedCallCallback ? 'text-slate-200 bg-slate-800' : 'text-slate-500 bg-slate-50'
+                   }`}>
                      {/* Guard against missing callScore for missed-call minimal contexts */}
                      Score: {(userContext.callScore?.currentScore ?? 50)} | 
                      Attempts: {(userContext.callScore?.totalAttempts ?? 0)}

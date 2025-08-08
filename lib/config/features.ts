@@ -299,6 +299,8 @@ const ORIGINAL_FLAGS: OriginalFeatureFlags = {
 export const FEATURE_FLAGS = {
   ...ORIGINAL_FLAGS,
   ...QUEUE_MIGRATION_FLAGS,
+  // AI agents
+  ENABLE_AI_SMS_AGENT: process.env.ENABLE_AI_SMS_AGENT === 'true'
 } as const;
 
 // ============================================================================
