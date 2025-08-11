@@ -171,26 +171,36 @@ export class AgentRuntimeService {
       
       const conversationalResponse = await buildConversationalResponse(input.fromPhone, responseContext)
       
-      // Handle 3-message sequences or single response
-      if (conversationalResponse.useSequence && conversationalResponse.messageSequence) {
-        // Use 3-message sequence approach
-        replyText = conversationalResponse.messageSequence.message1
+      // Handle AI's natural decision on 1-3 messages
+      const messages = conversationalResponse.messages || []
+      
+      if (messages.length === 1) {
+        // Single message
+        replyText = messages[0]
+        console.log('AI SMS | 💬 Single message response', {
+          messageLength: messages[0].length,
+          tone: conversationalResponse.conversationTone
+        })
+      } else if (messages.length > 1) {
+        // Multi-message sequence (2-3 messages)
+        replyText = messages[0] // Send first message immediately
         
-        // Schedule the remaining messages with 5-second delays
-        followups = [
-          { text: conversationalResponse.messageSequence.message2, delaySec: 5 },
-          { text: conversationalResponse.messageSequence.message3, delaySec: 10 }
-        ]
+        // Schedule remaining messages with 5-second delays
+        followups = messages.slice(1).map((text, index) => ({
+          text,
+          delaySec: (index + 1) * 5 // 5, 10 seconds
+        }))
         
-        console.log('AI SMS | 🎯 Scheduled 3-message sequence', {
-          reason: conversationalResponse.sequenceReason,
-          message1Length: conversationalResponse.messageSequence.message1.length,
-          message2Length: conversationalResponse.messageSequence.message2.length,
-          message3Length: conversationalResponse.messageSequence.message3.length
+        console.log('AI SMS | ✅ AI chose multi-message sequence', {
+          totalMessages: messages.length,
+          firstMessageLength: messages[0].length,
+          followupsScheduled: followups.length,
+          tone: conversationalResponse.conversationTone
         })
       } else {
-        // Use single message approach
-        replyText = `${conversationalResponse.mainResponse} ${conversationalResponse.followUpQuestion}`
+        // Fallback if no messages (shouldn't happen)
+        replyText = "I understand your question. How can I help you further?"
+        console.log('AI SMS | ⚠️ No messages from AI, using fallback')
       }
       
       // Handle smart link referencing or consent-based offers
@@ -222,11 +232,17 @@ export class AgentRuntimeService {
             phoneNumber: input.fromPhone, 
             linkType: 'claimPortal' 
           })
-          replyText = `${conversationalResponse.mainResponse} I'll send your portal link now. ${conversationalResponse.followUpQuestion}`
+          // Modify the last message to include link confirmation
+          const lastMessage = messages[messages.length - 1] || "I understand your question."
+          replyText = `${messages[0]} I'll send your portal link now.`
+          
+          // Update follow-ups to include the link confirmation
+          if (followups.length > 0) {
+            followups[followups.length - 1].text += " Your portal link is on the way!"
+          }
         }
         console.log('AI SMS | ✅ Conversational response built', {
-          hasMainResponse: !!conversationalResponse.mainResponse,
-          hasFollowUp: !!conversationalResponse.followUpQuestion,
+          messageCount: conversationalResponse.messages.length,
           shouldOfferLink: conversationalResponse.shouldOfferLink,
           hasConsent: consentStatus.hasConsent,
           consentReason: consentStatus.reason
