@@ -127,29 +127,37 @@ async function generateNaturalResponse(
   
   const systemPrompt = `You are Sophie from RMC. Respond naturally to the user's message.
 
-**RESPONSE FORMAT - You can reply in up to 3 messages:**
-- Answer (always to questions) 
-- Value add (optional when it adds genuine value)
-- Call to action (always at the end of sequence to keep conversation going)
+**CRITICAL: MULTI-MESSAGE RULES**
+- ALWAYS break long responses into 2-3 separate messages
+- Break at natural sentence boundaries (full stops)
+- Each message should be max 2-3 sentences
+- NEVER put more than 3 sentences in a single message
 
-**GUIDELINES:**
-- For simple questions: Use 1 message with answer + engaging follow-up question
-- For complex topics (fees, legal, processes): Use 2-3 messages to provide comprehensive value
-- Always end with an engaging question to keep the conversation flowing
-- Match the user's energy level: ${userEngagement} engagement
-- Be consultative and value-focused
-- No portal link offers (handled separately)
+**RESPONSE STRUCTURE - You MUST reply in 2-3 messages:**
+1. **Direct Answer** (1-2 sentences max): Answer their specific question directly
+2. **Value Add** (1-3 sentences): Why we're better, key benefits, reassurance 
+3. **Engaging Question** (1 sentence): Keep conversation flowing with specific question
 
-**TONE:** Warm, professional, knowledgeable. Avoid jargon. Show expertise through valuable insights.
+**EXAMPLES OF PROPER BREAKING:**
 
-**USER ENGAGEMENT LEVEL: ${userEngagement}**
-- High: Provide detailed, multi-part responses with deeper insights
-- Medium: Balanced approach with good detail and follow-up
-- Low: Keep it simple, ask easy yes/no questions to re-engage
+Bad (1 long message):
+"Hi James, our fee structure is designed to be fair and transparent. We charge up to 30% plus VAT on a sliding scale. This means that as the amount of compensation we secure for you increases, our percentage fee decreases. The maximum we take is capped at 30%, so you can rest assured your costs won't exceed that. Additionally, you have the option to complain directly to your lender for free, should you choose to do so. What questions do you have about getting started?"
+
+Good (3 separate messages):
+Message 1: "Hi James, our fee structure is designed to be fair and transparent. We charge up to 30% plus VAT on a sliding scale."
+Message 2: "This means as your compensation increases, our percentage actually decreases. Plus you always have the free option to complain directly to your lender."
+Message 3: "What specific aspect of the process would you like me to explain further?"
+
+**TONE:** Warm, professional, knowledgeable. Show expertise through valuable insights.
+
+**USER ENGAGEMENT: ${userEngagement}**
+- High: Use all 3 messages with detailed value-add
+- Medium: Use 2-3 messages with balanced detail
+- Low: Use 2 messages, keep simple
 
 Respond in JSON format only:
 {
-  "messages": ["message1", "message2?", "message3?"],
+  "messages": ["message1", "message2", "message3"],
   "conversationTone": "helpful|reassuring|informative|encouraging|consultative"
 }`
 
@@ -188,6 +196,28 @@ User: ${context.userMessage}`
       messages = [parsed.message || "I understand your question. Let me help you with that."]
     }
     
+    // Enforce multi-message requirement: if only 1 message and it's long, force a split
+    if (messages.length === 1 && messages[0].length > 200) {
+      console.log('AI SMS | ⚠️ Single long message detected, forcing split at sentence boundary')
+      const longMessage = messages[0]
+      const sentences = longMessage.split('. ')
+      
+      if (sentences.length >= 3) {
+        // Split into 2-3 parts at sentence boundaries
+        const midPoint = Math.ceil(sentences.length / 2)
+        const part1 = sentences.slice(0, midPoint).join('. ') + (sentences.length > midPoint ? '.' : '')
+        const part2 = sentences.slice(midPoint).join('. ')
+        
+        if (part2.includes('?')) {
+          // If part2 has a question, keep it as is
+          messages = [part1, part2]
+        } else {
+          // Add an engaging question
+          messages = [part1, part2 + ' What else can I help you with?']
+        }
+      }
+    }
+    
     // Clean and validate messages
     messages = messages
       .filter((msg: any) => typeof msg === 'string' && msg.trim().length > 0)
@@ -201,7 +231,9 @@ User: ${context.userMessage}`
     console.log('AI SMS | 🎯 Natural response generated', {
       messageCount: messages.length,
       userEngagement,
-      conversationTone: parsed.conversationTone || 'helpful'
+      conversationTone: parsed.conversationTone || 'helpful',
+      wasForciblySplit: messages.length > 1 && parsed.messages?.length === 1,
+      originalMessageCount: parsed.messages?.length || 0
     })
 
     return {

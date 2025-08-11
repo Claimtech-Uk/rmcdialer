@@ -216,8 +216,9 @@ function checkRecentLinkActivity(recentMessages: Array<{direction: 'inbound' | '
     
     // Check for actual link sends (URLs in outbound messages)
     if (message.direction === 'outbound') {
-      const hasPortalUrl = /claim\.resolvemyclaim\.co\.uk|portal.*link/i.test(message.body)
-      if (hasPortalUrl) {
+      // Only flag if an actual URL was sent, not just mentions/offers
+      const hasActualUrl = /claim\.resolvemyclaim\.co\.uk|https?:\/\/[^\s]+/i.test(message.body)
+      if (hasActualUrl) {
         linkSentRecently = true
         messagesAgo = Math.min(messagesAgo, messageIndex)
         
@@ -229,9 +230,10 @@ function checkRecentLinkActivity(recentMessages: Array<{direction: 'inbound' | '
       }
     }
     
-    // Check for portal link mentions (either direction)
-    const hasPortalMention = /portal\s+link|claim\s+portal|secure\s+link/i.test(message.body)
-    if (hasPortalMention) {
+    // Check for portal link mentions that suggest a link was shared (not just offered)
+    const hasSharedLinkMention = /(sent|shared|sent you|here.{0,10}link|link.{0,10}above|link.{0,10}earlier)/i.test(message.body) && 
+                                /portal|link/i.test(message.body)
+    if (hasSharedLinkMention) {
       linkMentionedRecently = true
       messagesAgo = Math.min(messagesAgo, messageIndex)
       
