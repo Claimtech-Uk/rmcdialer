@@ -116,7 +116,8 @@ export type ConversationalResponse = {
 
 async function generateNaturalResponse(
   context: ResponseContext, 
-  userEngagement: UserEngagement
+  userEngagement: UserEngagement,
+  hasExplicitLinkRequest: boolean = false
 ): Promise<Omit<ConversationalResponse, 'shouldOfferLink' | 'linkOffer' | 'linkReference'>> {
   
   // Build recent conversation context
@@ -125,39 +126,46 @@ async function generateNaturalResponse(
     .map(m => `${m.direction === 'inbound' ? 'User' : 'Sophie'}: ${m.body}`)
     .join('\n')
   
-  const systemPrompt = `You are Sophie from RMC. Respond naturally to the user's message.
+  const systemPrompt = `You are Sophie from RMC. You MUST respond with exactly 2 or 3 separate messages.
 
-**CRITICAL: MULTI-MESSAGE RULES**
-- ALWAYS break long responses into 2-3 separate messages
-- Break at natural sentence boundaries (full stops)
-- Each message should be max 2-3 sentences
-- NEVER put more than 3 sentences in a single message
+**MANDATORY RULE: NEVER give a single message. ALWAYS provide 2-3 messages.**
 
-**RESPONSE STRUCTURE - You MUST reply in 2-3 messages:**
-1. **Direct Answer** (1-2 sentences max): Answer their specific question directly
-2. **Value Add** (1-3 sentences): Why we're better, key benefits, reassurance 
-3. **Engaging Question** (1 sentence): Keep conversation flowing with specific question
+**RESPONSE STRUCTURE (REQUIRED):**
+Message 1: **Direct Answer** (1-2 sentences) - Answer their question immediately
+Message 2: **Value Add** (1-2 sentences) - Explain benefits of using RMC vs going direct
+Message 3: **Engaging Question** (1 sentence) - Keep conversation flowing
 
-**EXAMPLES OF PROPER BREAKING:**
+**For simple questions**: Use 2 messages (combine value-add with question)
+**For complex topics**: Use all 3 messages
 
-Bad (1 long message):
-"Hi James, our fee structure is designed to be fair and transparent. We charge up to 30% plus VAT on a sliding scale. This means that as the amount of compensation we secure for you increases, our percentage fee decreases. The maximum we take is capped at 30%, so you can rest assured your costs won't exceed that. Additionally, you have the option to complain directly to your lender for free, should you choose to do so. What questions do you have about getting started?"
+**CRITICAL EXAMPLES:**
 
-Good (3 separate messages):
-Message 1: "Hi James, our fee structure is designed to be fair and transparent. We charge up to 30% plus VAT on a sliding scale."
-Message 2: "This means as your compensation increases, our percentage actually decreases. Plus you always have the free option to complain directly to your lender."
-Message 3: "What specific aspect of the process would you like me to explain further?"
+User: "How long will it take?"
+✅ CORRECT (2 messages):
+Message 1: "The timelines can vary depending on your lender, but we proactively chase and keep you updated throughout the process."
+Message 2: "Unlike going direct, we have experience with each lender's specific procedures which often speeds things up. What else would you like to know about the process?"
 
-**TONE:** Warm, professional, knowledgeable. Show expertise through valuable insights.
+❌ WRONG (1 message):
+"The timelines can vary depending on your lender, but we proactively chase and keep you updated throughout the process. Unlike going direct, we have experience with each lender's specific procedures. What else would you like to know?"
+
+User: "What are your fees?"
+✅ CORRECT (3 messages):
+Message 1: "Our fees are on a sliding scale up to 30% plus VAT, designed to be fair and transparent."
+Message 2: "This means as your compensation increases, our percentage actually decreases. Plus you always have the free option to complain directly."
+Message 3: "What specific aspect of our fee structure would you like me to explain further?"
 
 **USER ENGAGEMENT: ${userEngagement}**
-- High: Use all 3 messages with detailed value-add
-- Medium: Use 2-3 messages with balanced detail
-- Low: Use 2 messages, keep simple
+**TONE:** Warm, professional, consultative. Show expertise.
 
-Respond in JSON format only:
+${hasExplicitLinkRequest ? `
+**SPECIAL NOTE: The user is explicitly asking for a link/portal access (e.g., "Yes send it"). 
+DO NOT refuse or say you can't send links. Instead, acknowledge their request positively.
+Example: "Perfect! I'll get that portal link sent to you right now." or "Great, sending your portal link now."**
+` : ''}
+
+MANDATORY JSON OUTPUT:
 {
-  "messages": ["message1", "message2", "message3"],
+  "messages": ["message1", "message2", "message3 (if needed)"],
   "conversationTone": "helpful|reassuring|informative|encouraging|consultative"
 }`
 
@@ -196,26 +204,36 @@ User: ${context.userMessage}`
       messages = [parsed.message || "I understand your question. Let me help you with that."]
     }
     
-    // Enforce multi-message requirement: if only 1 message and it's long, force a split
-    if (messages.length === 1 && messages[0].length > 200) {
-      console.log('AI SMS | ⚠️ Single long message detected, forcing split at sentence boundary')
-      const longMessage = messages[0]
-      const sentences = longMessage.split('. ')
+    // CRITICAL ENFORCEMENT: AI must provide 2-3 messages, never just 1
+    if (messages.length === 1) {
+      console.log('AI SMS | ⚠️ AI tried to give single message - ENFORCING multi-message rule')
+      const singleMessage = messages[0]
       
-      if (sentences.length >= 3) {
-        // Split into 2-3 parts at sentence boundaries
+      // Force into 2 messages: answer + value-add question
+      const sentences = singleMessage.split('. ')
+      if (sentences.length >= 2) {
         const midPoint = Math.ceil(sentences.length / 2)
-        const part1 = sentences.slice(0, midPoint).join('. ') + (sentences.length > midPoint ? '.' : '')
-        const part2 = sentences.slice(midPoint).join('. ')
+        const answer = sentences.slice(0, midPoint).join('. ') + '.'
+        let valueAdd = sentences.slice(midPoint).join('. ')
         
-        if (part2.includes('?')) {
-          // If part2 has a question, keep it as is
-          messages = [part1, part2]
-        } else {
-          // Add an engaging question
-          messages = [part1, part2 + ' What else can I help you with?']
+        // Ensure second message ends with question
+        if (!valueAdd.includes('?')) {
+          valueAdd += ' What else can I help you with?'
         }
+        
+        messages = [answer, valueAdd]
+      } else {
+        // Single sentence - force into answer + value-add
+        messages = [
+          singleMessage.replace(/\?.*$/, '.'), // Remove question from first
+          "We're here to guide you through the entire process. What else would you like to know?"
+        ]
       }
+      
+      console.log('AI SMS | ✅ Forced single message into multi-message sequence', {
+        originalLength: singleMessage.length,
+        newMessageCount: messages.length
+      })
     }
     
     // Clean and validate messages
@@ -259,14 +277,18 @@ export async function buildConversationalResponse(
   // Analyze user engagement naturally
   const userEngagement = analyzeUserEngagement(context.recentMessages)
   
+  // Check if user is explicitly requesting a link
+  const hasExplicitLinkRequest = /yes\s+send\s+it|yes\s*,?\s*send|send\s+it|portal|link/i.test(context.userMessage)
+  
   console.log('AI SMS | 💬 Building natural AI response', {
     userMessage: context.userMessage.substring(0, 50) + '...',
     userEngagement,
-    hasKnowledge: !!context.knowledgeContext
+    hasKnowledge: !!context.knowledgeContext,
+    hasExplicitLinkRequest
   })
   
-  // Let the AI naturally decide on 1-3 messages
-  const response = await generateNaturalResponse(context, userEngagement)
+  // Let the AI naturally decide on 1-3 messages (with context about link requests)
+  const response = await generateNaturalResponse(context, userEngagement, hasExplicitLinkRequest)
   
   // Handle link consent and offerings
   const consentStatus = await checkLinkConsent(phoneNumber, context.userMessage, {

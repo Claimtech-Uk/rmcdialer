@@ -58,6 +58,9 @@ export async function checkLinkConsent(
     /can\s+i\s+get\s+(the\s+)?(portal\s+)?link/i,
     /i\s+want\s+(the\s+)?(portal\s+)?link/i,
     /yes\s*,?\s*(send\s+)?(the\s+)?link/i,
+    /yes\s+send\s+it/i, // "Yes send it" - explicit after offer
+    /yes\s*,?\s*send/i, // "Yes, send" or "Yes send"
+    /send\s+it/i, // "Send it" - clear intent
     /portal/i // Simple portal mention
   ]
   
