@@ -7,24 +7,15 @@
   "functions": {
     "app/api/**": {
       "maxDuration": 60,
-      "includeFiles": [
-        "node_modules/.prisma/client/**",
-        "prisma/generated/mysql-client/**"
-      ]
+      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
     },
     "app/api/cron/**": {
       "maxDuration": 300,
-      "includeFiles": [
-        "node_modules/.prisma/client/**",
-        "prisma/generated/mysql-client/**"
-      ]
+      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
     },
     "app/api/webhooks/**": {
       "maxDuration": 180,
-      "includeFiles": [
-        "node_modules/.prisma/client/**",
-        "prisma/generated/mysql-client/**"
-      ]
+      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
     }
   },
   "crons": [
