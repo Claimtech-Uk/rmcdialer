@@ -1,18 +1,30 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": ".next",
   "installCommand": "npm ci",
   "framework": "nextjs",
   "functions": {
     "app/api/**": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": [
+        "node_modules/.prisma/client/**",
+        "prisma/generated/mysql-client/**"
+      ]
     },
     "app/api/cron/**": {
-      "maxDuration": 300
+      "maxDuration": 300,
+      "includeFiles": [
+        "node_modules/.prisma/client/**",
+        "prisma/generated/mysql-client/**"
+      ]
     },
     "app/api/webhooks/**": {
-      "maxDuration": 180
+      "maxDuration": 180,
+      "includeFiles": [
+        "node_modules/.prisma/client/**",
+        "prisma/generated/mysql-client/**"
+      ]
     }
   },
   "crons": [
