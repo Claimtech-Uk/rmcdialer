@@ -15,8 +15,10 @@ export function containsComplaintIntent(text: string): boolean {
 }
 
 export function containsAbuseIntent(text: string): boolean {
-  const t = text.toLowerCase()
-  return /(idiot|stupid|useless|fraud|scam|hate|swear|\bf\w{2,}\b)/.test(t)
+  // Only flag explicit abusive language. Avoid broad patterns that match common
+  // words like "from", "fees", etc. Do NOT treat "scam"/"fraud" as abuse – those are
+  // common trust questions and should be handled by normal replies.
+  return /(\bidiot\b|\bstupid\b|\buseless\b|\bfuck(?:er|ing)?\b|\bf\*+k\b)/i.test(text)
 }
 
 

@@ -24,6 +24,7 @@ export class SmsAgentService {
 
     // Safety: complaint/abuse handling – acknowledge and halt automation for 24h
     const lower = (input.message || '').toLowerCase()
+    // Detect STOP first elsewhere. Here, only treat as abuse if truly abusive.
     if (containsComplaintIntent(lower) || containsAbuseIntent(lower)) {
       const { formatSms } = await import('./formatter')
       const toE164 = (n: string) => (n?.startsWith('+') ? n : `+${n}`)
@@ -121,14 +122,15 @@ export class SmsAgentService {
       }
     }
 
-    if (turn.reply?.text) {
+    if (turn.reply && typeof turn.reply.text === 'string' && turn.reply.text.length > 0) {
       // Ensure SMS length stays reasonable (160-ish characters)
       const { formatSms } = await import('./formatter')
-      const replyKey = turn.idempotencyKey ? `${turn.idempotencyKey}:reply` : `reply:${toNumber}:${turn.reply.text}`
+      const replyText = turn.reply.text
+      const replyKey = turn.idempotencyKey ? `${turn.idempotencyKey}:reply` : `reply:${toNumber}:${replyText}`
       console.log('AI SMS | 📤 Sending reply', { to: toNumber, fromOverride: input.replyFromE164 })
       await sendOnce(replyKey, async () => {
         const { withinBusinessHours, scheduleAtBusinessOpen } = await import('../../core/followup.store')
-        const msg = formatSms(turn.reply.text)
+        const msg = formatSms(replyText)
         if (!withinBusinessHours()) {
           console.log('AI SMS | 🕗 Outside business hours, deferring reply to open')
           await scheduleAtBusinessOpen(input.fromPhone, msg, { kind: 'primary_reply' })
