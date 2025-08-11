@@ -222,7 +222,7 @@ TONE GUIDELINES:
 - Low engagement: Be warm, ask simple yes/no questions to re-engage
 - Declining momentum: Ask direct preference questions
 
-OUTPUT FORMAT:
+OUTPUT FORMAT: Respond in JSON format only:
 {
   "mainResponse": "Direct answer that flows from their recent message",
   "followUpQuestion": "Engaging question that keeps conversation going",

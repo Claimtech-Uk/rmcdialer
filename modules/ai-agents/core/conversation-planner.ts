@@ -245,7 +245,7 @@ ${getAllStrategiesContext()}
 
 TONE: Professional, helpful, consultative. No emojis. Brief but valuable.
 
-OUTPUT: JSON only, with this structure:
+OUTPUT: Respond in JSON format only, with this structure:
 {
   "shouldPlan": boolean,
   "strategy": "description of approach",
