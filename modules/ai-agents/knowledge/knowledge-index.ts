@@ -57,8 +57,8 @@ export const KNOWLEDGE_KB: Record<string, KBItem> = {
   'KB-005': {
     id: 'KB-005',
     title: 'How do I complain? (DIY route and with us)',
-    sms: 'You can complain to the lender for free. We can do it for you: sign the LOA, we get info, request docs, and submit the complaint.',
-    long: 'DIY is free. Lenders often only keep 6 years of docs; we can check back to 2007 and investigate unfair commissions/irresponsible lending. With us: LOA → checks → doc requests → submit → track → escalate.'
+    sms: 'You can complain directly for free. We handle everything - finding older agreements back to 2007, building stronger cases with multiple claim types, and managing all negotiations.',
+    long: 'DIY is free but limited. We find agreements back to 2007, investigate DCA, unfair relationships, and irresponsible lending. Full service: LOA → comprehensive checks → doc requests → complaint → negotiations → escalation.'
   },
   'KB-006': {
     id: 'KB-006',
@@ -111,14 +111,14 @@ export const KNOWLEDGE_KB: Record<string, KBItem> = {
   'KB-014': {
     id: 'KB-014',
     title: 'Timelines — how long will this take?',
-    sms: 'Varies. Many lenders have longer to respond (into late 2025). We’ll keep you updated.',
-    long: 'Delays expected due to FCA temporary rules. We track and chase cases proactively; timelines vary by lender.'
+    sms: 'Timelines vary by lender, but we proactively chase and keep you updated throughout. Most cases are stronger when we find older agreements going back to 2007.',
+    long: 'Delays expected due to FCA temporary rules. We track and chase cases proactively; timelines vary by lender. Comprehensive investigation often finds stronger claims.'
   },
   'KB-015': {
     id: 'KB-015',
     title: 'When will I get my money back?',
-    sms: 'FCA pause until 4 Dec 2025. Payments now expected to start in early 2026.',
-    long: 'FCA pause pending investigation. From 4 Dec 2025, lenders resume handling; payments likely early 2026. Timelines vary.'
+    sms: 'Most payments expected from early 2026. We\'ll push for quicker resolution and keep you informed of progress throughout.',
+    long: 'FCA pause until 4 Dec 2025, then payments likely early 2026. We actively chase lenders and negotiate for faster resolution where possible.'
   },
   'KB-016': {
     id: 'KB-016',
@@ -171,8 +171,8 @@ export const KNOWLEDGE_KB: Record<string, KBItem> = {
   'KB-024': {
     id: 'KB-024',
     title: 'What are your fees?',
-    sms: 'The fee is capped at 30% + VAT of any compensation.',
-    long: 'No‑win, no‑fee. Max 30% + VAT if successful, covering all case work. No fee if unsuccessful.'
+    sms: 'Our fee is up to 30% + VAT on a sliding scale. The more compensation we secure, the lower percentage we charge. We investigate 3 types of claims to maximise your compensation.',
+    long: 'No‑win, no‑fee with sliding scale pricing. Fee reduces as compensation increases, capped at 30% + VAT. We investigate DCA, unfair relationships, and irresponsible lending to maximise your outcome.'
   },
   // Regular Questions & Guided responses (2.2)
   'QRG-FEES': { id: 'QRG-FEES', title: 'Fees cap', sms: 'Our fee is capped at 30% + VAT. You can complain direct to your lender for free.', long: 'Our fee is capped at 30% + VAT of the compensation. DIY complaints to lenders are free; we add value by finding older cases, handling chasers, and building stronger evidence.' },

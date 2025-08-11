@@ -4,7 +4,15 @@
 import { AgentContextBuilder } from './context-builder'
 import { getConversationSummary, setConversationSummary, getLastReply, setLastReply, getLastLinkSentAt, setLastLinkSentAt, getLastReviewAskAt, setLastReviewAskAt } from './memory.store'
 import { chat } from './llm.client'
-import { buildSystemPrompt, buildUserPrompt } from './prompt-builder'
+import { hybridChat, convertToolCallsToActions, SMS_AGENT_TOOLS, getSystemPromptForMode, isToolCallingEnabled } from './modern-llm.client'
+import { buildSystemPrompt, buildUserPrompt, buildUserPromptIntelligent } from './prompt-builder'
+import { analyzeAndStoreConversationInsights } from './intelligent-kb-selector'
+import { smartPersonalize, getPersonalizationPromptContext, recordAILinkAction, createLegacyPersonalizeFunction } from './intelligent-personalization'
+import { enhanceResponse, shouldEnhanceResponse } from './intelligent-response-enhancer'
+import { conversationPlanner, type PlanningContext } from './conversation-planner'
+import { isFeatureEnabled } from '../config/feature-flags'
+import { buildConversationalResponse, type ResponseContext } from './conversational-response-builder'
+import { checkLinkConsent } from './consent-manager'
 import { SmsAgentRouter } from '../channels/sms/router/sms-agent-router'
 import { CustomerServiceProfile } from '../channels/sms/agents/customer-service.profile'
 import { UnsignedChaseProfile } from '../channels/sms/agents/unsigned-chase.profile'
@@ -61,9 +69,15 @@ export class AgentRuntimeService {
       : route.type === 'review_collection' ? ReviewCollectionProfile.systemAddendum
       : CustomerServiceProfile.systemAddendum
     )
-    const system = buildSystemPrompt(addendum)
-    // Fetch up to 5 most recent messages for this phone (inbound/outbound)
+    // Determine if we should use modern tool calling or legacy JSON response
+    const useToolCalling = isToolCallingEnabled()
+    const baseSystemPrompt = buildSystemPrompt(addendum)
+    const system = getSystemPromptForMode(baseSystemPrompt, useToolCalling)
+    
+    // Fetch balanced conversation context: up to 5 each direction (10 total)
     let recentTranscript: string | undefined = undefined
+    let recentMessages: Array<{direction: 'inbound' | 'outbound', body: string}> = []
+    
     try {
       const phone = input.fromPhone.replace(/^\+/, '')
       const conversation = await prisma.smsConversation.findFirst({
@@ -71,73 +85,273 @@ export class AgentRuntimeService {
         select: { id: true }
       })
       if (conversation?.id) {
-        const recent = await prisma.smsMessage.findMany({
+        // Get last 15 messages to ensure we have enough context
+        const allRecent = await prisma.smsMessage.findMany({
           where: { conversationId: conversation.id },
           orderBy: { createdAt: 'desc' },
-          take: 5,
-          select: { direction: true, body: true }
+          take: 15,
+          select: { direction: true, body: true, createdAt: true }
         })
-        if (recent && recent.length) {
-          const lines = recent
-            .reverse()
+        
+        if (allRecent && allRecent.length) {
+          // Balance the messages: aim for 5 inbound + 5 outbound (10 total max)
+          const reversed = allRecent.reverse() // Chronological order
+          const inboundMessages = reversed.filter(m => m.direction === 'inbound').slice(-5)
+          const outboundMessages = reversed.filter(m => m.direction === 'outbound').slice(-5)
+          
+          // Combine and sort by creation time to maintain conversation flow
+          const balancedMessages = [...inboundMessages, ...outboundMessages]
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+            .slice(-10) // Final limit of 10 messages
+          
+          // Store raw messages for intelligent analysis
+          recentMessages = balancedMessages.map((m: any) => ({
+            direction: m.direction as 'inbound' | 'outbound',
+            body: m.body
+          }))
+          
+          // Keep legacy transcript format for backward compatibility
+          const lines = recentMessages
             .map((m: any) => `${m.direction === 'inbound' ? 'User' : 'Sophie'}: ${redactPII(m.body).trim()}`)
           recentTranscript = lines.join('\n')
+          
+          console.log('AI SMS | 📚 Conversation context loaded', {
+            totalMessages: recentMessages.length,
+            inbound: recentMessages.filter(m => m.direction === 'inbound').length,
+            outbound: recentMessages.filter(m => m.direction === 'outbound').length
+          })
         }
       }
     } catch {}
-    const userPrompt = buildUserPrompt({
+    
+    // Use intelligent prompt building with conversation context
+    console.log('AI SMS | 🧠 Using intelligent prompt building with conversation context')
+    
+    // Get personalization context for smarter AI responses
+    const personalizationContext = await getPersonalizationPromptContext(input.fromPhone)
+    
+    const userPrompt = await buildUserPromptIntelligent({
       message: redactPII(input.message),
       userName: userCtx.firstName,
       statusHint: intentHint,
       conversationSummary: priorSummary || undefined,
-      recentTranscript
+      recentTranscript,
+      recentMessages,
+      personalizationContext
     })
 
-    // Call LLM using Chat Completions with json_object output
-    const completion = await chat({
-      system,
-      user: userPrompt,
-      model: process.env.AI_SMS_MODEL || 'gpt-4o-mini',
-      responseFormat: { type: 'json_object' }
-    })
-
+    // Initialize response variables
     let actions: AgentAction[] = []
     let idempotencyKey: string | undefined
     let planVersion: string | undefined
     let replyText: string | undefined
     let followups: Array<{ text: string; delaySec?: number }> = []
-    try {
-      const parsed = JSON.parse(completion)
-      const outputActions = Array.isArray(parsed?.actions) ? parsed.actions : []
-      if (typeof parsed?.idempotency_key === 'string') {
-        idempotencyKey = parsed.idempotency_key
+    
+    // Check if we should use the new conversational mode
+    const useConversationalMode = isFeatureEnabled('CONVERSATIONAL_MODE_ENABLED')
+    
+    if (useConversationalMode) {
+      console.log('AI SMS | 💬 Using new conversational response system')
+      
+      // Use new conversational response builder
+      const responseContext: ResponseContext = {
+        userMessage: input.message,
+        userName: userCtx.firstName,
+        recentMessages,
+        conversationInsights: await analyzeAndStoreConversationInsights(
+          input.fromPhone, 
+          input.message, 
+          recentMessages
+        ),
+        knowledgeContext: userPrompt.includes('Relevant KB') ? 
+          userPrompt.split('Relevant KB (AI-selected): [')[1]?.split(']')[0] : undefined,
+        userStatus: userCtx.queueType || undefined
       }
-      if (typeof parsed?.plan_version === 'string') {
-        planVersion = parsed.plan_version
+      
+      const conversationalResponse = await buildConversationalResponse(input.fromPhone, responseContext)
+      
+      // Build final response with natural follow-up question
+      replyText = `${conversationalResponse.mainResponse} ${conversationalResponse.followUpQuestion}`
+      
+      // Handle smart link referencing or consent-based offers
+      if (conversationalResponse.linkReference) {
+        // Replace any generic portal link mentions with smart reference
+        replyText = replyText.replace(/portal link/gi, conversationalResponse.linkReference)
+        console.log('AI SMS | 🔗 Applied smart link reference', {
+          reference: conversationalResponse.linkReference
+        })
+      } else if (conversationalResponse.shouldOfferLink && conversationalResponse.linkOffer) {
+        replyText += ` ${conversationalResponse.linkOffer}`
       }
-      for (const a of outputActions) {
-        if (a?.type === 'send_magic_link' && userCtx.found && userCtx.userId) {
-          actions.push({ type: 'send_magic_link', userId: userCtx.userId, phoneNumber: input.fromPhone, linkType: 'claimPortal' })
-        } else if (a?.type === 'send_sms' && a.phoneNumber && a.text) {
-          actions.push({ type: 'send_sms', phoneNumber: a.phoneNumber, text: String(a.text) })
-        } else if (a?.type === 'send_review_link') {
-          actions.push({ type: 'send_review_link', phoneNumber: input.fromPhone })
+      
+      // Check for explicit link consent and add to actions if approved
+      const consentStatus = await checkLinkConsent(input.fromPhone, input.message, {
+        messageCount: responseContext.conversationInsights?.messageCount || 0,
+        recentMessages: responseContext.recentMessages
+      })
+      
+      if (consentStatus.hasConsent && userCtx.found && userCtx.userId) {
+        if (consentStatus.reason === 'cooldown') {
+          // User wants link but it's in cooldown
+          replyText = 'I sent your portal link recently. Would you like me to resend it, or answer anything else first?'
+        } else {
+          // User has given consent, send the link
+          actions.push({ 
+            type: 'send_magic_link', 
+            userId: userCtx.userId, 
+            phoneNumber: input.fromPhone, 
+            linkType: 'claimPortal' 
+          })
+          replyText = `${conversationalResponse.mainResponse} I'll send your portal link now. ${conversationalResponse.followUpQuestion}`
+        }
+        console.log('AI SMS | ✅ Conversational response built', {
+          hasMainResponse: !!conversationalResponse.mainResponse,
+          hasFollowUp: !!conversationalResponse.followUpQuestion,
+          shouldOfferLink: conversationalResponse.shouldOfferLink,
+          hasConsent: consentStatus.hasConsent,
+          consentReason: consentStatus.reason
+        })
+      }
+      
+    } else {
+      // Use existing LLM approach
+      console.log('AI SMS | 🤖 Using legacy LLM approach', { 
+        useToolCalling, 
+        model: process.env.AI_SMS_MODEL || 'gpt-4o-mini' 
+      })
+    
+    const llmResponse = await hybridChat({
+      systemPrompt: system,
+      userPrompt,
+      tools: useToolCalling ? SMS_AGENT_TOOLS : undefined,
+      enableToolCalling: useToolCalling,
+      model: process.env.AI_SMS_MODEL || 'gpt-4o-mini'
+    })
+    
+    console.log('AI SMS | 🤖 LLM response received', {
+      type: llmResponse.type,
+      hasContent: !!llmResponse.content,
+      toolCallsCount: llmResponse.toolCalls.length,
+      fallbackUsed: llmResponse.fallbackUsed
+    })
+
+    // Handle response based on type (tool calling vs JSON)
+    if (llmResponse.type === 'tool_calling') {
+      // Modern tool calling response
+      console.log('AI SMS | 🔧 Processing tool calling response')
+      
+      // Extract reply from content
+      if (llmResponse.content) {
+        replyText = llmResponse.content.trim()
+      }
+      
+      // Convert tool calls to actions for backward compatibility
+      const toolActions = convertToolCallsToActions(
+        llmResponse.toolCalls, 
+        input.fromPhone, 
+        userCtx.found ? userCtx.userId : undefined
+      )
+      
+      // Add converted actions with proper type validation
+      for (const action of toolActions) {
+        if (action.type === 'send_magic_link' && typeof action.userId === 'number') {
+          actions.push({
+            type: 'send_magic_link',
+            userId: action.userId,
+            phoneNumber: action.phoneNumber,
+            linkType: (action.linkType as 'claimPortal' | 'documentUpload') || 'claimPortal'
+          })
+        } else if (action.type === 'send_sms' && action.text) {
+          actions.push({
+            type: 'send_sms',
+            phoneNumber: action.phoneNumber,
+            text: action.text
+          })
+        } else if (action.type === 'send_review_link') {
+          actions.push({
+            type: 'send_review_link',
+            phoneNumber: action.phoneNumber
+          })
         }
       }
-      if (typeof parsed?.reply === 'string' && parsed.reply.trim()) {
-        replyText = parsed.reply.trim()
+      
+      // Generate idempotency key from tool calls for consistency
+      if (llmResponse.toolCalls.length > 0) {
+        const toolCallSummary = llmResponse.toolCalls.map(tc => `${tc.name}:${JSON.stringify(tc.arguments)}`).join('|')
+        idempotencyKey = crypto.createHash('sha256')
+          .update(`${input.fromPhone}:${replyText}:${toolCallSummary}`)
+          .digest('hex').slice(0, 32)
       }
-      // Collect optional messages for follow-ups
-      if (Array.isArray(parsed?.messages)) {
-        type PlannedMsg = { text?: string; send_after_seconds?: number }
-        followups = (parsed.messages as PlannedMsg[])
-          .slice(1) // first message corresponds to reply
-          .map((m: PlannedMsg) => ({ text: String(m.text || '').trim(), delaySec: typeof m.send_after_seconds === 'number' ? m.send_after_seconds : undefined }))
-          .filter((m: { text: string; delaySec?: number }) => m.text)
+      
+    } else {
+      // Legacy JSON response handling (existing logic)
+      console.log('AI SMS | 📜 Processing JSON response')
+      
+      try {
+        const parsed = JSON.parse(llmResponse.content || '{}')
+        const outputActions = Array.isArray(parsed?.actions) ? parsed.actions : []
+        if (typeof parsed?.idempotency_key === 'string') {
+          idempotencyKey = parsed.idempotency_key
+        }
+        if (typeof parsed?.plan_version === 'string') {
+          planVersion = parsed.plan_version
+        }
+        for (const a of outputActions) {
+          if (a?.type === 'send_magic_link' && userCtx.found && userCtx.userId) {
+            actions.push({ type: 'send_magic_link', userId: userCtx.userId, phoneNumber: input.fromPhone, linkType: 'claimPortal' })
+          } else if (a?.type === 'send_sms' && a.phoneNumber && a.text) {
+            actions.push({ type: 'send_sms', phoneNumber: a.phoneNumber, text: String(a.text) })
+          } else if (a?.type === 'send_review_link') {
+            actions.push({ type: 'send_review_link', phoneNumber: input.fromPhone })
+          }
+        }
+        
+        if (typeof parsed?.reply === 'string' && parsed.reply.trim()) {
+          replyText = parsed.reply.trim()
+        }
+        
+        // Collect optional messages for follow-ups
+        if (Array.isArray(parsed?.messages)) {
+          type PlannedMsg = { text?: string; send_after_seconds?: number }
+          followups = (parsed.messages as PlannedMsg[])
+            .slice(1) // first message corresponds to reply
+            .map((m: PlannedMsg) => ({ text: String(m.text || '').trim(), delaySec: typeof m.send_after_seconds === 'number' ? m.send_after_seconds : undefined }))
+            .filter((m: { text: string; delaySec?: number }) => m.text)
+        }
+        
+      } catch (error) {
+        // If JSON parsing fails, degrade gracefully
+        console.warn('AI SMS | ⚠️ JSON parsing failed:', error)
+        replyText = String(llmResponse.content || '').replace(/^"|"$/g, '')
       }
-    } catch {
-      // If schema unexpectedly fails, degrade gracefully
-      replyText = String(completion).replace(/^"|"$/g, '')
+    }
+    
+    // Apply intelligent response enhancement (works for both tool calling and JSON responses)
+    if (replyText && shouldEnhanceResponse(replyText, input.message)) {
+      try {
+        const enhanced = await enhanceResponse(replyText, input.message, input.fromPhone)
+        
+        // Build enhanced response with value additions
+        const enhancedParts = [enhanced.coreAnswer]
+        if (enhanced.additionalValue.length > 0) {
+          enhancedParts.push(...enhanced.additionalValue)
+        }
+        enhancedParts.push(enhanced.callToAction)
+        
+        replyText = enhancedParts.join(' ')
+        
+        console.log('AI SMS | 💎 Enhanced response with value additions', {
+          phone: input.fromPhone.substring(0, 8) + '***',
+          questionType: enhanced.questionType,
+          ctaVariant: enhanced.ctaVariant,
+          responseType: llmResponse.type,
+          enhancedLength: replyText.length
+        })
+        
+      } catch (error) {
+        console.warn('AI SMS | ⚠️ Response enhancement failed, using original:', error)
+        // Keep original response if enhancement fails
+      }
     }
 
     // Consent-first heuristic: only send if explicit request to send/resend the link
@@ -175,20 +389,67 @@ export class AgentRuntimeService {
       }
     } catch {}
 
-    // Personalize with first name when we have a matched user and reply doesn't already start with a greeting
-    const personalize = (text: string, name?: string, found?: boolean): string => {
-      if (!found || !name || /^unknown$/i.test(name)) return text
-      const startsWithGreeting = /^\s*(hi|hey|hello)\b/i.test(text)
-      if (startsWithGreeting) return text
-      return `Hi ${name}, ${text}`
+    // Intelligent personalization that considers conversation context
+    const smartPersonalizationResult = await smartPersonalize({
+      phone: input.fromPhone,
+      firstName: userCtx.firstName,
+      userFound: userCtx.found,
+      replyText
+    })
+    
+    const personalized = smartPersonalizationResult.personalizedText
+    
+    // Record AI link actions for future intelligence
+    await recordAILinkAction(input.fromPhone, personalized)
+
+    // Intelligent multi-turn conversation planning
+    if (isFeatureEnabled('CONVERSATION_PLANNING_ENABLED')) {
+      try {
+        console.log('AI SMS | 🧠 Planning multi-turn conversation sequence')
+        
+        const planningContext: PlanningContext = {
+          userMessage: input.message,
+          currentResponse: personalized,
+          userFound: userCtx.found,
+          userName: userCtx.firstName,
+          queueType: userCtx.queueType || undefined,
+          recentMessages
+        }
+        
+        const conversationPlan = await conversationPlanner.planConversation(
+          input.fromPhone,
+          planningContext
+        )
+        
+        if (conversationPlan) {
+          await conversationPlanner.executePlan(
+            input.fromPhone,
+            conversationPlan,
+            userCtx.firstName,
+            userCtx.found
+          )
+          
+          console.log('AI SMS | ✅ Executed conversation plan:', {
+            planId: conversationPlan.planId,
+            goal: conversationPlan.goal,
+            strategy: conversationPlan.strategy,
+            messagesScheduled: conversationPlan.messages.length
+          })
+        } else {
+          console.log('AI SMS | ℹ️ No conversation plan needed for this turn')
+        }
+      } catch (error) {
+        console.error('AI SMS | ❌ Error in conversation planning:', error)
+      }
+    } else {
+      console.log('AI SMS | ⚠️ Conversation planning disabled by feature flag')
     }
-
-    const personalized = personalize(replyText, userCtx.firstName, userCtx.found)
-
-    // Enqueue follow-ups (MVP, within business hours handled at send time later)
+    
+    // Handle legacy followups if they still exist or if planning is disabled
     try {
+      const legacyPersonalize = createLegacyPersonalizeFunction()
       for (const f of followups) {
-        await scheduleFollowup(input.fromPhone, { text: personalize(f.text, userCtx.firstName, userCtx.found), delaySec: f.delaySec || 120 })
+        await scheduleFollowup(input.fromPhone, { text: legacyPersonalize(f.text, userCtx.firstName, userCtx.found), delaySec: f.delaySec || 120 })
       }
     } catch {}
 
@@ -227,13 +488,24 @@ export class AgentRuntimeService {
       idempotencyKey = crypto.createHash('sha256').update(planString).digest('hex').slice(0, 32)
     }
 
+    // Store enhanced conversation insights for future intelligence
+    try {
+      await analyzeAndStoreConversationInsights(
+        input.fromPhone,
+        input.message,
+        recentMessages
+      )
+    } catch (error) {
+      console.warn('AI SMS | ⚠️ Failed to store conversation insights:', error)
+    }
+    
+    } // Close the else block
+    
     return { reply: { text: personalized }, actions, idempotencyKey }
   }
 
-  // Expose minimal routing signals without expanding public API elsewhere
-  async getUserSignalsForRouting(fromPhone: string): Promise<{ found: boolean; hasSignature: boolean | null; pendingRequirements: number }> {
+  async getUserSignalsForRouting(fromPhone: string) {
     const ctx = await this.contextBuilder.buildFromPhone(fromPhone)
-    // Infer signature from queueType hint if callContext not available
     const hasSignature = ctx.queueType === 'unsigned_users' ? false : ctx.queueType ? true : null
     return {
       found: ctx.found,

@@ -3,7 +3,7 @@ import { AgentRuntimeService, type AgentTurnInput, type AgentTurnOutput } from '
 import { SmsAgentRouter } from './router/sms-agent-router'
 import { popDueFollowups } from '../../core/followup.store'
 import { containsAbuseIntent, containsComplaintIntent } from '../../core/guardrails'
-import { isAutomationHalted, setAutomationHalt, checkAndBumpRate, isIdempotencyKeyUsed, markIdempotencyKeyUsed, getLastReviewAskAt, setLastReviewAskAt } from '../../core/memory.store'
+import { isAutomationHalted, setAutomationHalt, checkAndBumpRate, isIdempotencyKeyUsed, markIdempotencyKeyUsed, getLastReviewAskAt, setLastReviewAskAt, recordLinkSent } from '../../core/memory.store'
 
 export class SmsAgentService {
   constructor(
@@ -166,6 +166,10 @@ export class SmsAgentService {
               phoneNumber: toE164(action.phoneNumber || input.fromPhone),
               fromNumberOverride: input.replyFromE164
             })
+            
+            // Record link send for smart conversation intelligence
+            await recordLinkSent(input.fromPhone, 'portal_link_sent')
+            console.log('AI SMS | 🔗 Recorded portal link send for conversation intelligence')
           }
           const userSignalsAfter = await this.runtime.getUserSignalsForRouting(input.fromPhone)
           await this.router.endIfGoalAchieved(input.fromPhone, route.type, userSignalsAfter)
@@ -215,6 +219,10 @@ export class SmsAgentService {
               userId: input.userId,
               fromNumberOverride: input.replyFromE164
             })
+            
+            // Record review link send for conversation intelligence  
+            await recordLinkSent(input.fromPhone, 'review_link_sent')
+            console.log('AI SMS | ⭐ Recorded review link send for conversation intelligence')
           }
           await setLastReviewAskAt(input.fromPhone, now, cooldownSec)
           // End review session immediately

@@ -862,12 +862,12 @@ export class AuthService {
   ): Promise<void> {
     try {
       // Find all queue entries assigned to this agent
-      const assignedCalls = await tx.inboundCallQueue.findMany({
+      const assignedCalls = tx.inboundCallQueue?.findMany ? await tx.inboundCallQueue.findMany({
         where: {
           assignedToAgentId: agentId,
           status: { in: ['assigned', 'connecting'] }
         }
-      });
+      }) : [] as any[]
 
       if (assignedCalls.length === 0) {
         this.deps.logger.info('No queue assignments to clear for agent', { agentId, reason });
@@ -881,7 +881,7 @@ export class AuthService {
       });
 
       // Return calls to waiting status for reassignment
-      const updatedCalls = await tx.inboundCallQueue.updateMany({
+      const updatedCalls = tx.inboundCallQueue?.updateMany ? await tx.inboundCallQueue.updateMany({
         where: {
           assignedToAgentId: agentId,
           status: { in: ['assigned', 'connecting'] }
@@ -901,7 +901,7 @@ export class AuthService {
             reassignedAt: new Date().toISOString()
           })
         }
-      });
+      }) : { count: 0 }
 
       this.deps.logger.info(`✅ Successfully cleared ${updatedCalls.count} queue assignments`, { 
         agentId, 
