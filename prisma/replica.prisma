@@ -2,8 +2,9 @@
 // This matches the actual structure of the main application database
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "./generated/mysql-client"
+  provider      = "prisma-client-js"
+  output        = "./generated/mysql-client"
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {
