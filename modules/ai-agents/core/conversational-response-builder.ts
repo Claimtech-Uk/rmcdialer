@@ -4,6 +4,12 @@
 import { chat } from './llm.client'
 import { getConversationInsights, type ConversationInsights } from './memory.store'
 import { checkLinkConsent, offerPortalLink } from './consent-manager'
+import { 
+  analyzeSequenceOpportunity, 
+  generateMessageSequence, 
+  type SequenceAnalysisContext,
+  type ThreeMessageSequence 
+} from './sequence-analyzer'
 
 // Helper function to check recent link activity
 function checkRecentLinkActivity(recentMessages: Array<{direction: 'inbound' | 'outbound', body: string}>): {
@@ -79,7 +85,11 @@ export type ConversationalResponse = {
   shouldOfferLink: boolean
   linkOffer?: string
   linkReference?: string
-  conversationTone: 'helpful' | 'reassuring' | 'informative' | 'encouraging'
+  conversationTone: 'helpful' | 'reassuring' | 'informative' | 'encouraging' | 'consultative'
+  // 3-message sequence support
+  useSequence?: boolean
+  messageSequence?: ThreeMessageSequence
+  sequenceReason?: string
 }
 
 export async function buildConversationalResponse(
@@ -97,11 +107,47 @@ export async function buildConversationalResponse(
   // Analyze recent conversation flow
   const conversationFlow = analyzeConversationFlow(context.recentMessages)
   
-  // Build weighted prompt that emphasizes recent context
-  const weightedPrompt = await buildWeightedPrompt(context, weights, conversationFlow)
+  // Check if this message would benefit from a 3-message sequence
+  const sequenceContext: SequenceAnalysisContext = {
+    userMessage: context.userMessage,
+    userName: context.userName,
+    conversationPhase: context.conversationInsights?.conversationPhase || 'discovery',
+    userEngagement: conversationFlow.userEngagement,
+    messageCount: context.conversationInsights?.messageCount || 0,
+    recentQuestions: conversationFlow.questionCount,
+    knowledgeContext: context.knowledgeContext
+  }
   
-  // Generate response with follow-up question requirement
-  const response = await generateConversationalResponse(weightedPrompt, context)
+  const sequenceDecision = await analyzeSequenceOpportunity(sequenceContext)
+  
+  let response: Omit<ConversationalResponse, 'shouldOfferLink' | 'linkOffer' | 'linkReference' | 'useSequence' | 'messageSequence' | 'sequenceReason'>
+  let messageSequence: ThreeMessageSequence | undefined
+  
+  if (sequenceDecision.shouldUseSequence && sequenceDecision.confidence > 0.6) {
+    // Generate 3-message sequence
+    console.log('AI SMS | 🎯 Using 3-message sequence approach:', sequenceDecision.reason)
+    
+    messageSequence = await generateMessageSequence(sequenceContext)
+    
+    if (messageSequence) {
+      // Use the first message as main response, question will be handled in sequence
+      response = {
+        mainResponse: messageSequence.message1,
+        followUpQuestion: '', // Empty since we're using sequence
+        conversationTone: 'consultative' // Override tone for sequences
+      }
+    } else {
+      // Fallback to single message if sequence generation fails
+      console.log('AI SMS | ⚠️ Sequence generation failed, falling back to single message')
+      const weightedPrompt = await buildWeightedPrompt(context, weights, conversationFlow)
+      response = await generateConversationalResponse(weightedPrompt, context)
+    }
+  } else {
+    // Use single message approach
+    console.log('AI SMS | 💬 Using single message approach:', sequenceDecision.reason)
+    const weightedPrompt = await buildWeightedPrompt(context, weights, conversationFlow)
+    response = await generateConversationalResponse(weightedPrompt, context)
+  }
   
   // Check if we should offer portal link (with consent and recent link activity)
   const consentStatus = await checkLinkConsent(phoneNumber, context.userMessage, {
@@ -144,7 +190,10 @@ export async function buildConversationalResponse(
     ...response,
     shouldOfferLink: !consentStatus.hasConsent && !!linkOffer,
     linkOffer,
-    linkReference
+    linkReference,
+    useSequence: !!messageSequence,
+    messageSequence,
+    sequenceReason: messageSequence ? sequenceDecision.reason : undefined
   }
 }
 

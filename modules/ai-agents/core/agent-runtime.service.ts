@@ -171,8 +171,27 @@ export class AgentRuntimeService {
       
       const conversationalResponse = await buildConversationalResponse(input.fromPhone, responseContext)
       
-      // Build final response with natural follow-up question
-      replyText = `${conversationalResponse.mainResponse} ${conversationalResponse.followUpQuestion}`
+      // Handle 3-message sequences or single response
+      if (conversationalResponse.useSequence && conversationalResponse.messageSequence) {
+        // Use 3-message sequence approach
+        replyText = conversationalResponse.messageSequence.message1
+        
+        // Schedule the remaining messages with 5-second delays
+        followups = [
+          { text: conversationalResponse.messageSequence.message2, delaySec: 5 },
+          { text: conversationalResponse.messageSequence.message3, delaySec: 10 }
+        ]
+        
+        console.log('AI SMS | 🎯 Scheduled 3-message sequence', {
+          reason: conversationalResponse.sequenceReason,
+          message1Length: conversationalResponse.messageSequence.message1.length,
+          message2Length: conversationalResponse.messageSequence.message2.length,
+          message3Length: conversationalResponse.messageSequence.message3.length
+        })
+      } else {
+        // Use single message approach
+        replyText = `${conversationalResponse.mainResponse} ${conversationalResponse.followUpQuestion}`
+      }
       
       // Handle smart link referencing or consent-based offers
       if (conversationalResponse.linkReference) {
