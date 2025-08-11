@@ -40,7 +40,9 @@
     "cron:schedule": "tsx scripts/check-cron-schedule.ts",
     "queue:trigger": "./scripts/trigger-queue-discovery-now.sh",
     "cron:logs": "curl -s https://rmcdialer-45m0lwnlq-james-campbells-projects-6c4e4922.vercel.app/api/cron/logs | jq .",
-    "cron:monitor": "./scripts/monitor-cron-schedule.sh"
+    "cron:monitor": "./scripts/monitor-cron-schedule.sh",
+    "vercel:deploy:prod": "node scripts/ci-assert-main.js && npx vercel@latest deploy --prebuilt --prod --yes",
+    "vercel:deploy:dev": "npx vercel@latest deploy --prebuilt --yes --target=preview"
   },
   "dependencies": {
     "@upstash/redis": "^1.31.4",
