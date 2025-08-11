@@ -145,6 +145,7 @@ export class AgentRuntimeService {
     let idempotencyKey: string | undefined
     let planVersion: string | undefined
     let replyText: string | undefined
+    let personalized: string | undefined
     let followups: Array<{ text: string; delaySec?: number }> = []
     
     // Check if we should use the new conversational mode
@@ -211,6 +212,21 @@ export class AgentRuntimeService {
           hasConsent: consentStatus.hasConsent,
           consentReason: consentStatus.reason
         })
+      }
+      
+      // Apply intelligent personalization for conversational mode
+      if (replyText) {
+        const smartPersonalizationResult = await smartPersonalize({
+          phone: input.fromPhone,
+          firstName: userCtx.firstName,
+          userFound: userCtx.found,
+          replyText
+        })
+        
+        personalized = smartPersonalizationResult.personalizedText
+        
+        // Record AI link actions for future intelligence
+        await recordAILinkAction(input.fromPhone, personalized)
       }
       
     } else {
@@ -500,6 +516,11 @@ export class AgentRuntimeService {
     }
     
     } // Close the else block
+    
+    // Ensure personalized is defined before return
+    if (!personalized) {
+      personalized = replyText || 'I\'m here to help with your claim. What can I assist you with?'
+    }
     
     return { reply: { text: personalized }, actions, idempotencyKey }
   }

@@ -149,10 +149,16 @@ export class ConversationPlanner {
    */
   private determineConversationGoal(
     context: PlanningContext, 
-    insights: ConversationInsights
+    insights: ConversationInsights | null
   ): ConversationGoal {
+    // Handle null insights gracefully
+    if (!insights) {
+      console.log('AI SMS | ⚠️ No conversation insights available, defaulting to signature goal')
+      return context.userFound ? 'retention' : 'signature'
+    }
+    
     // Check for objections first
-    if (insights.objectionsSeen.length > 0 || insights.userSentiment === 'cautious' || insights.userSentiment === 'frustrated') {
+    if (insights.objectionsSeen?.length > 0 || insights.userSentiment === 'cautious' || insights.userSentiment === 'frustrated') {
       return 'objection_handling'
     }
     
@@ -181,7 +187,8 @@ export class ConversationPlanner {
   /**
    * Check if context suggests we need follow-up planning
    */
-  private needsFollowUp(context: PlanningContext, insights: ConversationInsights): boolean {
+  private needsFollowUp(context: PlanningContext, insights: ConversationInsights | null): boolean {
+    if (!insights) return false
     // Always follow up on objections
     if (insights.objectionsSeen.length > 0) return true
     
@@ -200,9 +207,17 @@ export class ConversationPlanner {
   private async generatePlanWithAI(
     phoneNumber: string,
     context: PlanningContext,
-    insights: ConversationInsights,
+    insights: ConversationInsights | null,
     goal: ConversationGoal
   ): Promise<ConversationPlan | null> {
+    
+    // Use default values for null insights
+    const safeInsights = insights || {
+      userSentiment: 'neutral',
+      conversationPhase: 'discovery',
+      topicsDiscussed: [],
+      objectionsSeen: []
+    }
     const systemPrompt = `You are a conversation planning AI for Sophie at Resolve My Claim (RMC). 
 
 Your job is to plan strategic follow-up message sequences that maximize conversions while feeling natural and helpful.
@@ -247,14 +262,14 @@ OUTPUT: JSON only, with this structure:
 Goal: ${goal}
 User message: "${redactPII(context.userMessage)}"
 Current response: "${context.currentResponse}"
-User sentiment: ${insights.userSentiment}
-Conversation phase: ${insights.conversationPhase}
-Engagement level: ${insights.engagementLevel}
+User sentiment: ${safeInsights.userSentiment}
+Conversation phase: ${safeInsights.conversationPhase}
+Engagement level: ${safeInsights.engagementLevel || 'medium'}
 User found in system: ${context.userFound}
 Queue type: ${context.queueType || 'unknown'}
-Recent topics: ${insights.topicsDiscussed.slice(-3).join(', ')}
-Objections seen: ${insights.objectionsSeen.join(', ')}
-Message count: ${insights.messageCount}
+Recent topics: ${safeInsights.topicsDiscussed.slice(-3).join(', ')}
+Objections seen: ${safeInsights.objectionsSeen.join(', ')}
+Message count: ${safeInsights.messageCount || 0}
 
 Recent conversation:
 ${context.recentMessages?.slice(-3).map(m => `${m.direction === 'inbound' ? 'User' : 'Sophie'}: ${redactPII(m.body)}`).join('\n') || 'No recent messages'}
@@ -297,10 +312,10 @@ Plan a strategic follow-up sequence that addresses the user's needs and moves th
         messages,
         createdAt: Date.now(),
         context: {
-          userSentiment: insights.userSentiment,
-          conversationPhase: insights.conversationPhase,
-          recentTopics: insights.topicsDiscussed.slice(-3),
-          objectionsSeen: insights.objectionsSeen
+          userSentiment: safeInsights.userSentiment,
+          conversationPhase: safeInsights.conversationPhase,
+          recentTopics: safeInsights.topicsDiscussed.slice(-3),
+          objectionsSeen: safeInsights.objectionsSeen
         }
       }
       
