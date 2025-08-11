@@ -160,6 +160,8 @@ ${recentTranscript}
 User: ${context.userMessage}`
 
   try {
+    console.log('AI SMS | 🔄 Starting LLM call for natural response generation')
+    
     const response = await chat({
       system: systemPrompt,
       user: userPrompt,
@@ -167,7 +169,18 @@ User: ${context.userMessage}`
       responseFormat: { type: 'json_object' }
     })
 
+    console.log('AI SMS | ✅ LLM call completed', {
+      responseLength: response?.length || 0,
+      hasResponse: !!response
+    })
+
     const parsed = JSON.parse(response || '{}')
+    
+    console.log('AI SMS | 📝 Parsed LLM response', {
+      hasMessages: !!parsed.messages,
+      messageCount: Array.isArray(parsed.messages) ? parsed.messages.length : 0,
+      conversationTone: parsed.conversationTone
+    })
     
     // Ensure we have valid messages array
     let messages = parsed.messages || []

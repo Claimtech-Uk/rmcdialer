@@ -21,15 +21,22 @@ export type LlmCallOptions = {
 
 export async function chat(options: LlmCallOptions): Promise<string> {
   const model = options.model || process.env.AI_SMS_MODEL || 'gpt-4o-mini'
-  const response = await getClient().chat.completions.create({
+  
+  const requestOptions: any = {
     model,
     messages: [
       { role: 'system', content: options.system },
       { role: 'user', content: options.user }
     ],
-    response_format: { type: 'json_object' },
     max_tokens: 400
-  })
+  }
+  
+  // Only add response_format if specified
+  if (options.responseFormat) {
+    requestOptions.response_format = options.responseFormat
+  }
+  
+  const response = await getClient().chat.completions.create(requestOptions)
 
   const content = response.choices?.[0]?.message?.content
   return typeof content === 'string' ? content : ''

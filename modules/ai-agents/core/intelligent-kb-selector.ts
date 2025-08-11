@@ -68,6 +68,7 @@ Select the most relevant knowledge base items to help answer this user's message
       system: systemPrompt,
       user: userPrompt,
       model: 'gpt-4o-mini',
+      responseFormat: { type: 'json_object' },
       responseFormat: { type: 'json_object' }
     })
 

@@ -105,7 +105,8 @@ Classify this question:`
     const response = await chat({
       system: systemPrompt,
       user: userPrompt,
-      model: 'gpt-4o-mini'
+      model: 'gpt-4o-mini',
+      responseFormat: { type: 'json_object' }
     })
     
     const classification = response.trim().toLowerCase() as QuestionType
