@@ -9,6 +9,7 @@ import { Badge } from '@/modules/core/components/ui/badge'
 import { Input } from '@/modules/core/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/modules/core/components/ui/select'
 import { useToast } from '@/modules/core/hooks/use-toast'
+import { normalizePhoneNumber } from '@/modules/twilio-voice/utils/phone.utils'
 import { api } from '@/lib/trpc/client'
 import { useRouter } from 'next/navigation'
 import type { SMSConversation, SMSMessage } from '@/modules/communications'
@@ -266,12 +267,26 @@ export default function SMSPage() {
 
   // Filter conversations based on search
   const filteredConversations = conversations.filter(conversation => {
+    if (!searchTerm) return true
     const displayName = getUserDisplayName(conversation)
-    const matchesSearch = !searchTerm || 
+
+    // Case-insensitive name match
+    const nameMatch = displayName.toLowerCase().includes(searchTerm.toLowerCase())
+
+    // Flexible phone search: allow +44 / 44 / 07 / last digits
+    const convVariants = normalizePhoneNumber(conversation.phoneNumber)
+    const searchDigits = searchTerm.replace(/\D/g, '')
+    const convDigits = conversation.phoneNumber.replace(/\D/g, '')
+
+    const phoneMatch =
+      // direct includes on raw phone
       conversation.phoneNumber.includes(searchTerm) ||
-      displayName.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    return matchesSearch
+      // digits-substring match
+      (searchDigits.length >= 3 && (convDigits.includes(searchDigits))) ||
+      // variant match (e.g. search 07... against stored 447...)
+      convVariants.some(v => v.includes(searchTerm) || v.replace(/\D/g, '').includes(searchDigits))
+
+    return nameMatch || phoneMatch
   })
 
   // Format last message time

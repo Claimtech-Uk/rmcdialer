@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { CallHistoryTable } from '@/modules/calls'
+import { CallHistoryTable } from '@/modules/calls/components/CallHistoryTable'
 import { api } from '@/lib/trpc/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card'
 import { Button } from '@/modules/core/components/ui/button'

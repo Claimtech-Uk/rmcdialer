@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useTwilioVoice } from '@/modules/calls/hooks/useTwilioVoice';
-import { CallInterface } from '@/modules/calls';
+import { CallInterface } from '@/modules/calls/components/CallInterface';
 import { api } from '@/lib/trpc/client';
 import type { UserCallContext } from '@/modules/users';
-import type { CallOutcomeOptions, UserCallContext as CallUserContext } from '@/modules/calls';
+import type { CallOutcomeOptions, UserCallContext as CallUserContext } from '@/modules/calls/types/call.types';
 import { Button } from '@/modules/core/components/ui/button';
 
 // Format duration from seconds to MM:SS

@@ -6,6 +6,7 @@ import { normalizePhoneNumber } from '@/modules/twilio-voice/utils/phone.utils';
 import { FEATURE_FLAGS } from '@/lib/config/features';
 import { SmsAgentService } from '@/modules/ai-agents';
 import { SMSService, MagicLinkService } from '@/modules/communications';
+import { containsStopIntent } from '@/modules/ai-agents/core/guardrails'
 
 // Simple singleton for the SMS agent during runtime
 let smsAgentSingleton: SmsAgentService | null = null;
@@ -45,7 +46,7 @@ const TwilioSMSWebhookSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('📱 Twilio SMS webhook received');
+    console.log('AI SMS | 📱 Twilio SMS webhook received');
 
     // Parse form data from Twilio
     const formData = await request.formData();
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
       webhookData[key] = value.toString();
     }
     
-    console.log('📋 SMS Webhook data:', {
+    console.log('AI SMS | 📋 SMS Webhook data:', {
       MessageSid: webhookData.MessageSid,
       From: webhookData.From,
       To: webhookData.To,
@@ -67,13 +68,19 @@ export async function POST(request: NextRequest) {
     // Validate webhook data
     const validatedData = TwilioSMSWebhookSchema.parse(webhookData);
 
-    // Clean phone numbers (remove + prefix for consistency)
+    // Clean phone numbers (remove + prefix for consistency) and ensure we pass E.164 to lookup helpers
     const fromPhone = validatedData.From.replace(/^\+/, '');
     const toPhone = validatedData.To.replace(/^\+/, '');
 
     // Only allow AI SMS agent auto-replies on the designated test number
     const aiSmsTestNumberE164 = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
     const isTestNumber = (validatedData.To === aiSmsTestNumberE164) || (toPhone === aiSmsTestNumberE164.replace(/^\+/, ''));
+    console.log('AI SMS | 🧪 Agent gating', {
+      featureEnabled: FEATURE_FLAGS.ENABLE_AI_SMS_AGENT,
+      isTestNumber,
+      to: validatedData.To,
+      aiSmsTestNumberE164
+    })
     
     // For inbound messages, the conversation is with the sender's phone number
     const conversationPhoneNumber = fromPhone;
@@ -99,12 +106,12 @@ export async function POST(request: NextRequest) {
 
       if (matchedUser) {
         matchedUserId = Number(matchedUser.id);
-        console.log('🔗 Matched inbound SMS to user', {
+        console.log('AI SMS | 🔗 Matched inbound SMS to user', {
           userId: matchedUserId,
           phone: matchedUser.phone_number
         });
       } else {
-        console.log('ℹ️ No user match for inbound SMS', { triedVariants: phoneVariants.join(', ') });
+        console.log('AI SMS | ℹ️ No user match for inbound SMS', { triedVariants: phoneVariants.join(', '), from: validatedData.From });
       }
     } catch (lookupError) {
       console.error('❌ Failed to lookup user from phone for inbound SMS:', lookupError);
@@ -134,7 +141,7 @@ export async function POST(request: NextRequest) {
           }
         });
         
-        console.log('📝 Created new SMS conversation:', conversation.id);
+        console.log('AI SMS | 📝 Created new SMS conversation:', conversation.id);
       } else {
         // Update existing conversation
         await prisma.smsConversation.update({
@@ -147,8 +154,11 @@ export async function POST(request: NextRequest) {
           }
         });
         
-        console.log('📝 Updated existing SMS conversation:', conversation.id);
+        console.log('AI SMS | 📝 Updated existing SMS conversation:', conversation.id);
       }
+
+      // Handle STOP/UNSUBSCRIBE before any auto-reply
+      const isStop = containsStopIntent(validatedData.Body)
 
       // Create the SMS message
       const smsMessage = await prisma.smsMessage.create({
@@ -163,7 +173,7 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      console.log('✅ SMS message saved to database:', {
+      console.log('AI SMS | ✅ Inbound saved:', {
         messageId: smsMessage.id,
         conversationId: conversation.id,
         MessageSid: validatedData.MessageSid,
@@ -173,6 +183,27 @@ export async function POST(request: NextRequest) {
         timestamp: new Date().toISOString()
       });
 
+      // If STOP, send acknowledgement directly and halt automation for 24h
+      if (isStop) {
+        try {
+          const { SMSService } = await import('@/modules/communications')
+          const { setAutomationHalt } = await import('@/modules/ai-agents/core/memory.store')
+          const smsSvc = new SMSService({ authService: { getCurrentAgent: async () => ({ id: 0, role: 'system' }) } })
+          await smsSvc.sendSMS({
+            phoneNumber: validatedData.From,
+            message: "You've been unsubscribed from SMS. You can still receive updates by phone or email.",
+            messageType: 'auto_response',
+            userId: matchedUserId,
+            fromNumberOverride: aiSmsTestNumberE164
+          })
+          await setAutomationHalt(conversationPhoneNumber)
+          console.log('AI SMS | ✅ STOP acknowledged, automation halted 24h', { conversationId: conversation.id, to: validatedData.From })
+        } catch (stopErr) {
+          console.error('Failed to send STOP acknowledgement:', stopErr)
+        }
+        return NextResponse.json({ message: 'STOP acknowledged', status: 'processed_stop' })
+      }
+
       // Fire AI SMS auto-reply only for the test number and when feature is enabled
       if (FEATURE_FLAGS.ENABLE_AI_SMS_AGENT && isTestNumber) {
         try {
@@ -180,11 +211,27 @@ export async function POST(request: NextRequest) {
           void agent.handleInbound({
             fromPhone: conversationPhoneNumber,
             message: validatedData.Body,
+            userId: matchedUserId,
             replyFromE164: aiSmsTestNumberE164
+          })
+          .then(() => {
+            console.log('AI SMS | 🤖 Agent dispatched', {
+              conversationId: conversation.id,
+              fromPhone: conversationPhoneNumber,
+              to: validatedData.From
+            })
+          })
+          .catch((agentError: any) => {
+            console.error('AI SMS | 🤖 Agent failed', agentError)
           });
         } catch (agentError) {
-          console.error('AI SMS agent failed to handle inbound message:', agentError);
+          console.error('AI SMS | Agent invoke failed', agentError);
         }
+      } else {
+        console.log('AI SMS | ℹ️ Agent not triggered', {
+          reason: FEATURE_FLAGS.ENABLE_AI_SMS_AGENT ? (isTestNumber ? 'unknown' : 'not test number') : 'feature disabled',
+          to: validatedData.To
+        })
       }
 
       return NextResponse.json({ 

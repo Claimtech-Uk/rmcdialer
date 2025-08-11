@@ -72,6 +72,11 @@
       "path": "/api/cron/queue-cleanup",
       "schedule": "*/2 * * * *"
     }
+    ,
+    {
+      "path": "/api/cron/sms-followups",
+      "schedule": "*/5 * * * *"
+    }
   ],
   "git": {
     "deploymentEnabled": {

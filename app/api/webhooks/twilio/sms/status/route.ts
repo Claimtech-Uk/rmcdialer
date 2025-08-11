@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
+import { SMSService } from '@/modules/communications';
 
 // Twilio SMS Status Callback Schema
 const TwilioSMSStatusSchema = z.object({
@@ -17,13 +18,13 @@ const TwilioSMSStatusSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('📈 Twilio SMS status callback received');
+    console.log('AI SMS | 📈 Twilio SMS status callback received');
 
     // Parse form data from Twilio
     const formData = await request.formData();
     const webhookData = Object.fromEntries(formData.entries());
     
-    console.log('📊 SMS Status data:', {
+    console.log('AI SMS | 📊 SMS Status data:', {
       MessageSid: webhookData.MessageSid,
       MessageStatus: webhookData.MessageStatus,
       From: webhookData.From,
@@ -35,18 +36,24 @@ export async function POST(request: NextRequest) {
     // Validate webhook data
     const validatedData = TwilioSMSStatusSchema.parse(webhookData);
 
-    // For now, just log the status update
-    // TODO: Update SMS message status in database when SMS module is fully implemented
-    console.log('SMS status update:', {
-      MessageSid: validatedData.MessageSid,
-      status: validatedData.MessageStatus,
-      errorCode: validatedData.ErrorCode,
-      errorMessage: validatedData.ErrorMessage
-    });
+    // Persist status update to DB for observability/retries
+    try {
+      const smsService = new SMSService({
+        authService: { getCurrentAgent: async () => ({ id: 0, role: 'system' }) }
+      })
+      await smsService.updateMessageStatus(
+        validatedData.MessageSid,
+        validatedData.MessageStatus,
+        validatedData.ErrorCode,
+        validatedData.ErrorMessage
+      )
+    } catch (persistError) {
+      console.error('AI SMS | Failed to persist SMS status:', persistError)
+    }
 
     // Log any delivery failures for investigation
     if (validatedData.MessageStatus === 'failed' || validatedData.MessageStatus === 'undelivered') {
-      console.error('SMS delivery failed:', {
+      console.error('AI SMS | SMS delivery failed:', {
         MessageSid: validatedData.MessageSid,
         From: validatedData.From,
         To: validatedData.To,
@@ -64,7 +71,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ SMS status webhook error:', error);
+    console.error('AI SMS | ❌ SMS status webhook error:', error);
 
     // Return 200 OK even on error to prevent Twilio retries
     return NextResponse.json({ 

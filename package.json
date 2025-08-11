@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "openai:test": "tsx scripts/test-openai-sms-agent.ts",
+     
     "schema:diff:prod": "bash -lc 'URL=${PROD_DATABASE_URL:-$DATABASE_URL}; if [ -z \"$URL\" ]; then echo Missing DATABASE_URL/PROD_DATABASE_URL; exit 1; fi; prisma migrate diff --from-url=\"$URL\" --to-schema-datamodel=./prisma/schema.prisma'",
     "schema:diff:prod:sql": "bash -lc 'URL=${PROD_DATABASE_URL:-$DATABASE_URL}; if [ -z \"$URL\" ]; then echo Missing DATABASE_URL/PROD_DATABASE_URL; exit 1; fi; prisma migrate diff --from-url=\"$URL\" --to-schema-datamodel=./prisma/schema.prisma --script > scripts/diff-prod-to-schema.sql'",
     "schema:check": "node --env-file=.env scripts/check-production-schema.ts",
@@ -41,6 +43,7 @@
     "cron:monitor": "./scripts/monitor-cron-schedule.sh"
   },
   "dependencies": {
+    "@upstash/redis": "^1.31.4",
     "@aws-sdk/client-s3": "^3.850.0",
     "@aws-sdk/client-sqs": "^3.848.0",
     "@hookform/resolvers": "^3.3.2",

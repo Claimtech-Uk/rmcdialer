@@ -266,6 +266,7 @@ const config = {
   ],
   "activeProvider": "mysql",
   "postinstall": false,
+  "ciName": "Vercel",
   "inlineDatasources": {
     "db": {
       "url": {

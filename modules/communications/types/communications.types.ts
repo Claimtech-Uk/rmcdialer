@@ -169,6 +169,8 @@ export interface SendMagicLinkOptions extends MagicLinkOptions {
   email?: string;
   firstName?: string;
   customMessage?: string;
+  /** Optional: override the Twilio sender number for SMS delivery (E.164) */
+  fromNumberOverride?: string;
 }
 
 export interface MagicLinkActivity {

@@ -78,7 +78,7 @@ export class SMSService {
       const twilio = require('twilio');
       this.twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
       
-      logger.info('SMS service initialized with real Twilio client', { 
+      logger.info('AI SMS | SMS service initialized with real Twilio client', { 
         fromNumber: this.fromNumber,
         mode: process.env.NODE_ENV === 'production' ? 'production' : 'development'
       });
@@ -99,13 +99,24 @@ export class SMSService {
     const { phoneNumber, message, agentId, userId, messageType = 'manual', fromNumberOverride } = options;
 
     try {
+      console.log('AI SMS | 📨 Twilio send attempt', {
+        to: phoneNumber,
+        from: fromNumberOverride || this.fromNumber,
+        length: message.length,
+        type: messageType
+      })
       // Send via Twilio
+      // Determine status callback base URL from environment with fallbacks
+      const apiBase = process.env.API_BASE_URL || process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}` || process.env.MAIN_APP_URL || ''
+      const statusCallbackUrl = apiBase ? `${apiBase}/api/webhooks/twilio/sms/status` : undefined
+
       const twilioResponse = await this.twilioClient.messages.create({
         body: message,
         from: fromNumberOverride || this.fromNumber,
         to: phoneNumber,
-        statusCallback: `${process.env.API_BASE_URL}/api/webhooks/sms/status`
+        ...(statusCallbackUrl ? { statusCallback: statusCallbackUrl } : {})
       });
+      console.log('AI SMS | 📨 Twilio responded', { sid: twilioResponse.sid, status: twilioResponse.status })
 
       // Find or create conversation with 'closed' status for outbound messages
       const conversation = await this.findOrCreateConversation(phoneNumber, userId, 'closed');
@@ -133,7 +144,7 @@ export class SMSService {
         }
       });
 
-      logger.info('SMS sent successfully', {
+      logger.info('AI SMS | SMS sent successfully', {
         messageId: smsMessage.id,
         twilioSid: twilioResponse.sid,
         to: phoneNumber,
@@ -149,7 +160,8 @@ export class SMSService {
       };
 
     } catch (error) {
-      logger.error('Failed to send SMS:', error);
+      logger.error('AI SMS | Failed to send SMS:', error);
+      console.error('AI SMS | ❌ Twilio send failed', { to: phoneNumber, from: fromNumberOverride || this.fromNumber, error })
       
       // Log failed attempt
       if (userId) {
@@ -505,28 +517,32 @@ export class SMSService {
     errorMessage?: string
   ): Promise<{ count: number }> {
     try {
-      const updateData: any = {
-        status: status.toLowerCase(),
-        updatedAt: new Date()
-      };
+      // Our schema does not track status/failureReason columns for SMS messages.
+      // We only set sentAt when the provider reports a successful send/delivery.
+      const normalized = String(status).toLowerCase()
+      const shouldMarkSent = normalized === 'sent' || normalized === 'delivered'
 
-      if (errorCode) {
-        updateData.failureReason = `${errorCode}: ${errorMessage || 'Unknown error'}`;
+      if (!shouldMarkSent) {
+        logger.info('AI SMS | No DB fields to update for SMS status', {
+          twilioMessageSid,
+          status,
+          errorCode
+        })
+        return { count: 0 }
       }
 
       const updatedMessage = await prisma.smsMessage.updateMany({
         where: { twilioMessageSid },
-        data: updateData
-      });
+        data: { sentAt: new Date() }
+      })
 
-      logger.info('SMS message status updated', {
+      logger.info('AI SMS | SMS message marked as sent', {
         twilioMessageSid,
         status,
-        errorCode,
         updatedCount: updatedMessage.count
-      });
+      })
 
-      return updatedMessage;
+      return updatedMessage
 
     } catch (error) {
       logger.error('Failed to update SMS message status:', error);
@@ -748,9 +764,16 @@ export class SMSService {
     userId?: number,
     initialStatus: string = 'active'
   ): Promise<SMSConversation> {
+    const normalize = (n: string) => n.replace(/^\+/, '')
+    const normalized = normalize(phoneNumber)
     // Try to find existing conversation
     let conversation = await prisma.smsConversation.findFirst({
-      where: { phoneNumber }
+      where: {
+        OR: [
+          { phoneNumber: normalized },
+          { phoneNumber: `+${normalized}` }
+        ]
+      }
     });
 
     // If no existing conversation, try to find user by phone number
@@ -774,7 +797,7 @@ export class SMSService {
       // Create new conversation with matched user ID and specified status
       conversation = await prisma.smsConversation.create({
         data: {
-          phoneNumber,
+          phoneNumber: normalized,
           userId: matchedUserId,
           status: initialStatus,
           lastMessageAt: new Date()

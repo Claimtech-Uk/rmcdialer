@@ -64,26 +64,10 @@ export class MagicLinkService {
       // Skip short URL generation for now - use full URL
       const shortUrl = null;
 
-      // Store in database for tracking
-      await prisma.magicLinkActivity.create({
-        data: {
-          id: trackingId,
-          userId,
-          linkType,
-          linkToken: token,
-          sentVia: options.deliveryMethod,
-          sentByAgentId: options.agentId || 1,
-          sentAt: new Date(),
-          expiresAt,
-          callSessionId: options.callSessionId
-        }
-      });
-
       logger.info('Magic link generated', {
         trackingId,
         userId,
         linkType,
-        agentId: options.agentId,
         expiresAt
       });
 
@@ -109,7 +93,8 @@ export class MagicLinkService {
     const { deliveryMethod, phoneNumber, email, firstName, customMessage } = options;
 
     // Generate the magic link
-    const magicLink = await this.generateMagicLink(options);
+    let magicLink: MagicLinkResult | undefined
+    magicLink = await this.generateMagicLink(options);
 
     // Prepare message content
     const message = customMessage || this.buildMessage(
@@ -160,16 +145,6 @@ export class MagicLinkService {
 
     } catch (error) {
       logger.error('Failed to send magic link:', error);
-      
-      // Mark as failed in database
-      await prisma.magicLinkActivity.update({
-        where: { id: magicLink.trackingId },
-        data: { 
-          isActive: false,
-          expiredReason: error instanceof Error ? error.message : 'Unknown error'
-        }
-      });
-
       throw error;
     }
   }
@@ -578,7 +553,8 @@ export class MagicLinkService {
         messageType: 'magic_link',
         agentId: options.agentId,
         userId: options.userId,
-        callSessionId: options.callSessionId
+        callSessionId: options.callSessionId,
+        fromNumberOverride: options.fromNumberOverride
       });
 
       logger.info('Magic link sent via SMS service', {
