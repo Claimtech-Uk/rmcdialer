@@ -120,14 +120,22 @@ export async function buildConversationalResponse(
   
   const sequenceDecision = await analyzeSequenceOpportunity(sequenceContext)
   
+  console.log('AI SMS | 🎯 Sequence decision analysis', {
+    userMessage: context.userMessage.substring(0, 50) + '...',
+    shouldUseSequence: sequenceDecision.shouldUseSequence,
+    confidence: sequenceDecision.confidence,
+    reason: sequenceDecision.reason,
+    userEngagement: conversationFlow.userEngagement
+  })
+  
   let response: Omit<ConversationalResponse, 'shouldOfferLink' | 'linkOffer' | 'linkReference' | 'useSequence' | 'messageSequence' | 'sequenceReason'>
   let messageSequence: ThreeMessageSequence | undefined
   
-  if (sequenceDecision.shouldUseSequence && sequenceDecision.confidence > 0.6) {
+  if (sequenceDecision.shouldUseSequence && sequenceDecision.confidence > 0.4) {
     // Generate 3-message sequence
     console.log('AI SMS | 🎯 Using 3-message sequence approach:', sequenceDecision.reason)
     
-    messageSequence = await generateMessageSequence(sequenceContext)
+    messageSequence = await generateMessageSequence(sequenceContext) || undefined
     
     if (messageSequence) {
       // Use the first message as main response, question will be handled in sequence
@@ -309,9 +317,25 @@ async function generateConversationalResponse(
     
     const parsed = JSON.parse(response)
     
+    // Ensure we always have a proper follow-up question
+    let followUpQuestion = parsed.followUpQuestion || ""
+    if (!followUpQuestion || followUpQuestion.length < 10) {
+      // Generate a contextual follow-up question based on the topic
+      const topic = context.userMessage.toLowerCase()
+      if (topic.includes('fee') || topic.includes('cost') || topic.includes('charge')) {
+        followUpQuestion = "Would you like me to send your portal link to get started?"
+      } else if (topic.includes('court') || topic.includes('legal') || topic.includes('law')) {
+        followUpQuestion = "Does this affect your particular situation? I can check for you."
+      } else if (topic.includes('process') || topic.includes('how') || topic.includes('work')) {
+        followUpQuestion = "Ready to move forward with your claim?"
+      } else {
+        followUpQuestion = "What other questions can I help with?"
+      }
+    }
+
     return {
       mainResponse: parsed.mainResponse || "I understand your question. Let me help you with that.",
-      followUpQuestion: parsed.followUpQuestion || "What would you like to know next?",
+      followUpQuestion,
       conversationTone: parsed.conversationTone || 'helpful'
     }
   } catch (error) {

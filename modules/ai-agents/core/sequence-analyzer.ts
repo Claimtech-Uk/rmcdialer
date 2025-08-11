@@ -43,18 +43,19 @@ export async function analyzeSequenceOpportunity(context: SequenceAnalysisContex
     const systemPrompt = `You are an intelligent conversation analyzer. Determine if a user's message would benefit from a 3-part response sequence vs a single message.
 
 A 3-message sequence works well when:
-- Complex questions that benefit from structured explanation
-- Opportunities to provide valuable additional context
-- User shows high engagement and would appreciate depth
-- Question relates to important decision-making (fees, timelines, processes)
-- Can naturally follow: Answer → Value-add → Engaging question
+- Questions about fees, costs, charges, or pricing (almost always benefits from 3-part explanation)
+- Process questions (how claims work, what happens next, timelines)
+- Legal or complex topic questions (Supreme Court, regulations, eligibility)
+- "What" or "How" questions that can include value-add information
+- Any question where you can provide: Direct answer + Additional context + Next step
+- User shows medium to high engagement (longer messages, specific questions)
 
 A single message works better when:
-- Simple yes/no questions
-- Quick clarifications
-- User seems overwhelmed or low engagement
-- Follow-up to recent detailed explanations
-- Greeting/small talk
+- Simple yes/no questions or confirmations
+- Quick clarifications or corrections
+- Greeting messages or small talk
+- User seems overwhelmed (very short messages, low engagement)
+- Recent follow-up to a sequence that was just sent
 
 CONTEXT:
 - User engagement: ${context.userEngagement || 'unknown'}

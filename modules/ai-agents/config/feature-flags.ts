@@ -23,7 +23,7 @@ export const FEATURE_FLAGS = {
   CONVERSATION_PLANNING_ENABLED: process.env.AI_SMS_CONVERSATION_PLANNING !== 'false', // default true
   
   // New conversational response system
-  CONVERSATIONAL_MODE_ENABLED: process.env.AI_SMS_CONVERSATIONAL_MODE === 'true', // default false (opt-in)
+  CONVERSATIONAL_MODE_ENABLED: process.env.AI_SMS_CONVERSATIONAL_MODE !== 'false', // default true (opt-out)
   
   // Development/debugging features
   VERBOSE_LOGGING: process.env.AI_SMS_VERBOSE_LOGGING === 'true',
