@@ -738,30 +738,32 @@ export class CallService {
       : [];
     const bookingAgentBySessionId = new Map(sessions.map((s: any) => [s.id, s]));
 
-    // Get user context for each callback
-    const callbacksWithContext = await Promise.all(
-      callbacks.map(async (callback: any) => {
-        const userContext = await this.getUserCallContext(Number(callback.userId));
-        return {
-          ...callback,
-          user: {
-            firstName: userContext.firstName,
-            lastName: userContext.lastName,
-            phoneNumber: userContext.phoneNumber
-          },
-          preferredAgent: callback.preferredAgent,
-          // Add the booking agent information via original call session
-          bookingAgent: (() => {
-            const session = callback.originalCallSessionId ? bookingAgentBySessionId.get(callback.originalCallSessionId) : null;
-            return session?.agent ? {
-              id: session.agentId,
-              firstName: session.agent.firstName,
-              lastName: session.agent.lastName
-            } : null;
-          })()
-        };
-      })
-    );
+    // Batch minimal user identity lookup to avoid N parallel context calls
+    const uniqueUserIds = Array.from(new Set(callbacks.map((cb: any) => Number(cb.userId))));
+    const identities = await this.userService.getMinimalUserIdentitiesBatch(uniqueUserIds);
+
+    // Only fetch full context when required (e.g., for UI drill-in later), not for the list
+    const callbacksWithContext = callbacks.map((callback: any) => {
+      const identity = identities.get(Number(callback.userId)) || { firstName: null, lastName: null, phoneNumber: null };
+      return {
+        ...callback,
+        user: {
+          firstName: identity.firstName || 'Unknown',
+          lastName: identity.lastName || 'User',
+          phoneNumber: identity.phoneNumber || 'Unknown'
+        },
+        preferredAgent: callback.preferredAgent,
+        // Add the booking agent information via original call session
+        bookingAgent: (() => {
+          const session = callback.originalCallSessionId ? bookingAgentBySessionId.get(callback.originalCallSessionId) : null;
+          return session?.agent ? {
+            id: session.agentId,
+            firstName: session.agent.firstName,
+            lastName: session.agent.lastName
+          } : null;
+        })()
+      };
+    });
 
     return {
       callbacks: callbacksWithContext,

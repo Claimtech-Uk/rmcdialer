@@ -347,7 +347,7 @@ export class UserService {
           }
 
           // 3. Merge data into context (skip call scores for now - we can fetch async)
-          const context = this.mergeUserContext(userData as UserDataFromReplica, null);
+          const context = this.mergeUserContext(userData as unknown as UserDataFromReplica, null);
 
           // 4. Cache result with longer TTL for better performance
           await cacheService.set(cacheKey, context, CACHE_TTL.USER_CONTEXT * 2); // Double the cache time
@@ -1059,7 +1059,7 @@ export class UserService {
             claim_requirement_rejection_reason: null,
             created_at: null
           })),
-          // Real vehicle packages from database
+          // Real vehicle packages from database with numeric monthly_payment
           vehiclePackages: claimVehiclePackages.map(vp => ({
             id: vp.id,
             claim_id: vp.claim_id,
@@ -1067,7 +1067,7 @@ export class UserService {
             vehicle_make: vp.vehicle_make,
             vehicle_model: vp.vehicle_model,
             dealership_name: vp.dealership_name,
-            monthly_payment: vp.monthly_payment,
+            monthly_payment: vp.monthly_payment ? Number(vp.monthly_payment as any) : null,
             contract_start_date: vp.contract_start_date,
             status: vp.status,
             created_at: vp.created_at
@@ -1109,6 +1109,43 @@ export class UserService {
       // Re-throw to be handled by circuit breaker
       throw error;
     }
+  }
+
+  /**
+   * Batch fetch minimal user identities (first/last/phone) for many users
+   * Used by callbacks lists and cron to avoid N parallel context fetches
+   */
+  async getMinimalUserIdentitiesBatch(userIds: number[]): Promise<Map<number, { firstName: string | null; lastName: string | null; phoneNumber: string | null }>> {
+    const result = new Map<number, { firstName: string | null; lastName: string | null; phoneNumber: string | null }>();
+    const uniqueIds = Array.from(new Set(userIds.map(id => Number(id))));
+    if (uniqueIds.length === 0) return result;
+
+    try {
+      const rows = await replicaDatabaseCircuitBreaker.execute(
+        async () => await replicaDb.user.findMany({
+          where: { id: { in: uniqueIds.map(id => BigInt(id)) } },
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            phone_number: true
+          }
+        }),
+        `getMinimalUserIdentitiesBatch(${uniqueIds.length})`
+      );
+
+      for (const row of (rows as any[])) {
+        result.set(Number(row.id), {
+          firstName: row.first_name || null,
+          lastName: row.last_name || null,
+          phoneNumber: row.phone_number || null
+        });
+      }
+    } catch (error) {
+      this.logger.error(`Failed batch identity fetch for ${uniqueIds.length} users:`, error);
+    }
+
+    return result;
   }
 
   /**
@@ -1419,9 +1456,7 @@ export class UserService {
         lastLogin: userData.last_login,
         dateOfBirth: userData.date_of_birth,
         createdAt: userData.created_at,
-        address: this.buildAddressForUserContext(userData),
-        // Add signature information for queue determination and API responses
-        current_signature_file_id: userData.current_signature_file_id
+        address: this.buildAddressForUserContext(userData)
       },
       claims: userData.claims.map(claim => ({
         id: Number(claim.id),

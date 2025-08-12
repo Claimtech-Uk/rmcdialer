@@ -258,13 +258,13 @@ export function getReplicaDatabaseCircuitBreaker(): CircuitBreakerService {
 
 // Backwards compatibility - lazy getters
 export const databaseCircuitBreaker = {
-  execute: (operation: string, fn: () => Promise<any>) => getDatabaseCircuitBreaker().execute(operation, fn),
+  execute: <T>(fn: () => Promise<T>, name?: string) => getDatabaseCircuitBreaker().execute(fn, name),
   getStats: () => getDatabaseCircuitBreaker().getStats(),
   reset: () => getDatabaseCircuitBreaker().reset()
 };
 
 export const replicaDatabaseCircuitBreaker = {
-  execute: (operation: string, fn: () => Promise<any>) => getReplicaDatabaseCircuitBreaker().execute(operation, fn),
+  execute: <T>(fn: () => Promise<T>, name?: string) => getReplicaDatabaseCircuitBreaker().execute(fn, name),
   getStats: () => getReplicaDatabaseCircuitBreaker().getStats(),
   reset: () => getReplicaDatabaseCircuitBreaker().reset()
 };

@@ -107,6 +107,10 @@ export async function GET(request: NextRequest) {
       overdue: 0
     };
 
+    // Batch fetch minimal identities to avoid N parallel DB calls
+    const userIds = dueCallbacks.map((cb: any) => Number(cb.userId));
+    const identities = await userService.getMinimalUserIdentitiesBatch(userIds);
+
     // Process each callback
     for (const callback of dueCallbacks) {
       try {
@@ -120,16 +124,9 @@ export async function GET(request: NextRequest) {
           results.upcoming++;
         }
         
-        // Get user details for the callback
-        const userServiceContext = await userService.getUserCallContext(Number(callback.userId));
-        
-                if (!userServiceContext) {
-          console.error(`❌ User context not found for callback ${callback.id}`);
-          results.errors++;
-          continue;
-        }
-        
-        const userName = `${userServiceContext.user.firstName || 'Unknown'} ${userServiceContext.user.lastName || 'User'}`.trim();
+        // Get minimal user identity (avoid full context during cron dispatch)
+        const ident = identities.get(Number(callback.userId));
+        const userName = `${ident?.firstName || 'Unknown'} ${ident?.lastName || 'User'}`.trim();
         
         // Check if preferred agent is available
         let targetAgent = callback.preferredAgent;
