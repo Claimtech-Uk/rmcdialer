@@ -36,8 +36,8 @@ export class SmsAgentService {
         phoneNumber: toNumber,
         message: formatSms(msg),
         messageType: 'auto_response',
-        userId: input.userId,
-        fromNumberOverride: input.replyFromE164
+        userId: input.userId
+        // Note: SMS service automatically uses test number for auto_response messages
       })
       await setAutomationHalt(input.fromPhone)
       console.log('AI SMS | 🚩 Complaint/abuse acknowledged; automation halted 24h')
@@ -65,8 +65,8 @@ export class SmsAgentService {
             phoneNumber: input.fromPhone.startsWith('+') ? input.fromPhone : `+${input.fromPhone}`,
             message: formatSms(f.text),
             messageType: 'auto_response',
-            userId: input.userId,
-            fromNumberOverride: input.replyFromE164
+            userId: input.userId
+            // Note: SMS service now automatically uses test number for auto_response messages
           })
         }
         console.log('AI SMS | ⏰ Sent due follow-ups', { count: due.length })
@@ -140,8 +140,8 @@ export class SmsAgentService {
           phoneNumber: toNumber,
           message: msg,
           messageType: 'auto_response',
-          userId: input.userId,
-          fromNumberOverride: input.replyFromE164
+          userId: input.userId
+          // Note: SMS service automatically uses test number for auto_response messages
         })
       })
       console.log('AI SMS | ✅ Reply send invoked')
@@ -164,7 +164,7 @@ export class SmsAgentService {
               linkType: action.linkType,
               deliveryMethod: 'sms',
               phoneNumber: toE164(action.phoneNumber || input.fromPhone),
-              fromNumberOverride: input.replyFromE164
+              // Note: SMS service automatically uses test number for auto_response messages
             })
             
             // Record link send for smart conversation intelligence
@@ -189,7 +189,7 @@ export class SmsAgentService {
               message: msg,
               messageType: 'auto_response',
               userId: input.userId,
-              fromNumberOverride: input.replyFromE164
+              // Note: SMS service automatically uses test number for auto_response messages
             })
           }
         })
@@ -217,7 +217,7 @@ export class SmsAgentService {
               message: msg,
               messageType: 'auto_response',
               userId: input.userId,
-              fromNumberOverride: input.replyFromE164
+              // Note: SMS service automatically uses test number for auto_response messages
             })
             
             // Record review link send for conversation intelligence  

@@ -8,7 +8,7 @@ export const KNOWLEDGE_DIGESTS = {
   rmcSystem: `Portal link = the secure way users view/sign documents and upload requirements. Core flows: 1) If unsigned → explain benefits of signing and offer to send the portal link. 2) If outstanding requirements → explain what’s missing and help them upload via the portal. 3) If signed/no requirements → provide status updates. Use the phrase "portal link" to users. Ask permission before sending. Respect link send cooldowns.`,
 
   // Top FAQs users ask, condensed answers Sophie can draw from
-  faqs: `Common FAQs: (1) How long does it take? Timelines vary; we keep them updated in the portal. (2) What documents do you need? Usually ID, proof of address, and finance docs; the portal lists any outstanding items. (3) Is this no‑win no‑fee? We’re transparent about terms; details are in the portal/disclosure docs. (4) Can you guarantee a result? No guarantees; we’ll pursue the claim diligently and keep them informed. (5) I’ve already signed—what next? Check the portal for any outstanding items; otherwise we’ll progress and update you.`,
+  faqs: `Common FAQs: (1) How long does it take? Due to FCA pause until Dec 4, 2025, most payments expected early 2026; we keep them updated in the portal. (2) What documents do you need? Usually ID, proof of address, and finance docs; the portal lists any outstanding items. (3) Is this no‑win no‑fee? We're transparent about terms; details are in the portal/disclosure docs. (4) Can you guarantee a result? No guarantees; we'll pursue the claim diligently and keep them informed. (5) I've already signed—what next? Check the portal for any outstanding items; otherwise we'll progress and update you.`,
 
   // Compliance guardrails to reinforce tone and limits
   compliance: `Compliance: No promises of compensation or timeframes. No legal/financial advice. Be clear, patient, and opt‑in/consent‑first. If user is abusive or wants to complain, acknowledge and offer escalation to a specialist. Never share sensitive PII in messages; prefer portal for documents.`
@@ -57,7 +57,7 @@ export const KNOWLEDGE_KB: Record<string, KBItem> = {
   'KB-005': {
     id: 'KB-005',
     title: 'How do I complain? (DIY route and with us)',
-    sms: 'You can complain directly for free. We handle everything - finding older agreements back to 2007, building stronger cases with multiple claim types, and managing all negotiations.',
+    sms: 'You can complain directly for free. We handle everything - finding older motor finance agreements back to 2007, building stronger cases with DCA, hidden commission and irresponsible lending claims, and managing all negotiations.',
     long: 'DIY is free but limited. We find agreements back to 2007, investigate DCA, unfair relationships, and irresponsible lending. Full service: LOA → comprehensive checks → doc requests → complaint → negotiations → escalation.'
   },
   'KB-006': {
@@ -111,14 +111,14 @@ export const KNOWLEDGE_KB: Record<string, KBItem> = {
   'KB-014': {
     id: 'KB-014',
     title: 'Timelines — how long will this take?',
-    sms: 'Timelines vary by lender, but we proactively chase and keep you updated throughout. Most cases are stronger when we find older agreements going back to 2007.',
-    long: 'Delays expected due to FCA temporary rules. We track and chase cases proactively; timelines vary by lender. Comprehensive investigation often finds stronger claims.'
+    sms: 'Due to FCA rules, lenders have until December 4, 2025 to respond. Most payments are expected from early 2026. We proactively chase and keep you updated throughout.',
+    long: 'FCA pause until 4 Dec 2025 means extended response times. Most payments expected early 2026. We track and chase cases proactively; timelines vary by lender but regulatory pause affects all cases.'
   },
   'KB-015': {
     id: 'KB-015',
     title: 'When will I get my money back?',
-    sms: 'Most payments expected from early 2026. We\'ll push for quicker resolution and keep you informed of progress throughout.',
-    long: 'FCA pause until 4 Dec 2025, then payments likely early 2026. We actively chase lenders and negotiate for faster resolution where possible.'
+    sms: 'Due to FCA pause until December 4, 2025, most payments are expected from early 2026. We actively chase for quicker resolution where possible.',
+    long: 'FCA regulatory pause until 4 Dec 2025 affects all motor finance cases. Payments likely early 2026. We actively chase lenders and negotiate for faster resolution where possible.'
   },
   'KB-016': {
     id: 'KB-016',
@@ -147,7 +147,7 @@ export const KNOWLEDGE_KB: Record<string, KBItem> = {
   'KB-020': {
     id: 'KB-020',
     title: 'I have claimed myself / gone through Martin Lewis',
-    sms: 'You can claim yourself. We can also check older cases and add extra claim types.',
+    sms: 'You can claim yourself. We can also check older motor finance agreements and add DCA, hidden commission and irresponsible lending claims.',
     long: 'DIY claims are possible, but we can find older agreements, add DCA and irresponsible lending claims, and build a stronger case.'
   },
   'KB-021': {

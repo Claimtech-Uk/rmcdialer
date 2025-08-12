@@ -89,6 +89,21 @@ export class SMSService {
   }
 
   /**
+   * Get the appropriate sender number for AI SMS messages
+   */
+  private getAiSmsFromNumber(messageType?: string, fromNumberOverride?: string): string {
+    // For AI SMS messages, always use the test number to prevent production spam
+    if (messageType === 'auto_response' || messageType === 'magic_link') {
+      const testNumber = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
+      console.log('AI SMS | 🧪 Using AI test number for message type:', messageType, 'Number:', testNumber);
+      return testNumber;
+    }
+    
+    // For manual messages, respect override or use default
+    return fromNumberOverride || this.fromNumber;
+  }
+
+  /**
    * Send an SMS message
    */
   async sendSMS(options: SendSMSOptions): Promise<SMSSendResult> {
@@ -97,13 +112,17 @@ export class SMSService {
     }
 
     const { phoneNumber, message, agentId, userId, messageType = 'manual', fromNumberOverride } = options;
+    
+    // Determine the appropriate sender number
+    const senderNumber = this.getAiSmsFromNumber(messageType, fromNumberOverride);
 
     try {
       console.log('AI SMS | 📨 Twilio send attempt', {
         to: phoneNumber,
-        from: fromNumberOverride || this.fromNumber,
+        from: senderNumber,
         length: message.length,
-        type: messageType
+        type: messageType,
+        isAiSms: messageType === 'auto_response' || messageType === 'magic_link'
       })
       // Send via Twilio
       // Determine status callback base URL from environment with fallbacks
@@ -112,7 +131,7 @@ export class SMSService {
 
       const twilioResponse = await this.twilioClient.messages.create({
         body: message,
-        from: fromNumberOverride || this.fromNumber,
+        from: senderNumber,
         to: phoneNumber,
         ...(statusCallbackUrl ? { statusCallback: statusCallbackUrl } : {})
       });

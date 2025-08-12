@@ -126,36 +126,65 @@ async function generateNaturalResponse(
     .map(m => `${m.direction === 'inbound' ? 'User' : 'Sophie'}: ${m.body}`)
     .join('\n')
   
-  const systemPrompt = `You are Sophie from RMC. You MUST respond with exactly 2 or 3 separate messages.
+  const systemPrompt = `CRITICAL RULE: You MUST respond with EXACTLY 3 messages following this exact structure:
 
-**MANDATORY RULE: NEVER give a single message. ALWAYS provide 2-3 messages.**
+REQUIRED JSON OUTPUT:
+{
+  "messages": [
+    "Message 1: GREET & ANSWER - [Hi {Name},] Direct answer to their question",
+    "Message 2: DYNAMIC VALUE ADD - Context-specific value based on their question type",  
+    "Message 3: QUESTION LEAD CALL TO ACTION - Question that guides to signature/portal"
+  ],
+  "conversationTone": "helpful|consultative|encouraging"
+}
 
-**RESPONSE STRUCTURE (REQUIRED):**
-Message 1: **Direct Answer** (1-2 sentences) - Answer their question immediately
-Message 2: **Value Add** (1-2 sentences) - Explain benefits of using RMC vs going direct
-Message 3: **Engaging Question** (1 sentence) - Keep conversation flowing
+**BUSINESS FOCUS:** We ONLY handle motor finance claims (PCP, HP, car loans). NEVER ask about "specific claim types" - we already know what we do.
 
-**For simple questions**: Use 2 messages (combine value-add with question)
-**For complex topics**: Use all 3 messages
+**STRUCTURE BREAKDOWN:**
+✅ Message 1: GREET & ANSWER
+   - Use customer's name if available: "Hi James," or "Hi there," 
+   - Directly answer their specific question
+   - Keep it 1-2 sentences
+
+✅ Message 2: DYNAMIC VALUE ADD (choose based on question type)
+   
+   **If OBJECTION (fees, time concerns, skepticism, trust):**
+   - Address their specific concern directly
+   - Examples: "Our sliding scale means you pay less as we recover more" (fees objection)
+   - "We proactively chase so you don't have to worry about delays" (time objection)
+   
+   **If INFORMATION REQUEST (process, documents, general questions):**
+   - Provide value relevant to their specific question
+   - Examples: "We handle all the paperwork so it's stress-free for you" (documents question)
+   - "Our systematic approach covers all claim types for maximum recovery" (process question)
+
+✅ Message 3: QUESTION LEAD CALL TO ACTION
+   - Ask a question that guides toward signature/portal link
+   - "Would you like me to send your secure portal link to get started?"
+   - "Ready to get your signature sorted so we can begin?"
 
 **CRITICAL EXAMPLES:**
 
-User: "How long will it take?"
-✅ CORRECT (2 messages):
-Message 1: "The timelines can vary depending on your lender, but we proactively chase and keep you updated throughout the process."
-Message 2: "Unlike going direct, we have experience with each lender's specific procedures which often speeds things up. What else would you like to know about the process?"
+User: "What are your fees?" (OBJECTION)
+✅ CORRECT:
+Message 1: "Hi James, Our fees are on a sliding scale up to 30% plus VAT, designed to be fair and transparent."
+Message 2: "Our fee structure means you only pay when we succeed, and the percentage actually decreases as your compensation increases."
+Message 3: "Would you like me to send your secure portal link to get started?"
 
-❌ WRONG (1 message):
-"The timelines can vary depending on your lender, but we proactively chase and keep you updated throughout the process. Unlike going direct, we have experience with each lender's specific procedures. What else would you like to know?"
+User: "What documents do you need?" (INFORMATION)
+✅ CORRECT:
+Message 1: "Hi there, We typically need your agreement, ID, and bank statements, but we guide you through each step."
+Message 2: "We only request what's absolutely necessary and make the upload process simple through your secure portal."
+Message 3: "Ready to get your signature sorted so we can begin gathering your documents?"
 
-User: "What are your fees?"
-✅ CORRECT (3 messages):
-Message 1: "Our fees are on a sliding scale up to 30% plus VAT, designed to be fair and transparent."
-Message 2: "This means as your compensation increases, our percentage actually decreases. Plus you always have the free option to complain directly."
-Message 3: "What specific aspect of our fee structure would you like me to explain further?"
+User: "How long will this take?" (OBJECTION - concern about delays)
+✅ CORRECT:
+Message 1: "Hi James, Timelines vary by lender, but most cases progress within 3-6 months depending on complexity."
+Message 2: "We proactively chase lenders and keep you updated throughout, so you never have to worry about delays or follow-ups."
+Message 3: "Would you like me to send your portal link to get the process started?"
 
 **USER ENGAGEMENT: ${userEngagement}**
-**TONE:** Warm, professional, consultative. Show expertise.
+**TONE:** Warm, professional, consultative. Use customer's name when available. Focus on getting signatures.
 
 ${hasExplicitLinkRequest ? `
 **SPECIAL NOTE: The user is explicitly asking for a link/portal access (e.g., "Yes send it"). 
@@ -163,11 +192,7 @@ DO NOT refuse or say you can't send links. Instead, acknowledge their request po
 Example: "Perfect! I'll get that portal link sent to you right now." or "Great, sending your portal link now."**
 ` : ''}
 
-MANDATORY JSON OUTPUT:
-{
-  "messages": ["message1", "message2", "message3 (if needed)"],
-  "conversationTone": "helpful|reassuring|informative|encouraging|consultative"
-}`
+REMEMBER: EXACTLY 3 messages. NEVER deviate from the GREET & ANSWER → DYNAMIC VALUE ADD → QUESTION LEAD CALL TO ACTION structure.`
 
   const userPrompt = `${context.userName ? `Customer: ${context.userName}\n` : ''}${context.userStatus ? `Status: ${context.userStatus}\n` : ''}${context.knowledgeContext ? `Relevant info: ${context.knowledgeContext}\n` : ''}
 Recent conversation:
@@ -204,54 +229,72 @@ User: ${context.userMessage}`
       messages = [parsed.message || "I understand your question. Let me help you with that."]
     }
     
-    // CRITICAL ENFORCEMENT: AI must provide 2-3 messages, never just 1
+    // CRITICAL ENFORCEMENT: AI must provide EXACTLY 3 messages
     if (messages.length === 1) {
-      console.log('AI SMS | ⚠️ AI tried to give single message - ENFORCING multi-message rule')
+      console.log('AI SMS | ⚠️ AI tried to give single message - ENFORCING 3-message structure')
       const singleMessage = messages[0]
       
-      // Force into 2 messages: answer + value-add question
-      const sentences = singleMessage.split('. ')
-      if (sentences.length >= 2) {
-        const midPoint = Math.ceil(sentences.length / 2)
-        const answer = sentences.slice(0, midPoint).join('. ') + '.'
-        let valueAdd = sentences.slice(midPoint).join('. ')
-        
-        // Ensure second message ends with question
-        if (!valueAdd.includes('?')) {
-          valueAdd += ' What else can I help you with?'
-        }
-        
-        messages = [answer, valueAdd]
-      } else {
-        // Single sentence - force into answer + value-add
-        messages = [
-          singleMessage.replace(/\?.*$/, '.'), // Remove question from first
-          "We're here to guide you through the entire process. What else would you like to know?"
-        ]
-      }
+      // Force into 3 messages: Greet & Answer + Value Add + Call to Action
+      const userName = context.userName && !/^unknown$/i.test(context.userName.trim()) ? context.userName : null
+      const greeting = userName ? `Hi ${userName}, ` : 'Hi there, '
       
-      console.log('AI SMS | ✅ Forced single message into multi-message sequence', {
+      messages = [
+        greeting + singleMessage.replace(/\?.*$/, '.'), // Greet & Answer (remove questions)
+        "We handle everything to make the process simple and stress-free for you.", // Generic value add
+        "Would you like me to send your secure portal link to get started?" // Call to action
+      ]
+      
+      console.log('AI SMS | ✅ Forced single message into 3-message structure', {
         originalLength: singleMessage.length,
         newMessageCount: messages.length
       })
     }
     
-    // Clean and validate messages
+    if (messages.length === 2) {
+      console.log('AI SMS | ⚠️ AI gave 2 messages - ENFORCING 3-message structure')
+      
+      // Add call to action as third message
+      messages.push("Ready to get your signature sorted so we can begin?")
+      
+      console.log('AI SMS | ✅ Added third message to complete 3-message structure', {
+        newMessageCount: messages.length
+      })
+    }
+    
+    // Clean and validate messages - ensure exactly 3
     messages = messages
       .filter((msg: any) => typeof msg === 'string' && msg.trim().length > 0)
       .slice(0, 3) // Max 3 messages
       .map((msg: string) => msg.trim())
     
+    // Final safety net - ensure exactly 3 messages
     if (messages.length === 0) {
-      messages = ["I understand your question. How can I help you further?"]
+      const userName = context.userName && !/^unknown$/i.test(context.userName.trim()) ? context.userName : null
+      const greeting = userName ? `Hi ${userName}, ` : 'Hi there, '
+      messages = [
+        greeting + "I understand your question about motor finance claims.",
+        "We handle everything to make the process simple and stress-free for you.",
+        "Would you like me to send your secure portal link to get started?"
+      ]
+    }
+    
+    // Ensure we always have exactly 3 messages
+    while (messages.length < 3) {
+      if (messages.length === 1) {
+        messages.push("We make the motor finance claims process simple and stress-free.")
+      }
+      if (messages.length === 2) {
+        messages.push("Would you like me to send your secure portal link to get started?")
+      }
     }
 
     console.log('AI SMS | 🎯 Natural response generated', {
       messageCount: messages.length,
       userEngagement,
       conversationTone: parsed.conversationTone || 'helpful',
-      wasForciblySplit: messages.length > 1 && parsed.messages?.length === 1,
-      originalMessageCount: parsed.messages?.length || 0
+      wasForced: messages.length !== (parsed.messages?.length || 0),
+      originalMessageCount: parsed.messages?.length || 0,
+      enforced3Messages: messages.length === 3
     })
 
     return {

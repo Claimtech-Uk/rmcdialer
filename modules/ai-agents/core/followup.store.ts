@@ -67,25 +67,46 @@ export async function popDueFollowups(phone: string, nowMs: number = Date.now())
   return due
 }
 
-// Business-hours guard (08:00–20:00 local time). For UK deployment this approximates UK hours.
+// Business-hours guard (08:00–20:00 UK time). 
 export function withinBusinessHours(date: Date = new Date()): boolean {
-  const h = date.getHours()
+  // Check if business hours are bypassed for testing
+  if (process.env.AI_SMS_IGNORE_BUSINESS_HOURS === 'true') {
+    return true
+  }
+  
+  // Get UK time using Europe/London timezone
+  const ukTime = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/London' }))
+  const h = ukTime.getHours()
   return h >= 8 && h < 20
 }
 
-// Seconds until next business open (08:00 local time)
+// Seconds until next business open (08:00 UK time)
 export function secondsUntilBusinessOpen(date: Date = new Date()): number {
-  const now = new Date(date)
+  // If business hours are bypassed, return minimal delay
+  if (process.env.AI_SMS_IGNORE_BUSINESS_HOURS === 'true') {
+    return 1
+  }
+  
+  // Calculate based on UK timezone
+  const now = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/London' }))
   const h = now.getHours()
+  
+  // Create a new date for the next business opening in UK time
   const open = new Date(now)
   if (h < 8) {
+    // Before 8am - open today at 8am
     open.setHours(8, 0, 0, 0)
   } else {
-    // During or after business hours, schedule for next day 08:00
+    // During or after business hours - open tomorrow at 8am
     open.setDate(now.getDate() + 1)
     open.setHours(8, 0, 0, 0)
   }
-  const diffMs = open.getTime() - now.getTime()
+  
+  // Convert back to UTC for calculation
+  const nowUTC = new Date(date)
+  const openUTC = new Date(open.toLocaleString('en-US', { timeZone: 'UTC' }))
+  
+  const diffMs = openUTC.getTime() - nowUTC.getTime()
   return Math.max(1, Math.ceil(diffMs / 1000))
 }
 

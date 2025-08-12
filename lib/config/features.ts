@@ -300,7 +300,8 @@ export const FEATURE_FLAGS = {
   ...ORIGINAL_FLAGS,
   ...QUEUE_MIGRATION_FLAGS,
   // AI agents
-  ENABLE_AI_SMS_AGENT: process.env.ENABLE_AI_SMS_AGENT !== 'false' // Default enabled (opt-out)
+  ENABLE_AI_SMS_AGENT: process.env.ENABLE_AI_SMS_AGENT !== 'false', // Default enabled (opt-out)
+  CONVERSATIONAL_MODE_ENABLED: process.env.CONVERSATIONAL_MODE_ENABLED !== 'false' // Default enabled (opt-out) - New 3-part message structure
 } as const;
 
 // ============================================================================
@@ -311,8 +312,11 @@ export function useFeatureFlag(flag: keyof OriginalFeatureFlags): boolean {
   return ORIGINAL_FLAGS[flag];
 }
 
-export function isFeatureEnabled(flag: keyof OriginalFeatureFlags): boolean {
-  return ORIGINAL_FLAGS[flag];
+export function isFeatureEnabled(flag: keyof OriginalFeatureFlags | keyof typeof FEATURE_FLAGS): boolean {
+  if (flag in ORIGINAL_FLAGS) {
+    return ORIGINAL_FLAGS[flag as keyof OriginalFeatureFlags];
+  }
+  return FEATURE_FLAGS[flag as keyof typeof FEATURE_FLAGS] as boolean;
 }
 
 // Development helpers (preserved)

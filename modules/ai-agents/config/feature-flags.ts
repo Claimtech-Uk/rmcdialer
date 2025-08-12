@@ -27,7 +27,13 @@ export const FEATURE_FLAGS = {
   
   // Development/debugging features
   VERBOSE_LOGGING: process.env.AI_SMS_VERBOSE_LOGGING === 'true',
-  DEBUG_MODE: process.env.NODE_ENV === 'development' || process.env.AI_SMS_DEBUG === 'true'
+  DEBUG_MODE: process.env.NODE_ENV === 'development' || process.env.AI_SMS_DEBUG === 'true',
+  
+  // Business hours bypass for testing
+  IGNORE_BUSINESS_HOURS: process.env.AI_SMS_IGNORE_BUSINESS_HOURS === 'true',
+  
+  // Send multi-message responses immediately (for testing)
+  IMMEDIATE_MULTIMSGS: process.env.AI_SMS_IMMEDIATE_MULTIMSGS === 'true'
 } as const
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS
@@ -53,7 +59,9 @@ export function logFeatureFlags(): void {
       conversationPlanning: FEATURE_FLAGS.CONVERSATION_PLANNING_ENABLED,
       conversationalMode: FEATURE_FLAGS.CONVERSATIONAL_MODE_ENABLED,
       verboseLogging: FEATURE_FLAGS.VERBOSE_LOGGING,
-      debugMode: FEATURE_FLAGS.DEBUG_MODE
+      debugMode: FEATURE_FLAGS.DEBUG_MODE,
+      ignoreBusinessHours: FEATURE_FLAGS.IGNORE_BUSINESS_HOURS,
+      immediateMultimsgs: FEATURE_FLAGS.IMMEDIATE_MULTIMSGS
     })
   }
 }
@@ -124,5 +132,19 @@ export const ENV_VARS_DOCUMENTATION = {
     default: 'false',
     values: ['true', 'false'],
     example: 'AI_SMS_DEBUG=true'
+  },
+  AI_SMS_IGNORE_BUSINESS_HOURS: {
+    description: 'Bypass business hours restrictions for testing - sends messages immediately regardless of UK time',
+    type: 'boolean',
+    default: 'false',
+    values: ['true', 'false'],
+    example: 'AI_SMS_IGNORE_BUSINESS_HOURS=true'
+  },
+  AI_SMS_IMMEDIATE_MULTIMSGS: {
+    description: 'Send multi-message AI responses immediately as one combined message for testing (bypasses follow-up delays)',
+    type: 'boolean',
+    default: 'false',
+    values: ['true', 'false'],
+    example: 'AI_SMS_IMMEDIATE_MULTIMSGS=true'
   }
 } as const

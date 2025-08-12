@@ -183,20 +183,48 @@ export class AgentRuntimeService {
         })
       } else if (messages.length > 1) {
         // Multi-message sequence (2-3 messages)
-        replyText = messages[0] // Send first message immediately
         
-        // Schedule remaining messages with 5-second delays
-        followups = messages.slice(1).map((text, index) => ({
-          text,
-          delaySec: (index + 1) * 5 // 5, 10 seconds
-        }))
+        // Check if we should send all messages immediately for testing
+        const sendImmediately = process.env.AI_SMS_IMMEDIATE_MULTIMSGS === 'true'
         
-        console.log('AI SMS | ✅ AI chose multi-message sequence', {
-          totalMessages: messages.length,
-          firstMessageLength: messages[0].length,
-          followupsScheduled: followups.length,
-          tone: conversationalResponse.conversationTone
-        })
+        if (sendImmediately) {
+          // Send each message as a separate SMS immediately
+          replyText = messages[0] // First message goes as immediate reply
+          
+          // Add remaining messages as separate SMS actions (not follow-ups)
+          for (let i = 1; i < messages.length; i++) {
+            actions.push({
+              type: 'send_sms',
+              phoneNumber: input.fromPhone,
+              text: messages[i]
+            })
+          }
+          
+          followups = [] // No follow-ups needed since we're sending as actions
+          
+          console.log('AI SMS | 🚀 Sending each message as separate SMS (testing mode)', {
+            totalMessages: messages.length,
+            immediateMessage: messages[0].length,
+            additionalSMSActions: messages.length - 1,
+            tone: conversationalResponse.conversationTone
+          })
+        } else {
+          // Normal behavior: first message immediate, others as follow-ups
+          replyText = messages[0] // Send first message immediately
+          
+          // Schedule remaining messages with 5-second delays
+          followups = messages.slice(1).map((text, index) => ({
+            text,
+            delaySec: (index + 1) * 5 // 5, 10 seconds
+          }))
+          
+          console.log('AI SMS | ✅ AI chose multi-message sequence', {
+            totalMessages: messages.length,
+            firstMessageLength: messages[0].length,
+            followupsScheduled: followups.length,
+            tone: conversationalResponse.conversationTone
+          })
+        }
       } else {
         // Fallback if no messages (shouldn't happen)
         replyText = "I understand your question. How can I help you further?"
