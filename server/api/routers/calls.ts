@@ -16,6 +16,7 @@ import { PriorityScoringService } from '@/modules/scoring/services/priority-scor
 import { prisma } from '@/lib/db';
 import { replicaDb } from '@/lib/mysql';
 import { CallOutcomeType } from '@/modules/call-outcomes/types/call-outcome.types';
+import { replicaDatabaseCircuitBreaker } from '@/lib/services/circuit-breaker.service';
 
 // Create array of outcome types for validation
 const outcomeTypeValues = [
@@ -864,21 +865,50 @@ export const callsRouter = createTRPCRouter({
           skip: (filters.page - 1) * (filters.limit || 50)
         });
 
-        // Get user details from replica DB for each call
+        // Get user details from replica DB for each call with circuit breaker protection
         const userIds = [...new Set(callSessions.map((call: any) => call.userId))];
-        const users = userIds.length > 0 ? await replicaDb.user.findMany({
-          where: {
-            id: {
-              in: userIds.map(id => BigInt(id))
+        console.log(`🔍 Looking up ${userIds.length} unique user IDs for call history`);
+        
+        let users: any[] = [];
+        let missingUserIds: number[] = [];
+        
+        if (userIds.length > 0) {
+          try {
+            // Use circuit breaker for batch user lookup
+            users = await replicaDatabaseCircuitBreaker.execute(
+              async () => {
+                return await replicaDb.user.findMany({
+                  where: {
+                    id: {
+                      in: userIds.map(id => BigInt(id))
+                    }
+                  },
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    phone_number: true
+                  }
+                });
+              },
+              'callHistory.batchUserLookup'
+            );
+            
+            // Check for missing users
+            const foundUserIds = users.map(u => Number(u.id));
+            missingUserIds = userIds.filter(id => !foundUserIds.includes(Number(id)));
+            
+            if (missingUserIds.length > 0) {
+              console.warn(`⚠️ Missing users in replica DB for call history: ${missingUserIds.join(', ')}`);
             }
-          },
-          select: {
-            id: true,
-            first_name: true,
-            last_name: true,
-            phone_number: true
+            
+          } catch (error) {
+            console.error(`❌ Failed to fetch users for call history:`, error);
+            // Continue with empty users array - fallback will handle it
+            users = [];
+            missingUserIds = userIds;
           }
-        }) : [];
+        }
 
         const userMap = new Map(users.map(user => [Number(user.id), user]));
 
@@ -918,7 +948,11 @@ export const callsRouter = createTRPCRouter({
           return {
             id: session.id,
             userId: Number(session.userId),
-            userName: user ? `${user.first_name} ${user.last_name}` : 'Unknown User',
+            userName: user 
+              ? `${user.first_name} ${user.last_name}` 
+              : missingUserIds.includes(Number(session.userId))
+                ? `User ID ${session.userId} (sync issue)`
+                : `User ID ${session.userId} (not found)`,
             userPhone: user?.phone_number || 'Unknown',
             agentId: session.agentId,
             agentName: `${session.agent.firstName} ${session.agent.lastName}`,

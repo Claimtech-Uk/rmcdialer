@@ -275,7 +275,7 @@ export const analyticsRouter = createTRPCRouter({
                 email: user.email_address
               } : {
                 id: Number(conversion.userId),
-                name: 'Unknown User',
+                name: `User ID ${conversion.userId} (not found in replica)`,
                 email: null
               },
               agent: conversion.primaryAgent ? {

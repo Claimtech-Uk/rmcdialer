@@ -11,10 +11,11 @@ function buildReplicaDatabaseUrl(): string {
   const baseUrl = process.env.REPLICA_DATABASE_URL || ''
   const url = new URL(baseUrl)
   
-  // Add MySQL-specific connection pool parameters
-  url.searchParams.set('connection_limit', '20') // MySQL replica - slightly lower than main DB
-  url.searchParams.set('pool_timeout', '30') // 30 seconds
+  // Add MySQL-specific connection pool parameters - optimized for high concurrency
+  url.searchParams.set('connection_limit', '40') // Increased to handle concurrent load
+  url.searchParams.set('pool_timeout', '60') // Increased to 60 seconds for peak load
   url.searchParams.set('connect_timeout', '20') // 20 seconds for initial connection
+  url.searchParams.set('mysql_query_timeout', '45') // 45 second query timeout to handle complex queries
   
   return url.toString()
 }
@@ -26,10 +27,10 @@ export const replicaDb = globalForReplicaDb.replicaDb ?? new PrismaClient({
       url: buildReplicaDatabaseUrl()
     }
   },
-  // Additional client options for better performance
+  // Additional client options for better performance and stability
   transactionOptions: {
-    maxWait: 10000, // 10 seconds for read-only queries
-    timeout: 20000, // 20 seconds for transaction timeout
+    maxWait: 20000, // 20 seconds for read-only queries (increased)
+    timeout: 45000, // 45 seconds for transaction timeout (aligned with query timeout)
   }
 })
 
