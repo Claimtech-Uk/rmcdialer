@@ -218,7 +218,10 @@ export class UserService {
    * Get complete user context for calling
    * OPTIMIZED: Combines data from MySQL replica (user/claims) + PostgreSQL (call scores)
    */
-  async getUserCallContext(userId: number): Promise<UserCallContext | null> {
+  async getUserCallContext(
+    userId: number,
+    options?: { includeAddress?: boolean; includeRequirementDetails?: boolean }
+  ): Promise<UserCallContext | null> {
     return timeOperation(
       'getUserCallContext',
       async () => {
@@ -234,7 +237,7 @@ export class UserService {
           this.logger.debug(`Cache miss for user ${userId}, fetching from databases`);
 
           // 2. Use optimized single-query approach with aggressive timeout
-          let userData;
+          let userData: any;
           try {
             userData = await timeOperation(
               'getUserDataOptimized',
@@ -260,6 +263,86 @@ export class UserService {
           if (!userData) {
             this.logger.warn(`User ${userId} not found in replica database`);
             return null;
+          }
+
+          // 2b. Optionally enrich with address and real requirement details
+          // Keep these lightweight with short timeouts to avoid hanging the request
+          if (options?.includeAddress) {
+            try {
+              const addressResult: any = await Promise.race([
+                (async () => {
+                  // Prefer current_user_address_id if present
+                  if ((userData as any).current_user_address_id) {
+                    return await replicaDb.userAddress.findUnique({
+                      where: { id: (userData as any).current_user_address_id },
+                      select: {
+                        id: true,
+                        user_id: true,
+                        type: true,
+                        full_address: true,
+                        post_code: true,
+                        county: true,
+                        created_at: true
+                      }
+                    });
+                  }
+                  // Fallback: pick any non-linked address for the user
+                  return await replicaDb.userAddress.findFirst({
+                    where: { user_id: Number((userData as any).id) },
+                    select: {
+                      id: true,
+                      user_id: true,
+                      type: true,
+                      full_address: true,
+                      post_code: true,
+                      county: true,
+                      created_at: true
+                    },
+                    orderBy: { created_at: 'desc' }
+                  });
+                })(),
+                new Promise(resolve => setTimeout(() => resolve(null), 2000))
+              ]);
+              if (addressResult) {
+                (userData as any).address = addressResult;
+              }
+            } catch (e) {
+              // Ignore address enrichment failures
+            }
+          }
+
+          if (options?.includeRequirementDetails && Array.isArray((userData as any).claims) && (userData as any).claims.length > 0) {
+            try {
+              const claimIds = (userData as any).claims.map((c: any) => c.id);
+              const requirements: any[] = (await Promise.race([
+                replicaDb.claimRequirement.findMany({
+                  where: { claim_id: { in: claimIds } },
+                  select: {
+                    id: true,
+                    claim_id: true,
+                    type: true,
+                    status: true,
+                    claim_requirement_reason: true,
+                    claim_requirement_rejection_reason: true,
+                    created_at: true
+                  }
+                }),
+                new Promise(resolve => setTimeout(() => resolve([]), 2000))
+              ])) as any[];
+
+              const byClaim = new Map<any, any[]>();
+              for (const req of requirements) {
+                const list = byClaim.get(req.claim_id) || [];
+                list.push(req);
+                byClaim.set(req.claim_id, list);
+              }
+              (userData as any).claims = (userData as any).claims.map((c: any) => ({
+                ...c,
+                requirements: byClaim.get(c.id) || c.requirements || []
+              }));
+            } catch (e) {
+              // Ignore requirement enrichment failures
+            }
           }
 
           // 3. Merge data into context (skip call scores for now - we can fetch async)

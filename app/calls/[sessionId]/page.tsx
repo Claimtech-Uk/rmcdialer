@@ -25,7 +25,7 @@ function NewCallInterface({
 
   // Fetch user context for the call - PERFORMANCE OPTIMIZED
   const { data: userContextResponse, isLoading: userContextLoading, error: userContextError } = api.users.getUserContext.useQuery(
-    { userId },
+    { userId, includeAddress: true, includeRequirementDetails: true },
     { 
       enabled: !!userId,
       retry: 1, // Only retry once to avoid hanging

@@ -9,7 +9,9 @@ const userService = new UserService();
 // Input validation schemas
 const GetUserContextSchema = z.object({
   userId: z.number().int().positive(),
-  includeCallHistory: z.boolean().optional().default(false)
+  includeCallHistory: z.boolean().optional().default(false),
+  includeAddress: z.boolean().optional().default(true),
+  includeRequirementDetails: z.boolean().optional().default(true)
 });
 
 const GetEligibleUsersSchema = z.object({
@@ -81,7 +83,10 @@ export const usersRouter = createTRPCRouter({
     .input(GetUserContextSchema)
     .query(async ({ input, ctx }) => {
       try {
-        const context = await userService.getUserCallContext(input.userId);
+        const context = await userService.getUserCallContext(input.userId, {
+          includeAddress: input.includeAddress,
+          includeRequirementDetails: input.includeRequirementDetails
+        });
         
         if (!context) {
           throw new Error(`User ${input.userId} not found`);
