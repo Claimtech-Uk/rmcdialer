@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now();
   
   // Skip during build to prevent hanging
-  if (!process.env.VERCEL_URL && process.env.NODE_ENV === 'production') {
+  if (process.env.VERCEL_ENV === 'preview' || process.env.CI === 'true') {
     return NextResponse.json({ success: true, message: 'Skipped during build' });
   }
 
