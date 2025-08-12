@@ -226,8 +226,9 @@ export class UserService {
       'getUserCallContext',
       async () => {
         try {
-          // 1. Check cache first with longer TTL for frequently accessed users
-          const cacheKey = CACHE_KEYS.userContext(userId);
+          // 1. Check cache first with variant based on enrichment options
+          const wantsEnrichment = Boolean(options?.includeAddress || options?.includeRequirementDetails);
+          const cacheKey = `${CACHE_KEYS.userContext(userId)}${wantsEnrichment ? ':full' : ':base'}`;
           const cached = await cacheService.get(cacheKey);
           if (cached) {
             this.logger.debug(`Cache hit for user ${userId}`);
@@ -301,7 +302,7 @@ export class UserService {
                     orderBy: { created_at: 'desc' }
                   });
                 })(),
-                new Promise(resolve => setTimeout(() => resolve(null), 2000))
+                new Promise(resolve => setTimeout(() => resolve(null), 5000))
               ]);
               if (addressResult) {
                 (userData as any).address = addressResult;
@@ -327,7 +328,7 @@ export class UserService {
                     created_at: true
                   }
                 }),
-                new Promise(resolve => setTimeout(() => resolve([]), 2000))
+                new Promise(resolve => setTimeout(() => resolve([]), 5000))
               ])) as any[];
 
               const byClaim = new Map<any, any[]>();
