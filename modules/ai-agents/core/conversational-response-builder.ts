@@ -108,6 +108,11 @@ export type ResponseContext = {
 
 export type ConversationalResponse = {
   messages: string[] // AI decides: 1, 2, or 3 messages naturally
+  actions: Array<{
+    type: 'send_magic_link' | 'send_review_link' | 'schedule_followup' | 'none'
+    reasoning: string
+    confidence: number
+  }> // AI explicitly decides actions with reasoning
   shouldOfferLink: boolean
   linkOffer?: string
   linkReference?: string
@@ -198,8 +203,33 @@ REQUIRED JSON OUTPUT:
     "[Context-specific value based on their question type]",  
     "[Question that guides to signature/portal]"
   ],
+  "actions": [
+    {
+      "type": "send_magic_link|send_review_link|schedule_followup|none",
+      "reasoning": "Why you chose this action based on user signals",
+      "confidence": 0.8
+    }
+  ],
   "conversationTone": "helpful|consultative|encouraging"
 }
+
+**ACTION DECISION FRAMEWORK:**
+
+🔗 SEND_MAGIC_LINK when:
+- User shows readiness: "yes", "send it", "ready", "let's do it"  
+- User asks about next steps or process
+- User has shown positive intent: ${hasExplicitLinkRequest}
+
+⭐ SEND_REVIEW_LINK when:
+- User expresses satisfaction: "great", "thanks", "sorted"
+
+📅 SCHEDULE_FOLLOWUP when:  
+- User needs time to think
+- Promised to check back later
+
+🚫 NONE when:
+- User has concerns to address first
+- More information needed
 
 **BUSINESS FOCUS:** We ONLY handle motor finance claims (PCP, HP, car loans). NEVER ask about "specific claim types" - we already know what we do.
 
@@ -427,6 +457,7 @@ User: ${context.userMessage}`
 
     return {
       messages,
+      actions: parsed.actions || [{ type: 'none', reasoning: 'No specific action needed', confidence: 0.5 }],
       conversationTone: parsed.conversationTone || 'helpful'
     }
   } catch (error) {

@@ -438,13 +438,43 @@ export class AgentRuntimeService {
         replyText += ` ${conversationalResponse.linkOffer}`
       }
       
+      // Process AI-decided actions from conversational response
+      if (conversationalResponse.actions) {
+        for (const actionDecision of conversationalResponse.actions) {
+          if (actionDecision.type === 'send_magic_link' && userCtx.found && userCtx.userId) {
+            actions.push({
+              type: 'send_magic_link',
+              userId: userCtx.userId,
+              phoneNumber: input.fromPhone,
+              linkType: 'claimPortal'
+            })
+            console.log('AI SMS | 🔗 AI decided to send magic link:', actionDecision.reasoning, 'confidence:', actionDecision.confidence)
+          } else if (actionDecision.type === 'send_review_link') {
+            actions.push({
+              type: 'send_review_link',
+              phoneNumber: input.fromPhone
+            })
+            console.log('AI SMS | ⭐ AI decided to send review link:', actionDecision.reasoning)
+          } else if (actionDecision.type === 'schedule_followup') {
+            // Schedule a followup based on AI decision
+            followups.push({
+              text: "Hope you're doing well! Any questions about your motor finance claim?",
+              delaySec: 24 * 60 * 60 // 24 hours default
+            })
+            console.log('AI SMS | 📅 AI scheduled followup:', actionDecision.reasoning)
+          }
+          // 'none' action means just conversation, no additional actions needed
+        }
+      }
+
       console.log('AI SMS | ✅ Conversational response built', {
         messageCount: conversationalResponse.messages.length,
         shouldOfferLink: conversationalResponse.shouldOfferLink,
         hasConsent: consentStatus.hasConsent,
         consentReason: consentStatus.reason,
         hasLinkPlaceholder,
-        actionsCount: actions.length
+        actionsCount: actions.length,
+        aiDecisions: conversationalResponse.actions?.map(a => ({ type: a.type, confidence: a.confidence })) || []
       })
       
       // Apply intelligent personalization for conversational mode
