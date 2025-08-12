@@ -41,14 +41,20 @@ export function CallbackIcon() {
   const router = useRouter();
 
   // Get callbacks using authenticated tRPC query instead of raw fetch
-  const { data: callbacksData, refetch } = api.calls.getCallbacks.useQuery(
+  const { data: callbacksData, refetch, error } = api.calls.getCallbacks.useQuery(
     {
       status: 'pending',
       limit: 50, // Get more callbacks to show in dashboard
     },
     {
       enabled: !!agent?.id,
-      refetchInterval: 30000, // Poll every 30 seconds
+      refetchInterval: (data, query) => {
+        // Stop polling if there's an authentication error
+        if (query.state.error?.message?.includes('Authentication')) {
+          return false;
+        }
+        return 30000; // Poll every 30 seconds if authenticated
+      },
       staleTime: 30000, // Consider data stale after 30 seconds
     }
   );

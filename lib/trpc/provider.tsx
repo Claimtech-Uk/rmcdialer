@@ -11,7 +11,14 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
     defaultOptions: {
       queries: {
         staleTime: 5 * 60 * 1000, // 5 minutes
-        retry: 2, // Maximum 2 retries
+        retry: (failureCount, error) => {
+          // Don't retry authentication errors
+          if (error instanceof Error && error.message.includes('Authentication')) {
+            return false;
+          }
+          // Otherwise retry up to 2 times
+          return failureCount < 2;
+        },
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 3000), // Exponential backoff
         refetchOnWindowFocus: false, // Don't refetch on window focus
         refetchOnMount: false, // Don't refetch on mount if cached
@@ -21,7 +28,13 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         }
       },
       mutations: {
-        retry: 1, // Only retry mutations once
+        retry: (failureCount, error) => {
+          // Don't retry authentication errors
+          if (error instanceof Error && error.message.includes('Authentication')) {
+            return false;
+          }
+          return failureCount < 1; // Only retry mutations once
+        },
         retryDelay: 1000
       }
     },
@@ -66,12 +79,21 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
               
               // Handle authentication errors explicitly
               if (response.status === 401) {
-                console.error('🚨 Authentication failed - invalid or expired token');
-                // Clear invalid token
+                // Clear invalid token silently (reduce console noise)
                 if (typeof window !== 'undefined') {
-                  localStorage.removeItem('auth-token');
+                  const hadToken = localStorage.getItem('auth-token');
+                  if (hadToken) {
+                    localStorage.removeItem('auth-token');
+                    console.log('🔄 Cleared expired authentication token');
+                    // Optionally redirect to login after a short delay to avoid UI flash
+                    setTimeout(() => {
+                      if (window.location.pathname !== '/login') {
+                        window.location.href = '/login';
+                      }
+                    }, 2000);
+                  }
                 }
-                throw new Error('Authentication failed. Please log in again.');
+                throw new Error('Authentication expired');
               }
 
               // Handle other HTTP errors

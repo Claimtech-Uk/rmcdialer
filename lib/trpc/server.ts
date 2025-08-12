@@ -49,8 +49,11 @@ export const createTRPCContext = async (opts: CreateContextOptions) => {
         const decoded = jwt.verify(token, jwtSecret) as any
         agent = decoded
       } catch (error) {
-        // Invalid token, continue without agent
-        console.warn('Invalid JWT token in TRPC context:', error instanceof Error ? error.message : 'Unknown error')
+        // Invalid token, continue without agent (only log non-expired errors)
+        if (error instanceof Error && !error.message.includes('jwt expired')) {
+          console.warn('Invalid JWT token in TRPC context:', error.message)
+        }
+        // Silently handle expired tokens to reduce log noise
       }
     }
   }
