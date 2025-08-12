@@ -300,7 +300,7 @@ export const FEATURE_FLAGS = {
   ...ORIGINAL_FLAGS,
   ...QUEUE_MIGRATION_FLAGS,
   // AI agents
-  ENABLE_AI_SMS_AGENT: process.env.ENABLE_AI_SMS_AGENT === 'true'
+  ENABLE_AI_SMS_AGENT: process.env.ENABLE_AI_SMS_AGENT !== 'false' // Default enabled (opt-out)
 } as const;
 
 // ============================================================================
