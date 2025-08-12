@@ -68,9 +68,14 @@ export async function GET(
       })
     );
 
+    // Convert BigInt values to numbers for JSON serialization
+    const jsonSafeCallbacks = JSON.parse(JSON.stringify(callbacksWithContext, (key, value) =>
+      typeof value === 'bigint' ? Number(value) : value
+    ));
+
     return NextResponse.json({
       success: true,
-      callbacks: callbacksWithContext
+      callbacks: jsonSafeCallbacks
     });
 
   } catch (error) {

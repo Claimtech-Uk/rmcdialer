@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { logger } from '@/modules/core';
+import { UserService } from '@/modules/users';
 
 /**
  * Callback Notification Cron Job
@@ -14,6 +15,7 @@ import { logger } from '@/modules/core';
  */
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
+  const userService = new UserService();
   
   try {
     console.log('🔔 [CRON] Callback notification check starting...');
@@ -109,15 +111,15 @@ export async function GET(request: NextRequest) {
         }
         
         // Get user details for the callback
-        const userContext = await getUserCallContext(Number(callback.userId));
+        const userServiceContext = await userService.getUserCallContext(Number(callback.userId));
         
-        if (!userContext) {
+                if (!userServiceContext) {
           console.error(`❌ User context not found for callback ${callback.id}`);
           results.errors++;
           continue;
         }
-
-        const userName = `${userContext.firstName || 'Unknown'} ${userContext.lastName || 'User'}`.trim();
+        
+        const userName = `${userServiceContext.user.firstName || 'Unknown'} ${userServiceContext.user.lastName || 'User'}`.trim();
         
         // Check if preferred agent is available
         let targetAgent = callback.preferredAgent;
@@ -191,38 +193,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * Get user call context
- */
-async function getUserCallContext(userId: number) {
-  try {
-    // Using the same pattern as existing services
-    const userQuery = `
-      SELECT 
-        u.id,
-        u.first_name,
-        u.last_name,
-        u.phone_number
-      FROM users u 
-      WHERE u.id = ?
-    `;
-    
-    const result = await prisma.$queryRawUnsafe(userQuery, userId);
-    const users = result as any[];
-    
-    if (users.length === 0) return null;
-    
-    const user = users[0];
-    return {
-      firstName: user.first_name,
-      lastName: user.last_name,
-      phoneNumber: user.phone_number
-    };
-  } catch (error) {
-    console.error(`Error fetching user context for ${userId}:`, error);
-    return null;
-  }
-}
+
 
 /**
  * Find an available agent

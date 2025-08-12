@@ -70,10 +70,15 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    // Convert BigInt values to numbers for JSON serialization
+    const jsonSafeCallbacks = JSON.parse(JSON.stringify(callbacksWithContext, (key, value) =>
+      typeof value === 'bigint' ? Number(value) : value
+    ));
+
     return NextResponse.json({
       success: true,
-      callbacks: callbacksWithContext,
-      total: callbacksWithContext.length,
+      callbacks: jsonSafeCallbacks,
+      total: jsonSafeCallbacks.length,
       debug: {
         userId,
         agentId,
