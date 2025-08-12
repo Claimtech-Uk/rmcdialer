@@ -241,7 +241,7 @@ export class UserService {
               () => Promise.race([
                 this.getUserDataOptimized(userId),
                 new Promise((_, reject) => 
-                  setTimeout(() => reject(new Error('Database query timeout')), 2000) // Reduced to 2 seconds
+                  setTimeout(() => reject(new Error('Database query timeout')), 8000) // Allow 8 seconds before fallback
                 )
               ]),
               { userId }

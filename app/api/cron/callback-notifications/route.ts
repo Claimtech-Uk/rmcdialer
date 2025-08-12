@@ -15,6 +15,12 @@ import { UserService } from '@/modules/users';
  */
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
+  
+  // Skip during build to prevent hanging
+  if (!process.env.VERCEL_URL && process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ success: true, message: 'Skipped during build' });
+  }
+
   const userService = new UserService();
   
   try {
