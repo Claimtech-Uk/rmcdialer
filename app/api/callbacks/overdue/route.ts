@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { UserService } from '@/modules/users';
 
+// Prevent static generation - this route requires runtime database access
+export const dynamic = 'force-dynamic';
+
 /**
  * Get overdue callbacks that need manual attention
  * Returns callbacks past their scheduled time that haven't been completed

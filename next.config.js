@@ -19,6 +19,26 @@ const nextConfig = {
   // Optimize build performance
   swcMinify: true,
   poweredByHeader: false,
+  // CRITICAL: Exclude heavy API routes from static generation
+  exportPathMap: async function(defaultPathMap) {
+    const excludeRoutes = [
+      '/api/cron/callback-notifications',
+      '/api/cron/discover-new-requirements', 
+      '/api/cron/smart-new-users-discovery',
+      '/api/cron/sms-followups',
+      '/api/debug/all-callbacks',
+      '/api/callbacks/overdue',
+      '/api/agents/*/pending-callbacks'
+    ];
+    
+    // Remove excluded routes from static generation
+    const filteredPathMap = { ...defaultPathMap };
+    excludeRoutes.forEach(route => {
+      delete filteredPathMap[route];
+    });
+    
+    return filteredPathMap;
+  }
 }
 
 module.exports = nextConfig

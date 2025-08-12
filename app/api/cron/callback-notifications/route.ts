@@ -3,6 +3,10 @@ import { prisma } from '@/lib/db';
 import { logger } from '@/modules/core';
 import { UserService } from '@/modules/users';
 
+// Prevent static generation - this route requires runtime
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 /**
  * Callback Notification Cron Job
  * 

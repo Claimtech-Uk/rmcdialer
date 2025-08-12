@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { UserService } from '@/modules/users';
 
+// Prevent static generation - this route requires runtime database access
+export const dynamic = 'force-dynamic';
+
 /**
  * Debug endpoint to show ALL callbacks regardless of status
  * Helps debug why callbacks might not appear in regular endpoints
