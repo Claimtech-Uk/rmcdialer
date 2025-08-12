@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { UserService } from '@/modules/users';
 
 /**
  * Get overdue callbacks that need manual attention
  * Returns callbacks past their scheduled time that haven't been completed
  */
 export async function GET(request: NextRequest) {
+  const userService = new UserService();
+  
   try {
     const now = new Date();
     
@@ -32,7 +35,7 @@ export async function GET(request: NextRequest) {
     // Get user context for each callback
     const callbacksWithContext = await Promise.all(
       overdueCallbacks.map(async (callback: any) => {
-        const userContext = await getUserCallContext(Number(callback.userId));
+        const userServiceContext = await userService.getUserCallContext(Number(callback.userId));
         const minutesOverdue = Math.floor(
           (now.getTime() - new Date(callback.scheduledFor).getTime()) / (1000 * 60)
         );
@@ -42,10 +45,10 @@ export async function GET(request: NextRequest) {
           userId: callback.userId,
           scheduledFor: callback.scheduledFor,
           callbackReason: callback.callbackReason,
-          userName: userContext ? 
-            `${userContext.firstName || 'Unknown'} ${userContext.lastName || 'User'}`.trim() : 
-            'Unknown User',
-          userPhone: userContext?.phoneNumber || 'Unknown',
+          userName: userServiceContext ? 
+            `${userServiceContext.user.firstName || 'Unknown'} ${userServiceContext.user.lastName || 'User'}`.trim() : 
+            `User ID ${callback.userId} (not found)`,
+          userPhone: userServiceContext?.user.phoneNumber || 'Unknown',
           minutesOverdue,
           preferredAgentId: callback.preferredAgent?.id,
           preferredAgentName: callback.preferredAgent ? 
@@ -57,10 +60,15 @@ export async function GET(request: NextRequest) {
 
     console.log(`📋 Found ${callbacksWithContext.length} overdue callbacks for manual handling`);
 
+    // Convert BigInt values to numbers for JSON serialization
+    const jsonSafeCallbacks = JSON.parse(JSON.stringify(callbacksWithContext, (key, value) =>
+      typeof value === 'bigint' ? Number(value) : value
+    ));
+
     return NextResponse.json({
       success: true,
-      callbacks: callbacksWithContext,
-      total: callbacksWithContext.length
+      callbacks: jsonSafeCallbacks,
+      total: jsonSafeCallbacks.length
     });
 
   } catch (error) {
@@ -72,34 +80,4 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * Get user call context
- */
-async function getUserCallContext(userId: number) {
-  try {
-    const userQuery = `
-      SELECT 
-        u.id,
-        u.first_name,
-        u.last_name,
-        u.phone_number
-      FROM users u 
-      WHERE u.id = ?
-    `;
-    
-    const result = await prisma.$queryRawUnsafe(userQuery, userId);
-    const users = result as any[];
-    
-    if (users.length === 0) return null;
-    
-    const user = users[0];
-    return {
-      firstName: user.first_name,
-      lastName: user.last_name,
-      phoneNumber: user.phone_number
-    };
-  } catch (error) {
-    console.error(`Error fetching user context for ${userId}:`, error);
-    return null;
-  }
-} 
+ 
