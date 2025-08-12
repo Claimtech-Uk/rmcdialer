@@ -28,6 +28,7 @@ export function buildSystemPrompt(addendum?: string): string {
     `- PCP: ${KNOWLEDGE_DIGESTS.pcpClaim}`,
     `- System: ${KNOWLEDGE_DIGESTS.rmcSystem}`,
     `- FAQs: ${KNOWLEDGE_DIGESTS.faqs}`,
+    `- User Stages: ${KNOWLEDGE_DIGESTS.userStages}`,
     `- Compliance: ${KNOWLEDGE_DIGESTS.compliance}`,
     `- KB (selected): [${['KB-001','KB-002','KB-011','KB-014','KB-024']
       .map(id => `${id}: ${KNOWLEDGE_KB[id].sms}`)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { SMSService } from '@/modules/communications';
+import { advanceSmsPlan, getPlanBySid } from '@/modules/ai-agents/core/followup.store'
 
 // Twilio SMS Status Callback Schema
 const TwilioSMSStatusSchema = z.object({
@@ -47,6 +48,42 @@ export async function POST(request: NextRequest) {
         validatedData.ErrorCode,
         validatedData.ErrorMessage
       )
+      // Chain next SMS in plan when previous is confirmed sent/delivered
+      if (validatedData.MessageStatus === 'sent' || validatedData.MessageStatus === 'delivered') {
+        console.log('AI SMS | 🔍 Looking up plan mapping for SID:', validatedData.MessageSid)
+        const mapping = await getPlanBySid(validatedData.MessageSid)
+        
+        if (mapping?.phone && mapping.planId) {
+          console.log('AI SMS | ✅ Found plan mapping', { phone: mapping.phone, planId: mapping.planId })
+          const { nextText, done } = await advanceSmsPlan(mapping.phone, mapping.planId)
+          
+          if (nextText) {
+            console.log('AI SMS | 🚀 Advancing plan - sending next message', { 
+              phone: mapping.phone, 
+              planId: mapping.planId, 
+              messageLength: nextText.length,
+              done 
+            })
+            await smsService.sendSMS({
+              phoneNumber: mapping.phone,
+              message: nextText,
+              messageType: 'auto_response'
+            })
+          } else {
+            console.log('AI SMS | ✅ Plan completed or no next message', { 
+              phone: mapping.phone, 
+              planId: mapping.planId, 
+              done 
+            })
+          }
+        } else {
+          // Only log missing mapping if not in testing mode (testing mode uses Redis follow-ups)
+          const isTestingMode = process.env.AI_SMS_IMMEDIATE_MULTIMSGS === 'true'
+          if (!isTestingMode) {
+            console.log('AI SMS | ❌ No plan mapping found for SID:', validatedData.MessageSid)
+          }
+        }
+      }
     } catch (persistError) {
       console.error('AI SMS | Failed to persist SMS status:', persistError)
     }

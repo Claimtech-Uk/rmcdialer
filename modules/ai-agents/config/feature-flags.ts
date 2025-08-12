@@ -33,7 +33,8 @@ export const FEATURE_FLAGS = {
   IGNORE_BUSINESS_HOURS: process.env.AI_SMS_IGNORE_BUSINESS_HOURS === 'true',
   
   // Send multi-message responses immediately (for testing)
-  IMMEDIATE_MULTIMSGS: process.env.AI_SMS_IMMEDIATE_MULTIMSGS === 'true'
+  IMMEDIATE_MULTIMSGS: process.env.AI_SMS_IMMEDIATE_MULTIMSGS === 'true',
+  SIMPLIFIED_AI_MODE_ENABLED: process.env.AI_SMS_SIMPLIFIED_MODE === 'true'
 } as const
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS
@@ -146,5 +147,13 @@ export const ENV_VARS_DOCUMENTATION = {
     default: 'false',
     values: ['true', 'false'],
     example: 'AI_SMS_IMMEDIATE_MULTIMSGS=true'
+  },
+  
+  AI_SMS_SIMPLIFIED_MODE: {
+    description: 'Enable simplified AI-controlled mode where AI decides both messages and actions naturally (gives AI full autonomy)',
+    type: 'boolean',
+    default: 'false',
+    values: ['true', 'false'],
+    example: 'AI_SMS_SIMPLIFIED_MODE=true'
   }
 } as const

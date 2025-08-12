@@ -1,6 +1,7 @@
 import type { AgentTurnInput } from '../../../core/agent-runtime.service'
 import type { SmsAgentSession, SmsAgentType } from '../../../core/session.store'
 import { getActiveSession, startSession, completeSession } from '../../../core/session.store'
+import { getBehaviourOverride } from '../../../core/agent-behavior-override.store'
 
 export type RouteDecision = {
   type: SmsAgentType
@@ -24,6 +25,20 @@ export class SmsAgentRouter {
   }
 
   async route(phone: string, signals: UserRoutingSignals): Promise<RouteDecision> {
+    // 0) Behaviour override check
+    try {
+      const override = await getBehaviourOverride(phone)
+      if (override?.type) {
+        console.log('AI SMS | 🧭 Router: behaviour override active', { phone, type: override.type })
+        // Start a sticky session for the override type with a short TTL window
+        const ttlSeconds = 60 * 60 // 1 hour session stickiness by default
+        await startSession(phone, { type: override.type, startedAt: Date.now(), lastAt: Date.now(), ttlSeconds })
+        return { type: override.type, reason: 'behaviour_override', sessionStarted: true }
+      }
+    } catch (err) {
+      console.warn('AI SMS | ⚠️ Router: behaviour override check failed', { err })
+    }
+
     const existing = await getActiveSession(phone)
     if (existing && existing.type !== 'customer_service') {
       console.log('AI SMS | 🧭 Router: sticky', { phone, type: existing.type })

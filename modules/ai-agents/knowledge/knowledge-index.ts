@@ -11,7 +11,10 @@ export const KNOWLEDGE_DIGESTS = {
   faqs: `Common FAQs: (1) How long does it take? Due to FCA pause until Dec 4, 2025, most payments expected early 2026; we keep them updated in the portal. (2) What documents do you need? Usually ID, proof of address, and finance docs; the portal lists any outstanding items. (3) Is this no‑win no‑fee? We're transparent about terms; details are in the portal/disclosure docs. (4) Can you guarantee a result? No guarantees; we'll pursue the claim diligently and keep them informed. (5) I've already signed—what next? Check the portal for any outstanding items; otherwise we'll progress and update you.`,
 
   // Compliance guardrails to reinforce tone and limits
-  compliance: `Compliance: No promises of compensation or timeframes. No legal/financial advice. Be clear, patient, and opt‑in/consent‑first. If user is abusive or wants to complain, acknowledge and offer escalation to a specialist. Never share sensitive PII in messages; prefer portal for documents.`
+  compliance: `Compliance: No promises of compensation or timeframes. No legal/financial advice. Be clear, patient, and opt‑in/consent‑first. If user is abusive or wants to complain, acknowledge and offer escalation to a specialist. Never share sensitive PII in messages; prefer portal for documents.`,
+
+  // User stage-specific guidance for targeted responses
+  userStages: `UNSIGNED USER - What we need: Signature + ID (helpful but not always required). Why: Signature allows credit check, retrieve agreements, and start investigating claims. What happens after: We handle the rest, might need further info but we'll let you know. | OUTSTANDING REQUESTS - What we need: Claim/lender & requirement type dependent. Why: Lender pushed back because they can't identify user or locate agreements. What happens after: Once uploaded, we send it back and hopefully lenders approve going forward.`
 }
 
 // Structured Knowledge Base with stable IDs (2.1 from @aismsplan.mdc)

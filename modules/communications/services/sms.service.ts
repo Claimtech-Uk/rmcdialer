@@ -4,6 +4,7 @@
 // Handles SMS messaging, conversations, auto-responses, and Twilio integration
 
 import { prisma } from '@/lib/db';
+import { consumePendingPlanForPhone, mapSidToPlan } from '@/modules/ai-agents/core/followup.store'
 import { replicaDb } from '@/lib/mysql';
 import { logger } from '@/modules/core';
 import type {
@@ -152,6 +153,18 @@ export class SMSService {
           sentAt: new Date()
         }
       });
+
+      // If there is a pending plan for this phone, bind the SID to that planId for deterministic chaining
+      try {
+        const phoneForPlan = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`
+        const pendingPlanId = await consumePendingPlanForPhone(phoneForPlan)
+        if (pendingPlanId) {
+          await mapSidToPlan(twilioResponse.sid, phoneForPlan, pendingPlanId)
+          console.log('AI SMS | 🔗 Bound Twilio SID to plan', { sid: twilioResponse.sid, phone: phoneForPlan, planId: pendingPlanId })
+        }
+      } catch (bindErr) {
+        console.warn('AI SMS | ⚠️ Failed to bind SID to plan', bindErr)
+      }
 
       // Update conversation timestamp but keep it closed for outbound messages
       await prisma.smsConversation.update({

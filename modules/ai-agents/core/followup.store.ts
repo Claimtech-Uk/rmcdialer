@@ -9,6 +9,19 @@ export type SmsFollowup = {
   metadata?: Record<string, any>
 }
 
+export type SmsPlan = {
+  planId: string
+  phone: string
+  steps: string[]
+  nextIndex: number
+  createdAt: number
+  idempotencyKey?: string
+}
+
+const planKey = (phone: string, planId: string) => `sms:plan:${phone}:${planId}`
+const pendingPlanKey = (phone: string) => `sms:plan:pending:${phone}`
+const sidMapKey = (sid: string) => `sms:plan:bySid:${sid}`
+
 const key = (phone: string) => `sms:followups:${phone}`
 const indexKey = 'sms:followups:index'
 
@@ -49,6 +62,60 @@ export async function scheduleFollowup(phone: string, followup: Omit<SmsFollowup
   await cacheService.set(key(phone), next, ttlSec)
   await addPhoneToIndex(phone)
   return entry
+}
+
+// Create a new multi-message plan
+export async function createSmsPlan(phone: string, planId: string, steps: string[], idempotencyKey?: string): Promise<SmsPlan> {
+  const plan: SmsPlan = {
+    planId,
+    phone,
+    steps,
+    nextIndex: 0,
+    createdAt: Date.now(),
+    idempotencyKey
+  }
+  // Keep plan for up to 24h
+  await cacheService.set(planKey(phone, planId), plan, 24 * 60 * 60)
+  return plan
+}
+
+export async function getSmsPlan(phone: string, planId: string): Promise<SmsPlan | null> {
+  return ((await cacheService.get(planKey(phone, planId))) as SmsPlan | null) || null
+}
+
+export async function advanceSmsPlan(phone: string, planId: string): Promise<{ nextText: string | null; done: boolean; plan: SmsPlan | null }> {
+  const current = (await cacheService.get(planKey(phone, planId))) as SmsPlan | null
+  if (!current) return { nextText: null, done: true, plan: null }
+  if (current.nextIndex >= current.steps.length) return { nextText: null, done: true, plan: current }
+  const nextText = current.steps[current.nextIndex]
+  const updated: SmsPlan = { ...current, nextIndex: current.nextIndex + 1 }
+  await cacheService.set(planKey(phone, planId), updated, 24 * 60 * 60)
+  return { nextText, done: updated.nextIndex >= updated.steps.length, plan: updated }
+}
+
+export async function deleteSmsPlan(phone: string, planId: string): Promise<void> {
+  await cacheService.del(planKey(phone, planId))
+}
+
+// Pending plan helper: stash the planId for the next outbound SMS for this phone
+export async function setPendingPlanForPhone(phone: string, planId: string, ttlSeconds: number = 10 * 60): Promise<void> {
+  await cacheService.set(pendingPlanKey(phone), { planId, at: Date.now() }, ttlSeconds)
+}
+
+export async function consumePendingPlanForPhone(phone: string): Promise<string | null> {
+  const val = (await cacheService.get(pendingPlanKey(phone))) as { planId: string } | null
+  if (!val) return null
+  await cacheService.del(pendingPlanKey(phone))
+  return val.planId
+}
+
+// Map Twilio SID to a plan for deterministic chaining in webhook
+export async function mapSidToPlan(sid: string, phone: string, planId: string, ttlSeconds: number = 24 * 60 * 60): Promise<void> {
+  await cacheService.set(sidMapKey(sid), { phone, planId }, ttlSeconds)
+}
+
+export async function getPlanBySid(sid: string): Promise<{ phone: string; planId: string } | null> {
+  return ((await cacheService.get(sidMapKey(sid))) as any) || null
 }
 
 export async function listFollowups(phone: string): Promise<SmsFollowup[]> {

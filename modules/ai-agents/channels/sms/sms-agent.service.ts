@@ -36,7 +36,7 @@ export class SmsAgentService {
         phoneNumber: toNumber,
         message: formatSms(msg),
         messageType: 'auto_response',
-        userId: input.userId
+         userId: input.userId
         // Note: SMS service automatically uses test number for auto_response messages
       })
       await setAutomationHalt(input.fromPhone)
@@ -147,10 +147,15 @@ export class SmsAgentService {
       console.log('AI SMS | ✅ Reply send invoked')
     }
 
-    // Execute simple actions
-    for (let i = 0; i < turn.actions.length; i++) {
-      const action = turn.actions[i]
+    // Execute actions with proper ordering for multi-SMS sequences
+    const smsActions = turn.actions.filter(a => a.type === 'send_sms')
+    const nonSmsActions = turn.actions.filter(a => a.type !== 'send_sms')
+    
+    // Process non-SMS actions first (no ordering issues)
+    for (let i = 0; i < nonSmsActions.length; i++) {
+      const action = nonSmsActions[i]
       const actionKeyBase = turn.idempotencyKey ? `${turn.idempotencyKey}:action:${i}` : `action:${toNumber}:${JSON.stringify(action)}`
+      
       if (action.type === 'send_magic_link') {
         await sendOnce(actionKeyBase, async () => {
           console.log('AI SMS | 🔗 Sending magic link', { userId: action.userId, to: action.phoneNumber || input.fromPhone })
@@ -174,25 +179,6 @@ export class SmsAgentService {
           const userSignalsAfter = await this.runtime.getUserSignalsForRouting(input.fromPhone)
           await this.router.endIfGoalAchieved(input.fromPhone, route.type, userSignalsAfter)
         })
-      } else if (action.type === 'send_sms') {
-        await sendOnce(actionKeyBase, async () => {
-          const { formatSms } = await import('./formatter')
-          const { withinBusinessHours, scheduleAtBusinessOpen } = await import('../../core/followup.store')
-          console.log('AI SMS | 📨 Sending action SMS', { to: action.phoneNumber || input.fromPhone })
-          const msg = formatSms(action.text)
-          if (!withinBusinessHours()) {
-            console.log('AI SMS | 🕗 Outside business hours, deferring action SMS to open')
-            await scheduleAtBusinessOpen(input.fromPhone, msg, { kind: 'action_sms' })
-          } else {
-            await sendSmsWithRetry({
-              phoneNumber: toE164(action.phoneNumber || input.fromPhone),
-              message: msg,
-              messageType: 'auto_response',
-              userId: input.userId,
-              // Note: SMS service automatically uses test number for auto_response messages
-            })
-          }
-        })
       } else if (action.type === 'send_review_link') {
         await sendOnce(actionKeyBase, async () => {
           const reviewUrl = process.env.TRUSTPILOT_REVIEW_URL || 'https://uk.trustpilot.com/review/resolvemyclaim.co.uk'
@@ -207,7 +193,7 @@ export class SmsAgentService {
             return
           }
           console.log('AI SMS | ⭐ Sending review link', { to: action.phoneNumber })
-          const msg = formatSms(`Here’s the review link: ${reviewUrl}`)
+          const msg = formatSms(`Here's the review link: ${reviewUrl}`)
           if (!withinBusinessHours()) {
             console.log('AI SMS | 🕗 Outside business hours, deferring review link to open')
             await scheduleAtBusinessOpen(input.fromPhone, msg, { kind: 'review_link' })
@@ -230,6 +216,69 @@ export class SmsAgentService {
           await this.router.endIfGoalAchieved(input.fromPhone, 'review_collection' as any, signalsAfter)
         })
       }
+    }
+
+    // Move multi-SMS sequencing to Redis follow-ups for guaranteed delivery
+    if (smsActions.length > 0) {
+      await sendOnce(turn.idempotencyKey ? `${turn.idempotencyKey}:redis_sequence` : `redis_sequence:${toNumber}:${smsActions.length}`, async () => {
+        const { withinBusinessHours, scheduleFollowup, scheduleAtBusinessOpen } = await import('../../core/followup.store')
+        const baseDelaySec = 2 // first follow-up in 2s to feel immediate but use queue
+        let offset = 0
+        for (let i = 0; i < smsActions.length; i++) {
+          const action = smsActions[i]
+          offset += i === 0 ? baseDelaySec : 2 // subsequent +2s steps
+          const metadata = { kind: 'sequential_sms', sequenceIndex: i + 1, totalInSequence: smsActions.length }
+          if (!withinBusinessHours()) {
+            await scheduleAtBusinessOpen(input.fromPhone, action.text, metadata)
+          } else {
+            await scheduleFollowup(input.fromPhone, { text: action.text, delaySec: offset, metadata })
+          }
+        }
+        console.log('AI SMS | 🗄️ Sequenced SMS via Redis follow-ups', { count: smsActions.length, baseDelaySec })
+      })
+    }
+
+    // TESTING MODE: Use Promise.all with delays - work directly with turn followups, no Redis needed
+    const isTestingMode = process.env.AI_SMS_IMMEDIATE_MULTIMSGS === 'true'
+    if (isTestingMode && turn.reply?.text && turn.followups && turn.followups.length > 0) {
+      console.log('AI SMS | 🚀 Testing mode: using Promise.all with delays (direct from AI)', { 
+        count: turn.followups.length, 
+        delays: turn.followups.map(f => `${f.delaySec || 2}s`) 
+      })
+      
+      // Elegant Promise.all solution - all delays start immediately, resolve at scheduled times
+      const sendWithDelay = (message: string, delay: number) => 
+        new Promise<void>((resolve) => {
+          setTimeout(async () => {
+            try {
+              await sendSmsWithRetry({
+                phoneNumber: toE164(input.fromPhone),
+                message: message,
+                messageType: 'auto_response',
+                userId: input.userId
+              })
+              console.log('AI SMS | ✅ Testing mode message sent', { 
+                delay: delay + 'ms', 
+                messageLength: message.length
+              })
+            } catch (err) {
+              console.error('AI SMS | ❌ Testing mode message failed', { delay, message: message.slice(0, 50), err })
+            }
+            resolve() // Always resolve to not block other messages
+          }, delay)
+        })
+
+      // Fire all delayed messages in parallel - they'll send at their scheduled times
+      const delayedSends = turn.followups.map(f => 
+        sendWithDelay(f.text, (f.delaySec || 2) * 1000)
+      )
+      
+      // Don't await - let them fire in background so main request completes immediately
+      Promise.all(delayedSends).then(() => {
+        console.log('AI SMS | 🎉 All testing mode messages completed')
+      }).catch(err => {
+        console.error('AI SMS | ❌ Testing mode Promise.all error:', err)
+      })
     }
 
     // Mark idempotency key after successful sends

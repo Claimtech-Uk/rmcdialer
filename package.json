@@ -42,6 +42,9 @@
     "queue:trigger": "./scripts/trigger-queue-discovery-now.sh",
     "cron:logs": "curl -s https://rmcdialer-45m0lwnlq-james-campbells-projects-6c4e4922.vercel.app/api/cron/logs | jq .",
     "cron:monitor": "./scripts/monitor-cron-schedule.sh",
+    "scores:boost:dry": "DRY_RUN=1 tsx scripts/boost-call-scores.ts",
+    "scores:boost": "tsx scripts/boost-call-scores.ts",
+    "queue:unsigned:reset": "tsx scripts/reset-unsigned-queue.ts",
     "vercel:deploy:prod": "node scripts/ci-assert-main.js && npx vercel@latest deploy --prebuilt --prod --yes",
     "vercel:deploy:dev": "npx vercel@latest deploy --prebuilt --yes --target=preview"
   },
