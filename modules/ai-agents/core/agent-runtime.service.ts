@@ -50,7 +50,7 @@ export type AgentTurnOutput = {
 export class AgentRuntimeService {
   private readonly contextBuilder = new AgentContextBuilder()
   private readonly router = new SmsAgentRouter()
-  private readonly smsService = new SMSService() // For action execution
+  private readonly smsService = new SMSService({}) // For action execution
 
   async handleTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
     // Build user context (by phone). Used to tailor response and choose actions
@@ -800,7 +800,7 @@ export class AgentRuntimeService {
    */
   private async executeAIActions(
     aiActions: Array<{
-      type: 'send_magic_link' | 'send_review_link' | 'schedule_followup' | 'none'
+      type: 'send_magic_link' | 'send_portal_link' | 'send_review_link' | 'schedule_followup' | 'none'
       reasoning: string
       confidence: number
     }>,

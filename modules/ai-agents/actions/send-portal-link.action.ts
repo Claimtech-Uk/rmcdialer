@@ -112,6 +112,7 @@ export class PortalLinkAction {
         const result = await this.magicLinkService.generateMagicLink({
           userId: params.userId,
           linkType: params.linkType || 'claimPortal',
+          deliveryMethod: 'sms', // Required by interface
           expiresInHours: 48
         })
 

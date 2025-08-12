@@ -9,6 +9,7 @@ import { logger } from '@/modules/core'
 
 export type ActionType = 
   | 'send_portal_link'
+  | 'send_magic_link'  // Include both for compatibility
   | 'send_sms' 
   | 'send_review_link'
   | 'schedule_followup'
