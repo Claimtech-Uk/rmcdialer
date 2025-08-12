@@ -1,1 +1,13 @@
+# Vercel build optimization - exclude heavy files
 scripts/
+*.md
+.env.example
+.env.local
+.vscode/
+.cursor/
+*.log
+coverage/
+.nyc_output/
+.jest/
+# Keep essential files for build
+!scripts/ci-assert-main.js

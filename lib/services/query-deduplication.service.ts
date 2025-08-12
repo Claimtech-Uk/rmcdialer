@@ -153,5 +153,20 @@ export class QueryDeduplicationService {
   }
 }
 
-// Global singleton instance
-export const queryDeduplication = new QueryDeduplicationService();
+// Lazy-loaded singleton (build-safe)
+let _queryDeduplication: QueryDeduplicationService | null = null;
+
+export function getQueryDeduplication(): QueryDeduplicationService {
+  if (!_queryDeduplication) {
+    _queryDeduplication = new QueryDeduplicationService();
+  }
+  return _queryDeduplication;
+}
+
+// Backwards compatibility - lazy getter
+export const queryDeduplication = {
+  deduplicate: <T>(key: string, queryFn: () => Promise<T>, options?: any) => 
+    getQueryDeduplication().deduplicate(key, queryFn, options),
+  getStats: () => getQueryDeduplication().getStats(),
+  clear: () => getQueryDeduplication().clear()
+};

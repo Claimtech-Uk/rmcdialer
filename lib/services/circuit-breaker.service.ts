@@ -228,17 +228,43 @@ export class CircuitBreakerOpenError extends Error {
   }
 }
 
-// Global circuit breaker instances for different services
-export const databaseCircuitBreaker = new CircuitBreakerService({
-  failureThreshold: 5,
-  recoveryTimeout: 30000, // 30 seconds
-  monitoringWindow: 60000, // 1 minute
-  halfOpenMaxCalls: 3
-});
+// Lazy-loaded global instances (build-safe)
+let _databaseCircuitBreaker: CircuitBreakerService | null = null;
+let _replicaDatabaseCircuitBreaker: CircuitBreakerService | null = null;
 
-export const replicaDatabaseCircuitBreaker = new CircuitBreakerService({
-  failureThreshold: 8, // More lenient for replica
-  recoveryTimeout: 20000, // 20 seconds
-  monitoringWindow: 60000, // 1 minute
-  halfOpenMaxCalls: 5
-});
+export function getDatabaseCircuitBreaker(): CircuitBreakerService {
+  if (!_databaseCircuitBreaker) {
+    _databaseCircuitBreaker = new CircuitBreakerService({
+      failureThreshold: 5,
+      recoveryTimeout: 30000, // 30 seconds
+      monitoringWindow: 60000, // 1 minute
+      halfOpenMaxCalls: 3
+    });
+  }
+  return _databaseCircuitBreaker;
+}
+
+export function getReplicaDatabaseCircuitBreaker(): CircuitBreakerService {
+  if (!_replicaDatabaseCircuitBreaker) {
+    _replicaDatabaseCircuitBreaker = new CircuitBreakerService({
+      failureThreshold: 8, // More lenient for replica
+      recoveryTimeout: 20000, // 20 seconds
+      monitoringWindow: 60000, // 1 minute
+      halfOpenMaxCalls: 5
+    });
+  }
+  return _replicaDatabaseCircuitBreaker;
+}
+
+// Backwards compatibility - lazy getters
+export const databaseCircuitBreaker = {
+  execute: (operation: string, fn: () => Promise<any>) => getDatabaseCircuitBreaker().execute(operation, fn),
+  getStats: () => getDatabaseCircuitBreaker().getStats(),
+  reset: () => getDatabaseCircuitBreaker().reset()
+};
+
+export const replicaDatabaseCircuitBreaker = {
+  execute: (operation: string, fn: () => Promise<any>) => getReplicaDatabaseCircuitBreaker().execute(operation, fn),
+  getStats: () => getReplicaDatabaseCircuitBreaker().getStats(),
+  reset: () => getReplicaDatabaseCircuitBreaker().reset()
+};
