@@ -470,6 +470,7 @@ User: ${context.userMessage}`
           "Perfect! I'll send your secure portal link now: {LINK_PLACEHOLDER}",
           "Click the link above and provide your signature, ID, and any required information. If you have any questions, please reach out!"
         ],
+        actions: [{ type: 'send_magic_link', reasoning: 'User showed positive intent (fallback)', confidence: 0.7 }],
         conversationTone: 'helpful'
       }
     } else {
@@ -480,6 +481,7 @@ User: ${context.userMessage}`
           "We handle everything to make the process simple and stress-free for you.",
           "Would you like me to send your secure portal link to get started?"
         ],
+        actions: [{ type: 'none', reasoning: 'More information needed (fallback)', confidence: 0.8 }],
         conversationTone: 'helpful'
       }
     }

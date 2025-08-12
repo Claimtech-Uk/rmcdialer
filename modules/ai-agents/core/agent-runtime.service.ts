@@ -23,6 +23,8 @@ import { redactPII } from './guardrails'
 import { prisma } from '@/lib/db'
 import { scheduleFollowup, popDueFollowups, createSmsPlan, setPendingPlanForPhone } from './followup.store'
 import { generateAIMagicLink, formatMagicLinkForSMS } from './ai-magic-link-generator'
+import { actionRegistry, type ActionExecutionContext } from '../actions'
+import { SMSService } from '@/modules/communications/services/sms.service'
 import crypto from 'crypto'
 
 export type AgentTurnInput = {
@@ -48,6 +50,7 @@ export type AgentTurnOutput = {
 export class AgentRuntimeService {
   private readonly contextBuilder = new AgentContextBuilder()
   private readonly router = new SmsAgentRouter()
+  private readonly smsService = new SMSService() // For action execution
 
   async handleTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
     // Build user context (by phone). Used to tailor response and choose actions
@@ -438,33 +441,15 @@ export class AgentRuntimeService {
         replyText += ` ${conversationalResponse.linkOffer}`
       }
       
-      // Process AI-decided actions from conversational response
+      // Process AI-decided actions using the action registry
       if (conversationalResponse.actions) {
-        for (const actionDecision of conversationalResponse.actions) {
-          if (actionDecision.type === 'send_magic_link' && userCtx.found && userCtx.userId) {
-            actions.push({
-              type: 'send_magic_link',
-              userId: userCtx.userId,
-              phoneNumber: input.fromPhone,
-              linkType: 'claimPortal'
-            })
-            console.log('AI SMS | 🔗 AI decided to send magic link:', actionDecision.reasoning, 'confidence:', actionDecision.confidence)
-          } else if (actionDecision.type === 'send_review_link') {
-            actions.push({
-              type: 'send_review_link',
-              phoneNumber: input.fromPhone
-            })
-            console.log('AI SMS | ⭐ AI decided to send review link:', actionDecision.reasoning)
-          } else if (actionDecision.type === 'schedule_followup') {
-            // Schedule a followup based on AI decision
-            followups.push({
-              text: "Hope you're doing well! Any questions about your motor finance claim?",
-              delaySec: 24 * 60 * 60 // 24 hours default
-            })
-            console.log('AI SMS | 📅 AI scheduled followup:', actionDecision.reasoning)
-          }
-          // 'none' action means just conversation, no additional actions needed
-        }
+        await this.executeAIActions(
+          conversationalResponse.actions,
+          input.fromPhone,
+          userCtx,
+          actions,
+          followups
+        )
       }
 
       console.log('AI SMS | ✅ Conversational response built', {
@@ -807,6 +792,96 @@ export class AgentRuntimeService {
       found: ctx.found,
       hasSignature,
       pendingRequirements: ctx.pendingRequirements || 0
+    }
+  }
+
+  /**
+   * Execute AI-decided actions using the action registry
+   */
+  private async executeAIActions(
+    aiActions: Array<{
+      type: 'send_magic_link' | 'send_review_link' | 'schedule_followup' | 'none'
+      reasoning: string
+      confidence: number
+    }>,
+    phoneNumber: string,
+    userCtx: any,
+    actions: AgentAction[],
+    followups: Array<{ text: string; delaySec?: number }>
+  ): Promise<void> {
+    
+    const executionContext: ActionExecutionContext = {
+      smsService: this.smsService,
+      userContext: {
+        userId: userCtx.userId,
+        phoneNumber: phoneNumber,
+        userName: userCtx.firstName,
+        found: userCtx.found
+      },
+      conversationContext: {
+        reasoning: 'AI conversational decision',
+        confidence: 0.8
+      }
+    }
+
+    for (const actionDecision of aiActions) {
+      try {
+        console.log(`AI SMS | 🎯 Executing AI action: ${actionDecision.type}`, {
+          reasoning: actionDecision.reasoning,
+          confidence: actionDecision.confidence
+        })
+
+        // Execute action through registry
+        const result = await actionRegistry.execute(
+          actionDecision.type,
+          executionContext,
+          {
+            reasoning: actionDecision.reasoning,
+            confidence: actionDecision.confidence
+          }
+        )
+
+        if (result.success) {
+          // Convert registry results to legacy actions for backward compatibility
+          if (actionDecision.type === 'send_magic_link' || actionDecision.type === 'send_portal_link') {
+            if (userCtx.found && userCtx.userId) {
+              actions.push({
+                type: 'send_magic_link',
+                userId: userCtx.userId,
+                phoneNumber: phoneNumber,
+                linkType: 'claimPortal'
+              })
+            }
+          } else if (actionDecision.type === 'send_review_link') {
+            actions.push({
+              type: 'send_review_link',
+              phoneNumber: phoneNumber
+            })
+          } else if (actionDecision.type === 'schedule_followup') {
+            followups.push({
+              text: "Hope you're doing well! Any questions about your motor finance claim?",
+              delaySec: 24 * 60 * 60 // 24 hours
+            })
+          }
+
+          console.log(`AI SMS | ✅ Action executed successfully: ${actionDecision.type}`, {
+            trackingId: result.trackingId,
+            reasoning: result.reasoning
+          })
+
+        } else {
+          console.error(`AI SMS | ❌ Action failed: ${actionDecision.type}`, {
+            error: result.error,
+            reasoning: result.reasoning
+          })
+        }
+
+      } catch (error) {
+        console.error(`AI SMS | ❌ Action execution error: ${actionDecision.type}`, {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          reasoning: actionDecision.reasoning
+        })
+      }
     }
   }
 }
