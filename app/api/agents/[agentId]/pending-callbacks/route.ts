@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { UserService } from '@/modules/users';
 
 /**
  * Get pending callbacks assigned to a specific agent
@@ -9,6 +10,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { agentId: string } }
 ) {
+  const userService = new UserService();
+  
   try {
     const agentId = parseInt(params.agentId);
     if (isNaN(agentId)) {
@@ -51,15 +54,15 @@ export async function GET(
     // Get user context for each callback
     const callbacksWithContext = await Promise.all(
       callbacks.map(async (callback) => {
-        const userContext = await getUserCallContext(Number(callback.userId));
+        const userServiceContext = await userService.getUserCallContext(Number(callback.userId));
         
         return {
           id: callback.id,
           userId: callback.userId,
           scheduledFor: callback.scheduledFor,
           callbackReason: callback.callbackReason,
-          userName: userContext ? `${userContext.firstName || 'Unknown'} ${userContext.lastName || 'User'}`.trim() : 'Unknown User',
-          userPhone: userContext?.phoneNumber || 'Unknown',
+          userName: userServiceContext ? `${userServiceContext.user.firstName || 'Unknown'} ${userServiceContext.user.lastName || 'User'}`.trim() : `User ID ${callback.userId} (not found)`,
+          userPhone: userServiceContext?.user.phoneNumber || 'Unknown',
           isAssigned: true
         };
       })
@@ -79,33 +82,4 @@ export async function GET(
   }
 }
 
-/**
- * Get user call context
- */
-async function getUserCallContext(userId: number) {
-  try {
-    const userQuery = `
-      SELECT 
-        u.id,
-        u.first_name,
-        u.phone_number
-      FROM users u 
-      WHERE u.id = ?
-    `;
-    
-    const result = await prisma.$queryRawUnsafe(userQuery, userId);
-    const users = result as any[];
-    
-    if (users.length === 0) return null;
-    
-    const user = users[0];
-    return {
-      firstName: user.first_name,
-      lastName: user.last_name || '',
-      phoneNumber: user.phone_number
-    };
-  } catch (error) {
-    console.error(`Error fetching user context for ${userId}:`, error);
-    return null;
-  }
-} 
+ 
