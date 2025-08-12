@@ -1468,7 +1468,7 @@ export class UserService {
         requirements: claim.requirements.map(req => ({
           id: req.id,
           type: req.type,
-          status: req.status,
+          status: (req.status as any)?.toString().toUpperCase() || null,
           reason: req.claim_requirement_reason,
           rejectionReason: req.claim_requirement_rejection_reason,
           createdAt: req.created_at
