@@ -21,7 +21,7 @@ import { RequirementsProfile } from '../channels/sms/agents/requirements.profile
 import { ReviewCollectionProfile } from '../channels/sms/agents/review-collection.profile'
 import { redactPII } from './guardrails'
 import { prisma } from '@/lib/db'
-import { scheduleFollowup, popDueFollowups, createSmsPlan, setPendingPlanForPhone } from './followup.store'
+import { scheduleFollowup, popDueFollowups } from './followup.store'
 import { generateAIMagicLink, formatMagicLinkForSMS } from './ai-magic-link-generator'
 import { actionRegistry, type ActionExecutionContext } from '../actions'
 import { SMSService } from '@/modules/communications/services/sms.service'
@@ -295,23 +295,22 @@ export class AgentRuntimeService {
             tone: conversationalResponse.conversationTone
           })
         } else {
-          // Normal behavior: send first message now; chain the rest via Twilio status callback plan
+          // Normal behavior: send first message now; schedule remaining with simple delays
           replyText = messages[0]
           const remaining = messages.slice(1)
           if (remaining.length > 0) {
-            // Create a plan and stash its id in a short-lived memory.nextPlanId. The SMSService will read this
-            // ambient value (closure variable) is not feasible, so we log the plan id in memory; we will map SID→plan in webhook via user phone
-            const planId = `plan_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-            // Normalize phone to E.164 for deterministic plan key matches (webhook mapping uses +E164)
-            const e164Phone = input.fromPhone.startsWith('+') ? input.fromPhone : `+${input.fromPhone}`
-            await createSmsPlan(e164Phone, planId, remaining, idempotencyKey)
-            // Mark pending plan so the next outbound send can bind SID→plan for webhook chaining
-            await setPendingPlanForPhone(e164Phone, planId, 10 * 60)
-            // No immediate action; callback will advance plan
+            // Schedule remaining messages with 2-second delays (simplified approach)
+            for (let i = 0; i < remaining.length; i++) {
+              followups.push({
+                text: remaining[i],
+                delaySec: (i + 1) * 2 // 2s, 4s, 6s delays
+              })
+            }
           }
-          console.log('AI SMS | ✅ Multi-message plan created for status-callback chaining', {
+          console.log('AI SMS | ✅ Multi-message followups scheduled', {
             totalMessages: messages.length,
-            remaining: remaining.length
+            remaining: remaining.length,
+            delays: remaining.map((_, idx) => `${(idx + 1) * 2}s`).join(', ')
           })
         }
       } else {
