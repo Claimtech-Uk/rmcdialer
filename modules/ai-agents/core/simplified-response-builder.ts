@@ -435,17 +435,17 @@ function buildIntelligentSystemPrompt(
   consentStatus: any, 
   insights: ConversationInsights | null
 ): string {
-  const userReadiness = assessUserReadiness(context, insights)
+  // Removed pre-assessment - let AI determine readiness naturally through conversation analysis
   
   // Knowledge base now integrated directly into STEP 3 of the structured prompt
   
-  const currentPrompt = `🔍 CONVERSATION ANALYSIS - Study these details:
+  const currentPrompt = `�� CONVERSATION ANALYSIS - Study these details:
 
 📞 CUSTOMER INFORMATION:
 • Name: ${context.userName || 'Customer'}
 • Status: ${context.userStatus || 'Unknown'}
-• Readiness Level: ${userReadiness}
-• Link Consent: ${consentStatus.hasConsent ? 'Has given consent' : 'No recent consent'}
+• Message Count: ${insights?.messageCount || 0} (conversation stage context)
+• Link Cooldown: ${consentStatus.hasConsent ? 'Recently gave consent' : 'No recent consent - ask permission first'}
 
 ${buildAdaptiveUserContext(context)}
 
@@ -485,28 +485,9 @@ function buildIntelligentUserPrompt(
   return lines.join('\n')
 }
 
-function assessUserReadiness(
-  context: SimplifiedResponseContext, 
-  insights: ConversationInsights | null
-): string {
-  const msg = context.userMessage.toLowerCase()
-  
-  // Strong readiness signals
-  if (/(yes|send|ready|let's|go ahead|proceed|start)/i.test(msg)) return 'ready'
-  
-  // Interest signals
-  if (/(how|what|when|process|next)/i.test(msg)) return 'interested'
-  
-  // Concern signals  
-  if (/(but|however|worried|concerned|unsure)/i.test(msg)) return 'hesitant'
-  
-  // Default based on message count
-  const messageCount = insights?.messageCount || 0
-  if (messageCount > 3) return 'interested'
-  if (messageCount > 1) return 'curious'
-  
-  return 'curious'
-}
+// Removed assessUserReadiness function - AI now determines readiness naturally
+// No more rigid pattern matching like /(yes|send|ready)/ - trust AI intelligence
+// Let the AI analyze conversation context and user intent organically
 
 function buildAdaptiveUserContext(context: SimplifiedResponseContext): string {
   const signatureStatus = context.userContext.hasSignature 
