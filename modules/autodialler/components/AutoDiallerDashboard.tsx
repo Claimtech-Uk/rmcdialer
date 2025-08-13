@@ -151,6 +151,8 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
         return 'No agents available';
       case 'handler_error':
         return 'System error occurred';
+      case 'a.i sms agent callback':
+        return 'AI SMS agent scheduled callback';
       default:
         return reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
