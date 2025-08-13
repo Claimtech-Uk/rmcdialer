@@ -345,23 +345,30 @@ Using knowledge from STEP 3 and action from STEP 4, craft your message as Sophie
 
 📝 GENERAL MESSAGE REQUIREMENTS:
 • Use warm, professional tone with their name: ${context.userName || 'there'}
+• Use name sparingly - once at greeting, avoid overuse
 • NEVER repeat same information within response  
 • 1-3 messages based on complexity
 • Be natural and conversational as Sophie
 • ENSURE you have not repeated yourself (check for duplicate information)
 • ENSURE no profanity or inappropriate language
 
-🚨 IF ACTION = NONE, MUST END WITH ONE OF THESE EXACT PHRASES:
-• "Do you have any more questions or should we get you signed up?"
-• "All we need to get started is your signature - should I send you the link?"
-• "Ready to get started? Should I send you the link to get signed up?"  
-• "Should we get you signed up now?"
+📱 MESSAGE FORMATTING:
+• Add line breaks for readability: "Hi [Name],\n\n[main content]\n\n[closing]"
+• Use double line breaks (\n\n) between logical sections for mobile-friendly reading
+• Keep paragraphs concise and scannable
+
+🎯 NATURAL CONVERSATION ENDINGS:
+• Let your response flow naturally based on the adaptive user journey intelligence from STEP 1
+• Trust the context awareness - your ending should feel organic to the conversation
+• If your response naturally includes a question or direction, that's perfect
+• Only add explicit next steps when the conversation lacks clear direction
 
 ✅ IF ACTION = SEND_MAGIC_LINK, USE:
 • "Perfect! I'll send your secure portal link right away."
 
-❌ FORBIDDEN ENDINGS:
+❌ AVOID GENERIC ENDINGS:
 • "let me know", "any questions?", "more information", "how can I help"
+• Forced or robotic-sounding phrases that don't match conversation flow
 
 💡 STEP 5 COMPLETE: You've crafted your response messages.
    → PROCEED TO STEP 6
@@ -376,7 +383,7 @@ Using knowledge from STEP 3 and action from STEP 4, craft your message as Sophie
 □ Response addresses what the user really needs from STEP 2
 □ Conversation context from STEP 1 is acknowledged and built upon
 □ Compliance rules followed (no promises/guarantees)
-□ Strong conversion-focused ending included (if action = none)
+□ Natural conversation flow with appropriate next steps (if action = none)
 □ Professional yet natural tone with user's name
 □ NO repetition of information within response
 □ NO profanity or inappropriate language used
@@ -510,21 +517,22 @@ function validateAndEnhanceResponse(
   messages = messages.filter((msg: any) => typeof msg === 'string' && msg.trim())
   if (messages.length === 0) messages = ["How can I help with your motor finance claim?"]
   
-  // Enforce strong CTAs for 'none' actions
+  // Trust natural conversation flow - no forced CTAs
+  // The adaptive user journey intelligence from STEP 1 guides appropriate endings
+  // AI is instructed to include natural next steps when needed
+  
+  // Only enhance if message seems genuinely incomplete (very short or no direction)
   const hasNoneAction = response.actions?.some((action: any) => action.type === 'none')
   if (hasNoneAction && messages.length > 0) {
     const lastMessage = messages[messages.length - 1]
-    const requiredCTAs = [
-      "Do you have any more questions or should we get you signed up?",
-      "All we need to get started is your signature - should I send you the link?", 
-      "Ready to get started? Should I send you the link to get signed up?",
-      "Should we get you signed up now?"
-    ]
     
-    const hasRequiredCTA = requiredCTAs.some(cta => lastMessage.includes(cta))
-    if (!hasRequiredCTA) {
-      // Force add the CTA if missing
-      messages[messages.length - 1] = lastMessage + " Do you have any more questions or should we get you signed up?"
+    // Only add guidance if message is very short and lacks any direction
+    const hasNaturalDirection = /[?!]|\b(should|would|can|ready|next|let me|help)\b/i.test(lastMessage)
+    const isVeryShort = lastMessage.length < 20
+    
+    if (isVeryShort && !hasNaturalDirection) {
+      // Only in genuinely incomplete responses, add minimal guidance
+      messages[messages.length - 1] = lastMessage + " How can I help you further?"
     }
   }
   

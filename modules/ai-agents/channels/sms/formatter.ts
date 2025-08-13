@@ -1,14 +1,19 @@
 export function formatSms(text: string): string {
-  const trimmed = text.trim().replace(/\s+/g, ' ')
+  // Preserve intentional double line breaks for paragraph spacing
+  const withPreservedBreaks = text.replace(/\n\n/g, '__PARAGRAPH_BREAK__')
+  // Clean up other whitespace but preserve our markers
+  const trimmed = withPreservedBreaks.trim().replace(/\s+/g, ' ')
+  // Restore paragraph breaks for mobile readability
+  const formatted = trimmed.replace(/__PARAGRAPH_BREAK__/g, '\n\n')
   
   // Modern SMS supports concatenated messages up to ~1600 chars
   // Use a reasonable limit of 800 chars for good UX
   const SMS_LIMIT = 800
   
-  if (trimmed.length <= SMS_LIMIT) return trimmed
+  if (formatted.length <= SMS_LIMIT) return formatted
   
   // Try to end on a sentence or clause boundary before limit
-  const soft = trimmed.slice(0, SMS_LIMIT)
+  const soft = formatted.slice(0, SMS_LIMIT)
   const lastPunct = Math.max(
     soft.lastIndexOf('. '), 
     soft.lastIndexOf('! '), 
