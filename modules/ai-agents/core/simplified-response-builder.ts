@@ -356,6 +356,7 @@ Using knowledge from STEP 3 and action from STEP 4, craft your message as Sophie
 • Add line breaks for readability: "Hi [Name],\n\n[main content]\n\n[closing]"
 • Use double line breaks (\n\n) between logical sections for mobile-friendly reading
 • Keep paragraphs concise and scannable
+• Use approved emojis naturally when they enhance communication (see SMS policy for full list)
 
 🎯 NATURAL CONVERSATION ENDINGS:
 • Let your response flow naturally based on the adaptive user journey intelligence from STEP 1
@@ -505,7 +506,8 @@ function buildAdaptiveUserContext(context: SimplifiedResponseContext): string {
 • Naturally weave in relevant next steps when appropriate  
 • Let their responses guide the conversation direction
 • Be genuinely helpful, not agenda-driven or pushy
-• Match your approach to what they actually need right now`
+• Match your approach to what they actually need right now
+• Use approved emojis naturally when they enhance your message tone and clarity`
 }
 
 function validateAndEnhanceResponse(
