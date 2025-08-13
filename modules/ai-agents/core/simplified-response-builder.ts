@@ -180,16 +180,13 @@ function prepareKnowledgeBase(context: SimplifiedResponseContext): string {
     '=== VALUE BENEFITS ===',
     ...KB_SUMMARY.benefits.map((benefit: string, i: number) => `${i + 1}. ${benefit}`),
     '',
-    '=== OBJECTION HANDLING ===',
-    'General Rules:',
-    ...KB_SUMMARY.objectionHandlingRules.general.map((rule: string) => `• ${rule}`),
+        '=== OBJECTION PSYCHOLOGY ===',
+    'Psychology Framework: Understand emotional and logical drivers behind objections, then address naturally',
+    'Core Approaches: Validate concerns, provide verification, respect autonomy, address value questions',
+    'Key Psychology Types: legitimacy, autonomy, value, timeline, news-headline concerns',
+    'Natural Response: Use conversational intelligence to craft original responses based on psychology understanding',
     '',
-    'Specific Playbooks:',
-    ...KB_SUMMARY.objectionHandlingRules.playbooks.map((obj: any) => 
-      `${obj.id}: ${obj.title}\n  → Acknowledge: "${obj.acknowledge}"\n  → Respond: "${obj.respond}"\n  → Confirm: "${obj.confirm}"`
-    ),
-    '',
-    '=== USAGE NOTES ===',
+    '=== USAGE NOTES ===',,
     '• Use facts to answer questions accurately',
     '• Use benefits to overcome hesitation',
     '• Follow playbook structure for objections',
@@ -268,14 +265,30 @@ ${KB_SUMMARY.facts.map((fact: string, i: number) => `${i + 1}. ${fact}`).join('\
 💼 BENEFITS - Value propositions and advantages of our service:
 ${KB_SUMMARY.benefits.map((benefit: string, i: number) => `${i + 1}. ${benefit}`).join('\n')}
 
-🎯 OBJECTION HANDLING - Structured responses for concerns:
-General Rules:
-${KB_SUMMARY.objectionHandlingRules.general.map((rule: string) => `• ${rule}`).join('\n')}
+🎯 OBJECTION PSYCHOLOGY - Understand and address concerns naturally:
 
-Specific Playbooks:
-${KB_SUMMARY.objectionHandlingRules.playbooks.map((obj: any) => 
-  `${obj.id}: ${obj.title}\n  → Acknowledge: "${obj.acknowledge}"\n  → Respond: "${obj.respond}"\n  → Confirm: "${obj.confirm}"`
-).join('\n\n')}
+PSYCHOLOGY FRAMEWORK:
+• Understand emotional and logical drivers behind each objection
+• Address the underlying psychology naturally using facts and benefits  
+• Adapt your approach to their communication style and energy
+• No rigid scripts - use your conversational intelligence
+
+CORE OBJECTION PSYCHOLOGIES:
+• LEGITIMACY CONCERNS: Fear of scams → Validate caution, provide verification (FCA regulation, Prowse Phillips Law)
+• AUTONOMY CONCERNS: "I'll do it myself" → Respect capability, highlight practical challenges  
+• VALUE CONCERNS: "Is it worth it?" → Acknowledge practical mindset, clarify no-win-no-fee value
+• TIMELINE CONCERNS: "Takes too long" → Empathize with frustration, provide realistic expectations
+• NEWS CONCERNS: Supreme Court confusion → Acknowledge confusing coverage, clarify current status
+
+INTELLIGENT RESPONSE APPROACH:
+• Acknowledge their concern as valid and smart
+• Address the underlying fear/need, not just surface objection
+• Use relevant facts/benefits to build confidence naturally
+• Guide toward next steps when conversation context supports it
+• Craft original responses - no templates or repeated phrases
+
+COMPLIANCE REQUIREMENTS:
+• No outcome guarantees • No legal/financial advice • Keep PII in portal • Respect consent/cooldowns
 
 💡 KNOWLEDGE SELECTION STRATEGY:
 • Choose the most relevant information for THIS specific user and situation
