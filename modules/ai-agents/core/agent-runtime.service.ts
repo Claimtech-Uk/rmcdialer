@@ -213,35 +213,18 @@ export class AgentRuntimeService {
         })
       }
       
-      // Execute AI-decided actions
-      for (const actionWithReasoning of intelligentResponse.actions) {
-        if (actionWithReasoning.type === 'send_magic_link') {
-          if (userCtx.found && userCtx.userId) {
-            actions.push({
-              type: 'send_magic_link',
-              userId: userCtx.userId,
-              phoneNumber: input.fromPhone,
-              linkType: (actionWithReasoning.params?.linkType as 'claimPortal' | 'documentUpload') || 'claimPortal'
-            })
-            console.log('AI SMS | 🔗 AI decided to send magic link:', actionWithReasoning.reasoning)
-          }
-        } else if (actionWithReasoning.type === 'send_review_link') {
-          actions.push({
-            type: 'send_review_link',
-            phoneNumber: input.fromPhone
-          })
-          console.log('AI SMS | ⭐ AI decided to send review link:', actionWithReasoning.reasoning)
-        } else if (actionWithReasoning.type === 'schedule_followup') {
-          if (actionWithReasoning.params?.message) {
-            followups.push({
-              text: actionWithReasoning.params.message,
-              delaySec: actionWithReasoning.params.delaySeconds || 300 // 5 min default
-            })
-            console.log('AI SMS | 📅 AI scheduled followup:', actionWithReasoning.reasoning)
-          }
-        }
-        // 'none' action means just conversation, no additional actions needed
-      }
+      // Execute AI-decided actions using the action registry system
+      await this.executeAIActions(
+        intelligentResponse.actions.map(action => ({
+          type: action.type as any,
+          reasoning: action.reasoning,
+          confidence: 0.8 // Default confidence for AI decisions
+        })),
+        input.fromPhone,
+        userCtx,
+        actions,
+        followups
+      )
       
       // Apply intelligent personalization
       if (replyText) {

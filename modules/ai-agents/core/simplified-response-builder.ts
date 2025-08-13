@@ -89,12 +89,17 @@ export async function buildSimplifiedResponse(
     return validatedResponse
 
   } catch (error) {
-    console.error('AI SMS | ❌ Error generating intelligent response:', error)
+    console.error('AI SMS | ❌ Error generating intelligent response:', {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+      systemPromptLength: systemPrompt.length,
+      userPromptLength: userPrompt.length
+    })
     
     // Fallback response
     return {
       messages: ["I understand your question. How can I help you with your motor finance claim?"],
-      actions: [{ type: 'none', reasoning: 'Fallback due to generation error' }],
+      actions: [{ type: 'none', reasoning: `Fallback due to error: ${error instanceof Error ? error.message : 'Unknown error'}` }],
       conversationTone: 'helpful'
     }
   }
@@ -110,7 +115,7 @@ function buildIntelligentSystemPrompt(
   
   return `You are Sophie from RMC, helping with motor finance claims (PCP, HP, car loans).
 
-RESPONSE FORMAT:
+CRITICAL: Respond with valid JSON in the exact format below:
 {
   "messages": ["message1", "message2?", "message3?"],
   "actions": [
