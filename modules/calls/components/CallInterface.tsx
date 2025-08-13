@@ -843,6 +843,22 @@ export function CallInterface({
     }
   };
 
+  // ✅ DYNAMIC MISSED CALL REASON MAPPING
+  const getMissedCallReason = (reason: string): string => {
+    switch (reason) {
+      case 'out_of_hours':
+        return 'Called outside business hours';
+      case 'agents_busy':
+        return 'All agents were busy';
+      case 'no_agents_available':
+        return 'No agents available';
+      case 'handler_error':
+        return 'System error occurred';
+      default:
+        return reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+  };
+
   return (
     <>
       {/* Disposition Required Alert */}
@@ -885,7 +901,7 @@ export function CallInterface({
                 <div className="text-sm font-medium opacity-90">
                   Customer called {(userContext as any)?.missedCallData?.missedAt && 
                     `${Math.round((Date.now() - new Date((userContext as any).missedCallData.missedAt).getTime()) / (1000 * 60))} minutes ago`}
-                  {' '}• {(userContext as any)?.missedCallData?.reason === 'out_of_hours' ? 'Called outside business hours' : 'All agents were busy'}
+                  {' '}• {getMissedCallReason((userContext as any)?.missedCallData?.reason || 'unknown')}
                 </div>
                 <div className="text-xs font-medium mt-1 opacity-80">
                   Priority callback - They are expecting our call

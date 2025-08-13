@@ -140,6 +140,22 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
 
   const stateDisplay = getStateDisplay();
 
+  // ✅ DYNAMIC MISSED CALL REASON MAPPING
+  const getMissedCallReason = (reason: string): string => {
+    switch (reason) {
+      case 'out_of_hours':
+        return 'Called outside business hours';
+      case 'agents_busy':
+        return 'All agents were busy';
+      case 'no_agents_available':
+        return 'No agents available';
+      case 'handler_error':
+        return 'System error occurred';
+      default:
+        return reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+  };
+
   return (
     <div className={`autodialler-dashboard min-h-screen ${teamConfig.color.background}`}>
       {/* Header */}
@@ -315,7 +331,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                       <div className="text-sm font-medium mt-1 opacity-90">
                         Customer called {(currentUser as any)?.missedCallData?.missedAt && 
                           `${Math.round((Date.now() - new Date((currentUser as any).missedCallData.missedAt).getTime()) / (1000 * 60))} minutes ago`}
-                        {' '}• Reason: {(currentUser as any)?.missedCallData?.reason === 'out_of_hours' ? 'Called outside business hours' : 'All agents were busy'}
+                        {' '}• Reason: {getMissedCallReason((currentUser as any)?.missedCallData?.reason || 'unknown')}
                       </div>
                     </div>
                   </div>
