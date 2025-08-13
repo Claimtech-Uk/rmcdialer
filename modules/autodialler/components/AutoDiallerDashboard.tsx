@@ -300,19 +300,19 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
 
         {isActive && state === 'user_loaded' && currentUser && !isCallInterfaceActive && (
           <div className="max-w-5xl mx-auto space-y-6">
-            {/* 🚨 MISSED CALL PRIORITY ALERT - FULL WIDTH TOP BANNER */}
+            {/* 🚨 MISSED CALL PRIORITY ALERT - UNIFIED COLOR THEME */}
             {(currentUser as any)?.isMissedCallCallback && (
-              <div className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white p-6 rounded-2xl shadow-2xl border-2 border-red-300 animate-pulse">
+              <div className="bg-gradient-to-r from-amber-500 to-red-500 text-white p-4 rounded-xl shadow-xl border-2 border-amber-300">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-white/20 p-3 rounded-full">
-                      <RefreshCw className="w-8 h-8 text-white animate-spin-slow" />
+                  <div className="flex items-center gap-3">
+                    <div className="bg-amber-100/30 p-2 rounded-full">
+                      <RefreshCw className="w-6 h-6 text-white animate-spin-slow" />
                     </div>
                     <div>
-                      <div className="text-2xl font-black uppercase tracking-wide">
+                      <div className="text-xl font-bold uppercase tracking-wide">
                         🚨 PRIORITY: MISSED CALL CALLBACK
                       </div>
-                      <div className="text-lg font-semibold mt-1 opacity-90">
+                      <div className="text-sm font-medium mt-1 opacity-90">
                         Customer called {(currentUser as any)?.missedCallData?.missedAt && 
                           `${Math.round((Date.now() - new Date((currentUser as any).missedCallData.missedAt).getTime()) / (1000 * 60))} minutes ago`}
                         {' '}• Reason: {(currentUser as any)?.missedCallData?.reason === 'out_of_hours' ? 'Called outside business hours' : 'All agents were busy'}
@@ -320,9 +320,9 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="bg-white/30 px-6 py-3 rounded-xl border-2 border-white/40">
-                      <div className="text-xl font-black uppercase tracking-wider">URGENT</div>
-                      <div className="text-sm font-bold opacity-90">Call Back Now</div>
+                    <div className="bg-amber-100/30 px-4 py-2 rounded-lg border border-amber-200/50">
+                      <div className="text-sm font-bold uppercase tracking-wider">URGENT</div>
+                      <div className="text-xs font-medium opacity-90">Call Back Now</div>
                     </div>
                   </div>
                 </div>
@@ -333,20 +333,20 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
             <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm">
               <CardHeader
                 className={`bg-gradient-to-r ${
-                  (currentUser as any)?.isMissedCallCallback ? 'from-slate-900 to-slate-800' : teamConfig.color.gradient
+                  (currentUser as any)?.isMissedCallCallback ? 'from-red-700 to-red-800' : teamConfig.color.gradient
                 } text-white py-10 border-b-2 border-white/20 relative overflow-hidden`}
               >
                 {/* Enhanced background overlay for better contrast */}
                 <div className={`absolute inset-0 ${
-                  (currentUser as any)?.isMissedCallCallback ? 'bg-black/60' : 'bg-black/20'
+                  (currentUser as any)?.isMissedCallCallback ? 'bg-red-900/30' : 'bg-black/20'
                 } backdrop-blur-sm`}></div>
                 <div className="relative z-10 flex items-center justify-between">
                   <div className="flex items-center space-x-6">
                       <div className={`w-20 h-20 ${
-                        (currentUser as any)?.isMissedCallCallback ? 'bg-red-600' : 'bg-white/40'
+                        (currentUser as any)?.isMissedCallCallback ? 'bg-amber-100 border-amber-300' : 'bg-white/40'
                       } rounded-2xl flex items-center justify-center shadow-2xl backdrop-blur-sm border-3 border-white/50`}>
                         <Phone className={`w-10 h-10 ${
-                          (currentUser as any)?.isMissedCallCallback ? 'text-white' : 'text-white'
+                          (currentUser as any)?.isMissedCallCallback ? 'text-red-600' : 'text-white'
                         } drop-shadow-lg`} />
                     </div>
                     <div>

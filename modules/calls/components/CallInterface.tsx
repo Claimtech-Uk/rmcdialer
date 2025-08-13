@@ -870,32 +870,32 @@ export function CallInterface({
         </div>
       )}
 
-      {/* 🚨 MISSED CALL CALLBACK BANNER - ENHANCED */}
+      {/* 🚨 MISSED CALL CALLBACK BANNER - UNIFIED COLOR THEME */}
       {(userContext as any)?.isMissedCallCallback && (
-        <div className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white p-6 rounded-2xl shadow-2xl border-4 border-red-300 mb-8 animate-pulse">
+        <div className="bg-gradient-to-r from-amber-500 to-red-500 text-white p-4 rounded-xl shadow-xl border-2 border-amber-300 mb-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="bg-white/20 p-3 rounded-full">
-                <RefreshCw className="h-8 w-8 text-white animate-spin-slow" />
+            <div className="flex items-center gap-3">
+              <div className="bg-amber-100/30 p-2 rounded-full">
+                <RefreshCw className="h-6 w-6 text-white animate-spin-slow" />
               </div>
               <div>
-                <div className="flex items-center gap-3 text-2xl font-black uppercase tracking-wide mb-2">
+                <div className="flex items-center gap-3 text-xl font-bold uppercase tracking-wide mb-1">
                   🚨 URGENT: MISSED CALL CALLBACK
                 </div>
-                <div className="text-lg font-semibold opacity-90">
+                <div className="text-sm font-medium opacity-90">
                   Customer called {(userContext as any)?.missedCallData?.missedAt && 
                     `${Math.round((Date.now() - new Date((userContext as any).missedCallData.missedAt).getTime()) / (1000 * 60))} minutes ago`}
                   {' '}• {(userContext as any)?.missedCallData?.reason === 'out_of_hours' ? 'Called outside business hours' : 'All agents were busy'}
                 </div>
-                <div className="text-base font-medium mt-1 opacity-80">
+                <div className="text-xs font-medium mt-1 opacity-80">
                   Priority callback - They are expecting our call
                 </div>
               </div>
             </div>
             <div className="text-right">
-              <div className="bg-white/30 px-6 py-4 rounded-xl border-2 border-white/40">
-                <div className="text-xl font-black uppercase tracking-wider">TOP PRIORITY</div>
-                <div className="text-sm font-bold opacity-90 mt-1">Handle Immediately</div>
+              <div className="bg-amber-100/30 px-4 py-2 rounded-lg border border-amber-200/50">
+                <div className="text-sm font-bold uppercase tracking-wider">TOP PRIORITY</div>
+                <div className="text-xs font-medium opacity-90 mt-1">Handle Immediately</div>
               </div>
             </div>
           </div>
