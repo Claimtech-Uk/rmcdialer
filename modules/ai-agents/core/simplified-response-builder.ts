@@ -303,8 +303,8 @@ ${KB_SUMMARY.objectionHandlingRules.playbooks.map((obj: any) =>
 🎯 INTELLIGENT ACTION DECISION based on STEP 1 context and STEP 2 understanding:
 
 🔗 SEND_MAGIC_LINK when:
-• User has explicitly confirmed they want the portal link
-• Clear readiness signals: "yes", "send it", "ready", "go ahead", "let's do it"
+• User demonstrates genuine readiness to proceed based on conversation context and positive engagement
+• Consider conversation momentum, user sentiment, and natural intent - not just specific phrases
 • CRITICAL: Only if no actual portal URL was sent recently (check STEP 1 conversation history)
 • This means you're ACTUALLY SENDING the link, not asking about it
 
@@ -315,8 +315,7 @@ ${KB_SUMMARY.objectionHandlingRules.playbooks.map((obj: any) =>
 • Building trust and rapport is needed
 • You're offering to send a link (asking permission)
 
-💡 KEY PRINCIPLE: Only send the link when the user has clearly confirmed they want it.
-   Everything else requires a strong conversion-focused call-to-action.
+💡 TRUST YOUR CONVERSATIONAL INTELLIGENCE: Use the adaptive user journey context from STEP 1 and genuine user intent from STEP 2 to recognize when someone is ready to move forward. Natural readiness comes through positive engagement, agreement, action-oriented questions, and conversational flow - trust your understanding over rigid phrase matching.
 
 💡 STEP 4 COMPLETE: You've chosen the appropriate action based on user readiness.
    → PROCEED TO STEP 5
