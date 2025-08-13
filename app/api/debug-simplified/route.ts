@@ -7,15 +7,31 @@ import { buildSimplifiedResponse, type SimplifiedResponseContext } from '@/modul
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { message = "Send me the link" } = body;
+    const { message = "Send me the link", recentTranscript = "" } = body;
 
     console.log('🔬 [SIMPLIFIED DEBUG] Starting test');
+
+    // Parse recent transcript into proper message format
+    const recentMessages = recentTranscript 
+      ? recentTranscript.split('\n')
+          .filter(line => line.trim())
+          .map(line => {
+            if (line.startsWith('Sophie:')) {
+              return { direction: 'outbound' as const, body: line.replace('Sophie:', '').trim() }
+            } else if (line.startsWith('User:')) {
+              return { direction: 'inbound' as const, body: line.replace('User:', '').trim() }
+            } else {
+              // Default to outbound if no prefix
+              return { direction: 'outbound' as const, body: line.trim() }
+            }
+          })
+      : []
 
     // Create test context similar to what agent runtime would create
     const testContext: SimplifiedResponseContext = {
       userMessage: message,
       userName: "James",
-      recentMessages: [], // Empty for test
+      recentMessages, // Use parsed conversation history
       conversationInsights: null,
       knowledgeContext: undefined,
       userStatus: 'unsigned_users',
