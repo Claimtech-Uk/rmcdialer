@@ -304,7 +304,15 @@ ${KB_SUMMARY.objectionHandlingRules.playbooks.map((obj: any) =>
 
 🔗 SEND_MAGIC_LINK when:
 • User demonstrates genuine readiness to proceed based on conversation context and positive engagement
-• Consider conversation momentum, user sentiment, and natural intent - not just specific phrases
+• CRITICAL CONTEXT CHECK: Analyze what YOU just asked in your last message - does their positive response logically relate to moving forward with the portal?
+• Examples of RELEVANT positive responses:
+  - If you asked about sending the portal link → "Yes", "Send it", "Go ahead" = CLEAR readiness
+  - If you asked about getting started → "I'm ready", "Let's do it" = CLEAR readiness
+  - If you asked about next steps → "What do I need to do?" = ACTION-ORIENTED readiness
+• Examples of IRRELEVANT positive responses:
+  - If you asked about fees → "That's reasonable" = POSITIVE but not necessarily ready for portal
+  - If you asked about process → "That makes sense" = UNDERSTANDING but not necessarily ready to proceed
+  - If you asked about timelines → "Sounds good" = AGREEMENT but context doesn't indicate portal readiness
 • CRITICAL: Only if no actual portal URL was sent recently (check STEP 1 conversation history)
 • This means you're ACTUALLY SENDING the link, not asking about it
 
@@ -314,8 +322,9 @@ ${KB_SUMMARY.objectionHandlingRules.playbooks.map((obj: any) =>
 • User needs clarification or more information
 • Building trust and rapport is needed
 • You're offering to send a link (asking permission)
+• Positive response doesn't relate to portal/next steps based on conversation context
 
-💡 TRUST YOUR CONVERSATIONAL INTELLIGENCE: Use the adaptive user journey context from STEP 1 and genuine user intent from STEP 2 to recognize when someone is ready to move forward. Natural readiness comes through positive engagement, agreement, action-oriented questions, and conversational flow - trust your understanding over rigid phrase matching.
+💡 CONVERSATION COHERENCE: Always check what YOU just asked before interpreting their response. Positive sentiment about fees, timelines, or process understanding does NOT automatically mean readiness for portal link unless the conversation context clearly indicates next-step intent.
 
 💡 STEP 4 COMPLETE: You've chosen the appropriate action based on user readiness.
    → PROCEED TO STEP 5
@@ -430,6 +439,7 @@ ${buildAdaptiveUserContext(context)}
 🕒 CONVERSATION HISTORY CHECK:
 • Review recent messages below for context
 • Look for ANY actual portal links already sent (URLs with "claim.resolvemyclaim.co.uk" or "mlid=")
+• CRITICAL: Identify what YOU asked in your LAST message - this determines if their response indicates portal readiness
 • Note any previous actions taken or questions answered
 • Identify conversation stage and user sentiment
 
@@ -437,7 +447,8 @@ ${buildAdaptiveUserContext(context)}
 • Don't repeat actions recently taken
 • Don't ask for something just provided
 • Build on previous conversation naturally
-• Acknowledge what's already been discussed`
+• Acknowledge what's already been discussed
+• MOST IMPORTANT: Check if their positive response logically connects to portal readiness based on YOUR last question`
   
   // PHASE 1 ENHANCEMENT: Apply structured formatting if enabled (expanded in Phase 2)
   const enhancedPrompt = preparePromptStructure(currentPrompt, context)
