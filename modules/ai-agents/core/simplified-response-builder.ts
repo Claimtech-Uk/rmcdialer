@@ -448,20 +448,7 @@ function buildIntelligentSystemPrompt(
 • Link Cooldown: ${consentStatus.hasConsent ? 'Recently gave consent' : 'No recent consent - ask permission first'}
 
 ${buildAdaptiveUserContext(context)}
-
-🕒 CONVERSATION HISTORY CHECK:
-• Review recent messages below for context
-• Look for ANY actual portal links already sent (URLs with "claim.resolvemyclaim.co.uk" or "mlid=")
-• CRITICAL: Identify what YOU asked in your LAST message - this determines if their response indicates portal readiness
-• Note any previous actions taken or questions answered
-• Identify conversation stage and user sentiment
-
-⚠️ CRITICAL CONTEXT POINTS:
-• Don't repeat actions recently taken
-• Don't ask for something just provided
-• Build on previous conversation naturally
-• Acknowledge what's already been discussed
-• MOST IMPORTANT: Check if their positive response logically connects to portal readiness based on YOUR last question`
+`
   
   // PHASE 1 ENHANCEMENT: Apply structured formatting if enabled (expanded in Phase 2)
   const enhancedPrompt = preparePromptStructure(currentPrompt, context)
