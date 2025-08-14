@@ -20,7 +20,7 @@ export type PortalLinkActionParams = {
   userId: number
   phoneNumber: string
   userName?: string
-  linkType?: 'claimPortal' | 'documentUpload' | 'profileUpdate'
+  linkType?: 'claimPortal' | 'documentUpload' | 'statusUpdate' | 'profileUpdate'
   customMessage?: string
   reasoning?: string
   aiDecisionConfidence?: number
@@ -199,6 +199,9 @@ export class PortalLinkAction {
     switch (params.linkType) {
       case 'documentUpload':
         return `Hi ${userName}, here's your secure portal to upload required documents:\n\n${formattedUrl}\n\nClick to upload your ID, proof of address, or other required items. Questions? Just reply!`
+
+      case 'statusUpdate':
+        return `Hi ${userName}, here's your secure portal to check your case status:\n\n${formattedUrl}\n\nView your current progress, documents, and next steps. Questions? Just reply!`
 
       case 'profileUpdate':
         return `Hi ${userName}, update your profile securely here:\n\n${formattedUrl}\n\nKeep your details current for faster processing. Any questions, just ask!`

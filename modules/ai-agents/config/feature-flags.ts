@@ -34,7 +34,24 @@ export const FEATURE_FLAGS = {
   
   // Send multi-message responses immediately (for testing)
   IMMEDIATE_MULTIMSGS: process.env.AI_SMS_IMMEDIATE_MULTIMSGS === 'true',
-  SIMPLIFIED_AI_MODE_ENABLED: process.env.AI_SMS_SIMPLIFIED_MODE === 'true'
+  SIMPLIFIED_AI_MODE_ENABLED: process.env.AI_SMS_SIMPLIFIED_MODE === 'true',
+  
+  // PHASE 1 ENHANCEMENTS: Full Knowledge Base & Structured Prompting
+  
+  // Full knowledge base mode (vs filtered KB selection)
+  FULL_KNOWLEDGE_BASE_ENABLED: process.env.AI_SMS_FULL_KB_MODE === 'true',
+  
+  // Structured checklist prompting approach
+  STRUCTURED_PROMPT_ENABLED: process.env.AI_SMS_STRUCTURED_PROMPT === 'true',
+  
+  // GPT-4o-mini optimized configurations
+  GPT4_MINI_OPTIMIZATIONS: process.env.AI_SMS_GPT4_MINI_OPTIMIZED === 'true',
+  
+  // Enhanced token usage tracking and optimization
+  ENHANCED_TOKEN_TRACKING: process.env.AI_SMS_ENHANCED_TOKEN_TRACKING === 'true',
+  
+  // Knowledge base validation and quality checks
+  KB_VALIDATION_ENABLED: process.env.AI_SMS_KB_VALIDATION === 'true'
 } as const
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS
@@ -62,7 +79,15 @@ export function logFeatureFlags(): void {
       verboseLogging: FEATURE_FLAGS.VERBOSE_LOGGING,
       debugMode: FEATURE_FLAGS.DEBUG_MODE,
       ignoreBusinessHours: FEATURE_FLAGS.IGNORE_BUSINESS_HOURS,
-      immediateMultimsgs: FEATURE_FLAGS.IMMEDIATE_MULTIMSGS
+      immediateMultimsgs: FEATURE_FLAGS.IMMEDIATE_MULTIMSGS,
+      simplifiedMode: FEATURE_FLAGS.SIMPLIFIED_AI_MODE_ENABLED,
+      
+      // Phase 1 Enhancements
+      fullKnowledgeBase: FEATURE_FLAGS.FULL_KNOWLEDGE_BASE_ENABLED,
+      structuredPrompt: FEATURE_FLAGS.STRUCTURED_PROMPT_ENABLED,
+      gpt4MiniOptimizations: FEATURE_FLAGS.GPT4_MINI_OPTIMIZATIONS,
+      enhancedTokenTracking: FEATURE_FLAGS.ENHANCED_TOKEN_TRACKING,
+      kbValidation: FEATURE_FLAGS.KB_VALIDATION_ENABLED
     })
   }
 }
@@ -155,5 +180,52 @@ export const ENV_VARS_DOCUMENTATION = {
     default: 'false',
     values: ['true', 'false'],
     example: 'AI_SMS_SIMPLIFIED_MODE=true'
+  },
+  
+  // PHASE 1 ENHANCEMENT VARIABLES
+  
+  AI_SMS_FULL_KB_MODE: {
+    description: 'Enable full knowledge base access (vs app-filtered KB selection) - gives AI complete domain knowledge for autonomous decision making',
+    type: 'boolean',
+    default: 'false',
+    values: ['true', 'false'],
+    example: 'AI_SMS_FULL_KB_MODE=true',
+    impact: 'Higher token usage (~15k additional tokens) but significantly improved response quality and comprehensiveness'
+  },
+  
+  AI_SMS_STRUCTURED_PROMPT: {
+    description: 'Enable structured checklist-based prompting for improved AI instruction following and consistency',
+    type: 'boolean',
+    default: 'false', 
+    values: ['true', 'false'],
+    example: 'AI_SMS_STRUCTURED_PROMPT=true',
+    impact: 'Better compliance with requirements, clearer decision-making process, easier debugging'
+  },
+  
+  AI_SMS_GPT4_MINI_OPTIMIZED: {
+    description: 'Enable GPT-4o-mini specific optimizations (prompt formatting, token management, response validation)',
+    type: 'boolean',
+    default: 'true',
+    values: ['true', 'false'],
+    example: 'AI_SMS_GPT4_MINI_OPTIMIZED=true',
+    impact: 'Optimized for cost/performance balance with GPT-4o-mini model capabilities'
+  },
+  
+  AI_SMS_ENHANCED_TOKEN_TRACKING: {
+    description: 'Enable detailed token usage tracking, prompt optimization suggestions, and cost monitoring',
+    type: 'boolean',
+    default: 'false',
+    values: ['true', 'false'], 
+    example: 'AI_SMS_ENHANCED_TOKEN_TRACKING=true',
+    impact: 'Additional logging overhead but valuable insights for optimization'
+  },
+  
+  AI_SMS_KB_VALIDATION: {
+    description: 'Enable knowledge base content validation and quality scoring for AI responses',
+    type: 'boolean',
+    default: 'false',
+    values: ['true', 'false'],
+    example: 'AI_SMS_KB_VALIDATION=true',
+    impact: 'Ensures AI utilizes knowledge base effectively and identifies knowledge gaps'
   }
 } as const

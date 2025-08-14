@@ -5,6 +5,8 @@ import { chat } from './llm.client'
 import { getConversationInsights, type ConversationInsights } from './memory.store'
 import { checkLinkConsent } from './consent-manager'
 import { FEATURE_FLAGS, isFeatureEnabled } from '../config/feature-flags'
+import { KB_SUMMARY } from '../knowledge/kb-summary'
+import { SMS_POLICY_PROMPT } from '../prompts/sms.policy'
 
 export type SimplifiedAgentResponse = {
   messages: string[]           // 1-3 natural messages decided by AI
@@ -14,7 +16,7 @@ export type SimplifiedAgentResponse = {
 }
 
 export type AgentActionWithReasoning = {
-  type: 'send_magic_link' | 'send_review_link' | 'schedule_followup' | 'none'
+  type: 'send_magic_link' | 'send_case_status_link' | 'send_document_upload_link' | 'send_review_link' | 'send_signup_link' | 'schedule_followup' | 'schedule_callback' | 'none'
   reasoning: string          // Why this action was chosen
   timing?: 'immediate' | 'after_messages'
   params?: {
@@ -38,7 +40,9 @@ export type SimplifiedResponseContext = {
     userId?: number
     queueType?: string
     hasSignature?: boolean | null
-    pendingRequirements?: number
+    pendingRequirementTypes?: string[]
+    primaryClaimStatus?: string
+    claimLenders?: string[]
   }
 }
 
@@ -66,7 +70,7 @@ export async function buildSimplifiedResponse(
   const userPrompt = buildIntelligentUserPrompt(context, recentTranscript)
 
   try {
-    // PHASE 1 ENHANCEMENT: Enhanced model configuration and logging
+    // Configure AI model with enhanced logging
     const modelConfig = {
       system: systemPrompt,
       user: userPrompt,
@@ -98,7 +102,7 @@ export async function buildSimplifiedResponse(
     // Validate and enhance the response
     const validatedResponse = validateAndEnhanceResponse(parsed, context)
     
-    // PHASE 1 ENHANCEMENT: Expanded success logging
+    // Comprehensive success logging for monitoring
     const successLog: any = {
       messageCount: validatedResponse.messages.length,
       actionCount: validatedResponse.actions.length,
@@ -115,21 +119,15 @@ export async function buildSimplifiedResponse(
       }
     }
     
-    // Add knowledge base utilization tracking if enabled
-    if (FEATURE_FLAGS.KB_VALIDATION_ENABLED && context.knowledgeContext) {
-      successLog.knowledgeUtilization = {
-        kbProvided: !!context.knowledgeContext,
-        kbLength: context.knowledgeContext?.length || 0,
-        fullKBMode: FEATURE_FLAGS.FULL_KNOWLEDGE_BASE_ENABLED
-      }
-    }
+    // Knowledge base is now integrated directly into prompt structure
+    // Legacy context.knowledgeContext is rarely used in simplified mode
     
     console.log('AI SMS | ✅ Intelligent response generated', successLog)
 
     return validatedResponse
 
   } catch (error) {
-    // PHASE 1 ENHANCEMENT: Enhanced error logging
+    // Detailed error logging for debugging
     const errorLog: any = {
       error: error instanceof Error ? error.message : error,
       stack: error instanceof Error ? error.stack : undefined,
@@ -137,7 +135,7 @@ export async function buildSimplifiedResponse(
       userPromptLength: userPrompt.length
     }
     
-    // Add Phase 1 specific error context
+    // Add detailed error analysis
     if (FEATURE_FLAGS.ENHANCED_TOKEN_TRACKING) {
       errorLog.tokenAnalysis = {
         estimatedInputTokens: Math.round((systemPrompt.length + userPrompt.length) / 4),
@@ -146,13 +144,7 @@ export async function buildSimplifiedResponse(
       }
     }
     
-    if (FEATURE_FLAGS.FULL_KNOWLEDGE_BASE_ENABLED) {
-      errorLog.knowledgeBaseContext = {
-        fullKBEnabled: true,
-        kbIncluded: !!context.knowledgeContext,
-        possibleKBIssue: !context.knowledgeContext && FEATURE_FLAGS.FULL_KNOWLEDGE_BASE_ENABLED
-      }
-    }
+    // Simplified mode uses integrated knowledge base approach
     
     console.error('AI SMS | ❌ Error generating intelligent response:', errorLog)
     
@@ -165,46 +157,14 @@ export async function buildSimplifiedResponse(
   }
 }
 
-// OPTIMIZED: Streamlined knowledge base for efficient AI processing
-function prepareKnowledgeBase(context: SimplifiedResponseContext): string {
-  console.log('AI SMS | 📚 Streamlined KB mode - providing optimized knowledge base')
-  
-  // Import streamlined knowledge base
-  const { KB_SUMMARY } = require('../knowledge/kb-summary')
-  
-  // Build efficient knowledge context
-  const streamlinedKnowledgeBase = [
-    '=== KEY FACTS ===',
-    ...KB_SUMMARY.facts.map((fact: string, i: number) => `${i + 1}. ${fact}`),
-    '',
-    '=== VALUE BENEFITS ===',
-    ...KB_SUMMARY.benefits.map((benefit: string, i: number) => `${i + 1}. ${benefit}`),
-    '',
-        '=== OBJECTION PSYCHOLOGY ===',
-    'Psychology Framework: Understand emotional and logical drivers behind objections, then address naturally',
-    'Core Approaches: Validate concerns, provide verification, respect autonomy, address value questions',
-    'Key Psychology Types: legitimacy, autonomy, value, timeline, news-headline concerns',
-    'Natural Response: Use conversational intelligence to craft original responses based on psychology understanding',
-    '',
-    '=== USAGE NOTES ===',,
-    '• Use facts to answer questions accurately',
-    '• Use benefits to overcome hesitation',
-    '• Follow playbook structure for objections',
-    '• Always end with conversion-focused confirmations'
-  ].join('\n')
-  
-  const estimatedTokens = Math.ceil(streamlinedKnowledgeBase.length / 4) // Rough token estimation
-  console.log('AI SMS | 📊 Streamlined KB token usage:', { estimatedTokens, kbSize: streamlinedKnowledgeBase.length })
-  
-  return streamlinedKnowledgeBase
-}
+// Removed unused prepareKnowledgeBase() function - was dead code
+// Knowledge base is now integrated directly into the 6-step prompt structure
 
-// OPTIMIZED: Structured 6-step checklist integrated with streamlined prompt
+// Build the structured 6-step decision process prompt
 function preparePromptStructure(existingPrompt: string, context: SimplifiedResponseContext): string {
   console.log('AI SMS | 📝 Structured prompt - applying 6-step checklist format')
   
-  // Get knowledge base for STEP 3 injection
-  const { KB_SUMMARY } = require('../knowledge/kb-summary')
+  // Knowledge base injected directly into STEP 3 template
   
   // Build logically structured prompt that follows the 6-step progression
   const structuredPrompt = `
@@ -315,19 +275,58 @@ COMPLIANCE REQUIREMENTS:
 
 🎯 INTELLIGENT ACTION DECISION based on STEP 1 context and STEP 2 understanding:
 
+⚠️ CRITICAL: Choose exactly ONE action. Multiple actions cause system conflicts.
+
+🔍 FIRST PRIORITY CHECK - USER EXISTENCE:
+
+🆔 SEND_SIGNUP_LINK when:
+• User is NOT found in system (userContext.found = false)
+• User asks about claims, process, eligibility, or shows interest in services
+• First-time interactions with unknown users
+• CRITICAL: This is the ONLY action allowed for unknown users - no other actions permitted
+
+🚨 UNKNOWN USER RESTRICTION:
+• If userContext.found = false, you can ONLY choose SEND_SIGNUP_LINK or NONE
+• NO magic links, case status, document uploads, reviews, or callbacks for unknown users
+• They must register first before accessing any other services
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📋 FOR EXISTING USERS ONLY (userContext.found = true):
+
+🚨 CRITICAL CONSENT-FIRST RULE FOR ALL LINK ACTIONS:
+📋 CHECK PREVIOUS MESSAGES FIRST:
+• Did you offer this specific link in your previous messages?
+  → NO: You must OFFER the link in your message, not send it
+  → YES: You can send the link if user shows positive readiness
+
 🔗 SEND_MAGIC_LINK when:
-• User demonstrates genuine readiness to proceed based on conversation context and positive engagement
-• CRITICAL CONTEXT CHECK: Analyze what YOU just asked in your last message - does their positive response logically relate to moving forward with the portal?
-• Examples of RELEVANT positive responses:
-  - If you asked about sending the portal link → "Yes", "Send it", "Go ahead" = CLEAR readiness
-  - If you asked about getting started → "I'm ready", "Let's do it" = CLEAR readiness
-  - If you asked about next steps → "What do I need to do?" = ACTION-ORIENTED readiness
-• Examples of IRRELEVANT positive responses:
-  - If you asked about fees → "That's reasonable" = POSITIVE but not necessarily ready for portal
-  - If you asked about process → "That makes sense" = UNDERSTANDING but not necessarily ready to proceed
-  - If you asked about timelines → "Sounds good" = AGREEMENT but context doesn't indicate portal readiness
-• CRITICAL: Only if no actual portal URL was sent recently (check STEP 1 conversation history)
-• This means you're ACTUALLY SENDING the link, not asking about it
+• You offered a portal link in your last message AND user shows clear positive response
+• User explicitly asks to "send", "resend", or "get" the portal link
+• Only if no actual portal URL was sent recently (check STEP 1 conversation history)
+
+📋 SEND_CASE_STATUS_LINK when:
+• You offered a case status link in your last message AND user shows positive response
+• User explicitly says they want to check their status after you offered
+• Clear follow-up to a previous offer, not first-time questions
+
+📤 SEND_DOCUMENT_UPLOAD_LINK when:
+• You offered a document upload link in your last message AND user shows positive response  
+• User says they want to upload, submit, or send documents after you offered
+• User confirms they have documents ready after you offered the upload option
+• NOT for questions about what documents are needed (that's information, not action)
+
+⭐ SEND_REVIEW_LINK when:
+• User has shown a positive response AND no other link is required
+• User expresses genuine satisfaction, gratitude, or positive feedback about the service
+• User just completed a positive milestone (signed up, uploaded docs, etc.) AND shows appreciation
+• You offered a review link in your last message AND user shows positive response
+
+📞 SCHEDULE_CALLBACK when:
+• User explicitly requests a callback ("Can someone call me?", "I'd like a callback", "Please call me back")
+• User says they prefer phone calls over text messages
+• User mentions they're available at specific times for a call
+• Complex issues that would be better resolved over the phone
 
 🚫 NONE for all other scenarios:
 • User has questions that need answering first
@@ -335,9 +334,8 @@ COMPLIANCE REQUIREMENTS:
 • User needs clarification or more information
 • Building trust and rapport is needed
 • You're offering to send a link (asking permission)
-• Positive response doesn't relate to portal/next steps based on conversation context
 
-💡 CONVERSATION COHERENCE: Always check what YOU just asked before interpreting their response. Positive sentiment about fees, timelines, or process understanding does NOT automatically mean readiness for portal link unless the conversation context clearly indicates next-step intent.
+
 
 💡 STEP 4 COMPLETE: You've chosen the appropriate action based on user readiness.
    → PROCEED TO STEP 5
@@ -377,16 +375,17 @@ Using knowledge from STEP 3 and action from STEP 4, craft your message as Sophie
 • Add line breaks for readability: "Hi [Name],\n\n[main content]\n\n[closing]"
 • Use double line breaks (\n\n) between logical sections for mobile-friendly reading
 • Keep paragraphs concise and scannable
-• Use approved emojis naturally when they enhance communication (see SMS policy for full list)
+• CRITICAL: When providing numbered or bulleted lists, start each item on a new line:
+  ❌ BAD: "1. First item. 2. Second item. 3. Third item."
+  ✅ GOOD: "1. First item.\n\n2. Second item.\n\n3. Third item."
+• Use approved emojis naturally when they enhance communication
+  Available palette: ✅ ☑️ ✔️ 👍 🎉 💪 🙌 ⭐ 🔒 🛡️ 🔐 🏦 📋 💼 📄 📝 📊 📞 💬 📲 📧 ⏱️ ⏰ 📅 🔄 ➡️ 🚀 ❓ ❗ 💭 💡 🤔 😊 👋 ☺️
 
 🎯 NATURAL CONVERSATION ENDINGS:
 • Let your response flow naturally based on the adaptive user journey intelligence from STEP 1
 • Trust the context awareness - your ending should feel organic to the conversation
 • If your response naturally includes a question or direction, that's perfect
 • Only add explicit next steps when the conversation lacks clear direction
-
-✅ IF ACTION = SEND_MAGIC_LINK, USE:
-• "Perfect! I'll send your secure portal link right away."
 
 ❌ AVOID GENERIC ENDINGS:
 • "let me know", "any questions?", "more information", "how can I help"
@@ -412,11 +411,20 @@ Using knowledge from STEP 3 and action from STEP 4, craft your message as Sophie
 □ Response feels natural and human, not templated or robotic
 □ NOTHING contradicts or goes against the facts from the knowledge base
 
+🔍 ACTION PRIORITY VALIDATION:
+□ Is this action definitely required right now?
+□ Are there more important actions the user needs first?
+□ For SEND_REVIEW_LINK specifically: Is this a good time to offer the review link?
+  • Has user completed their primary goal (signing, uploading docs)?
+  • Are they expressing genuine satisfaction?
+  • Would a portal/document link be more valuable right now? or has it been sent recently? 
+  • Is this the natural flow moment for feedback?
+
 🎯 REQUIRED JSON OUTPUT FORMAT:
 {
   "messages": ["message1", "message2?"],
   "actions": [{
-    "type": "send_magic_link|none",
+    "type": "send_magic_link|send_case_status_link|send_document_upload_link|send_review_link|send_signup_link|schedule_callback|none",
     "reasoning": "Why you chose this action (reference steps 1-4)",
     "timing": "immediate", 
     "params": {}
@@ -424,6 +432,8 @@ Using knowledge from STEP 3 and action from STEP 4, craft your message as Sophie
   "conversationTone": "helpful|reassuring|informative|encouraging",
   "reasoning": "Your overall strategy (reference your 6-step process)"
 }
+
+CRITICAL: Only return ONE action. Multiple actions will cause system conflicts.
 
 Be intelligent, natural, and conversion-focused.`
   
@@ -450,7 +460,7 @@ function buildIntelligentSystemPrompt(
 ${buildAdaptiveUserContext(context)}
 `
   
-  // PHASE 1 ENHANCEMENT: Apply structured formatting if enabled (expanded in Phase 2)
+  // Apply structured 6-step formatting to system prompt
   const enhancedPrompt = preparePromptStructure(currentPrompt, context)
   
   return enhancedPrompt
@@ -477,20 +487,36 @@ function buildIntelligentUserPrompt(
 // Let the AI analyze conversation context and user intent organically
 
 function buildAdaptiveUserContext(context: SimplifiedResponseContext): string {
+  // User found status - CRITICAL for action routing
+  const userFoundStatus = context.userContext.found 
+    ? 'EXISTING USER ✅ (Found in system - full access to actions)' 
+    : 'NEW USER ⚠️ (Not found - ONLY send_signup_link or none allowed)'
+    
   const signatureStatus = context.userContext.hasSignature 
     ? 'SIGNED ✅ (Can proceed with claim process)' 
     : 'UNSIGNED ⚠️ (Needs signature to unlock claim investigation)'
     
-  const requirementsCount = context.userContext.pendingRequirements || 0
-  const requirementsStatus = requirementsCount > 0 
-    ? `${requirementsCount} outstanding items ⚠️ (Portal enables document uploads)` 
+  const pendingTypes = context.userContext.pendingRequirementTypes || []
+  const requirementsStatus = pendingTypes.length > 0 
+    ? `Outstanding: ${pendingTypes.join(', ')} ⚠️ (Portal enables document uploads)` 
     : 'Up-to-date ✅ (No outstanding requirements)'
+
+  const claimStatus = context.userContext.primaryClaimStatus 
+    ? `Primary Claim: ${context.userContext.primaryClaimStatus}` 
+    : 'No active claims found'
+
+  const lenders = context.userContext.claimLenders || []
+  const lenderInfo = lenders.length > 0 
+    ? `Lenders: ${lenders.join(', ')}` 
+    : 'Lender information not available'
     
   return `
 📊 USER JOURNEY INTELLIGENCE:
 
+👤 USER STATUS: ${userFoundStatus}
 🔒 SIGNATURE STATUS: ${signatureStatus}
 📋 REQUIREMENTS STATUS: ${requirementsStatus}
+🏦 CLAIM CONTEXT: ${claimStatus} | ${lenderInfo}
 
 🎯 ADAPTIVE CONVERSATION STRATEGY:
 • ALWAYS answer their actual question thoroughly FIRST
@@ -498,7 +524,8 @@ function buildAdaptiveUserContext(context: SimplifiedResponseContext): string {
 • Let their responses guide the conversation direction
 • Be genuinely helpful, not agenda-driven or pushy
 • Match your approach to what they actually need right now
-• Use approved emojis naturally when they enhance your message tone and clarity`
+• Use approved emojis naturally when they enhance your message tone and clarity
+  Available palette: ✅ ☑️ ✔️ 👍 🎉 💪 🙌 ⭐ 🔒 🛡️ 🔐 🏦 📋 💼 📄 📝 📊 📞 💬 📲 📧 ⏱️ ⏰ 📅 🔄 ➡️ 🚀 ❓ ❗ 💭 💡 🤔 😊 👋 ☺️`
 }
 
 function validateAndEnhanceResponse(
@@ -535,6 +562,15 @@ function validateAndEnhanceResponse(
     actions = [{ type: 'none', reasoning: 'Continue conversation without specific action' }]
   }
   
+  // CRITICAL: Ensure only one action to prevent clashes
+  if (actions.length > 1) {
+    console.log('AI SMS | ⚠️ Multiple actions detected, keeping only the first one:', {
+      actionsReceived: actions.map((a: any) => a.type),
+      actionKept: actions[0].type
+    })
+    actions = [actions[0]]
+  }
+  
   // Validate action structure
   actions = actions.map((action: any) => ({
     type: action.type || 'none',
@@ -550,6 +586,33 @@ function validateAndEnhanceResponse(
         ...action.params,
         userId: context.userContext.userId,
         linkType: action.params.linkType || 'claimPortal'
+      }
+    }
+    if (action.type === 'send_case_status_link' && context.userContext.userId) {
+      action.params = {
+        ...action.params,
+        userId: context.userContext.userId,
+        linkType: action.params.linkType || 'statusUpdate'
+      }
+    }
+    if (action.type === 'send_document_upload_link' && context.userContext.userId) {
+      action.params = {
+        ...action.params,
+        userId: context.userContext.userId,
+        linkType: action.params.linkType || 'documentUpload'
+      }
+    }
+    if (action.type === 'send_review_link') {
+      action.params = {
+        ...action.params,
+        userId: context.userContext.userId, // Optional for Trustpilot, but useful for tracking
+        userName: context.userName
+      }
+    }
+    if (action.type === 'send_signup_link') {
+      action.params = {
+        ...action.params,
+        userName: context.userName
       }
     }
     return action

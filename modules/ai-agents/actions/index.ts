@@ -3,3 +3,8 @@ export { actionRegistry, type ActionRegistry, type ActionType, type ActionResult
 export { sendPortalLinkAction, type PortalLinkActionParams, type PortalLinkActionResult, PortalLinkAction } from './send-portal-link.action'
 export { sendSmsAction } from './send-sms.action'
 export { sendMagicLinkAction } from './send-magic-link.action'
+export { sendReviewLinkAction, type ReviewLinkActionParams, type ReviewLinkActionResult } from './send-review-link.action'
+export { sendCaseStatusLinkAction, type CaseStatusLinkActionParams, type CaseStatusLinkActionResult } from './send-case-status-link.action'
+export { sendDocumentUploadLinkAction, type DocumentUploadLinkActionParams, type DocumentUploadLinkActionResult } from './send-document-upload-link.action'
+export { sendSignupLinkAction, type SignupLinkActionParams, type SignupLinkActionResult } from './send-signup-link.action'
+export { scheduleCallbackAction, type ScheduleCallbackActionParams, type ScheduleCallbackActionResult } from './schedule-callback.action'

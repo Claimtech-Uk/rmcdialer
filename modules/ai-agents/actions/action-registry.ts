@@ -5,14 +5,23 @@ import { SMSService } from '@/modules/communications/services/sms.service'
 import { MagicLinkService } from '@/modules/communications/services/magic-link.service'
 import { sendPortalLinkAction, type PortalLinkActionParams, type PortalLinkActionResult } from './send-portal-link.action'
 import { sendSmsAction } from './send-sms.action'
+import { sendReviewLinkAction } from './send-review-link.action'
+import { sendCaseStatusLinkAction } from './send-case-status-link.action'
+import { sendDocumentUploadLinkAction } from './send-document-upload-link.action'
+import { sendSignupLinkAction } from './send-signup-link.action'
+import { scheduleCallbackAction } from './schedule-callback.action'
 import { logger } from '@/modules/core'
 
 export type ActionType = 
   | 'send_portal_link'
   | 'send_magic_link'  // Include both for compatibility
   | 'send_sms' 
+  | 'send_case_status_link'
+  | 'send_document_upload_link'
   | 'send_review_link'
+  | 'send_signup_link'
   | 'schedule_followup'
+  | 'schedule_callback'
   | 'none'
 
 export type ActionExecutionContext = {
@@ -88,8 +97,8 @@ export class ActionRegistry {
           }
 
           const actionParams: PortalLinkActionParams = {
-            userId: context.userContext?.userId || (isTestUser ? 12345 : undefined), // Use test ID for test users
-            phoneNumber: params.phoneNumber || context.userContext?.phoneNumber,
+            userId: context.userContext?.userId || (isTestUser ? 12345 : 0), // Use test ID for test users
+            phoneNumber: params.phoneNumber || context.userContext?.phoneNumber || '',
             userName: params.userName || context.userContext?.userName || (isTestUser ? 'TestUser' : undefined),
             linkType: params.linkType || 'claimPortal',
             customMessage: params.customMessage,
@@ -165,33 +174,160 @@ export class ActionRegistry {
       }
     })
 
-    // Review Link Action (placeholder)
+    // Case Status Link Action - Clean delegation to action file
+    this.register({
+      type: 'send_case_status_link',
+      name: 'Send Case Status Link',
+      description: 'Send a secure link for users to review their case status, documents, and next steps',
+      requiredParams: ['userId', 'phoneNumber'],
+      optionalParams: ['userName', 'linkType', 'customMessage', 'reasoning'],
+      execute: async (context: ActionExecutionContext, params: any): Promise<ActionResult> => {
+        try {
+          // For testing purposes, allow status links even for unknown users
+          const isTestUser = context.userContext?.phoneNumber?.includes('07700900001') || 
+                           context.userContext?.phoneNumber?.includes('+447700900001') ||
+                           context.userContext?.phoneNumber?.includes('+15005550006') ||
+                           context.userContext?.phoneNumber?.includes('5005550006') ||
+                           context.userContext?.phoneNumber?.includes('447738585850') // James's number
+
+          if (!context.userContext?.userId && !isTestUser) {
+            return {
+              success: false,
+              actionType: 'send_case_status_link',
+              error: 'User ID required for case status links',
+              reasoning: 'Cannot send case status link without valid user'
+            }
+          }
+
+          // Delegate to action file
+          const result = await sendCaseStatusLinkAction(
+            context.smsService,
+            {
+              userId: context.userContext?.userId || (isTestUser ? 2064 : 0), // Use James's ID for his number
+              phoneNumber: params.phoneNumber || context.userContext?.phoneNumber || '',
+              userName: params.userName || context.userContext?.userName || (isTestUser ? 'James' : undefined),
+              linkType: params.linkType || 'statusUpdate',
+              customMessage: params.customMessage,
+              reasoning: context.conversationContext?.reasoning || params.reasoning || 'User requested case status review',
+              fromE164: context.conversationContext?.fromE164
+            },
+            context.magicLinkService
+          )
+
+          return {
+            success: result.success,
+            actionType: 'send_case_status_link',
+            data: {
+              linkUrl: result.linkUrl,
+              messageId: result.messageId,
+              trackingId: result.trackingId
+            },
+            error: result.error,
+            reasoning: result.reasoning,
+            trackingId: result.trackingId
+          }
+
+        } catch (error) {
+          return {
+            success: false,
+            actionType: 'send_case_status_link',
+            error: error instanceof Error ? error.message : 'Case status link action failed',
+            reasoning: 'Unexpected error in case status link execution'
+          }
+        }
+      }
+    })
+
+    // Document Upload Link Action - Clean delegation to action file
+    this.register({
+      type: 'send_document_upload_link',
+      name: 'Send Document Upload Link',
+      description: 'Send a secure link for users to upload required documents (lower priority than signature)',
+      requiredParams: ['userId', 'phoneNumber'],
+      optionalParams: ['userName', 'linkType', 'customMessage', 'reasoning'],
+      execute: async (context: ActionExecutionContext, params: any): Promise<ActionResult> => {
+        try {
+          // For testing purposes, allow document upload links even for unknown users
+          const isTestUser = context.userContext?.phoneNumber?.includes('07700900001') || 
+                           context.userContext?.phoneNumber?.includes('+447700900001') ||
+                           context.userContext?.phoneNumber?.includes('+15005550006') ||
+                           context.userContext?.phoneNumber?.includes('5005550006') ||
+                           context.userContext?.phoneNumber?.includes('447738585850') // James's number
+
+          if (!context.userContext?.userId && !isTestUser) {
+            return {
+              success: false,
+              actionType: 'send_document_upload_link',
+              error: 'User ID required for document upload links',
+              reasoning: 'Cannot send document upload link without valid user'
+            }
+          }
+
+          // Delegate to action file
+          const result = await sendDocumentUploadLinkAction(
+            context.smsService,
+            {
+              userId: context.userContext?.userId || (isTestUser ? 2064 : 0), // Use James's ID for his number
+              phoneNumber: params.phoneNumber || context.userContext?.phoneNumber || '',
+              userName: params.userName || context.userContext?.userName || (isTestUser ? 'James' : undefined),
+              linkType: params.linkType || 'documentUpload',
+              customMessage: params.customMessage,
+              reasoning: context.conversationContext?.reasoning || params.reasoning || 'User requested document upload access',
+              fromE164: context.conversationContext?.fromE164
+            },
+            context.magicLinkService
+          )
+
+          return {
+            success: result.success,
+            actionType: 'send_document_upload_link',
+            data: {
+              linkUrl: result.linkUrl,
+              messageId: result.messageId,
+              trackingId: result.trackingId
+            },
+            error: result.error,
+            reasoning: result.reasoning,
+            trackingId: result.trackingId
+          }
+
+        } catch (error) {
+          return {
+            success: false,
+            actionType: 'send_document_upload_link',
+            error: error instanceof Error ? error.message : 'Document upload link action failed',
+            reasoning: 'Unexpected error in document upload link execution'
+          }
+        }
+      }
+    })
+
+    // Review Link Action - Clean delegation to action file
     this.register({
       type: 'send_review_link',
-      name: 'Send Review Link',
+      name: 'Send Trustpilot Review Link',
       description: 'Send a Trustpilot review link to satisfied users',
       requiredParams: ['phoneNumber'],
       optionalParams: ['userName'],
       execute: async (context: ActionExecutionContext, params: any): Promise<ActionResult> => {
         try {
-          const userName = params.userName || context.userContext?.userName || 'there'
-          const reviewMessage = `Hi ${userName}, we'd love your feedback! Please leave a review: https://uk.trustpilot.com/review/resolvemyclaim.co.uk`
-
-          const result = await sendSmsAction(context.smsService, {
+          // Delegate to action file
+          const result = await sendReviewLinkAction(context.smsService, {
             phoneNumber: params.phoneNumber || context.userContext?.phoneNumber,
-            text: reviewMessage,
+            userName: params.userName || context.userContext?.userName,
             fromE164: context.conversationContext?.fromE164,
             userId: context.userContext?.userId
           })
 
           return {
-            success: true,
+            success: result.success,
             actionType: 'send_review_link',
             data: {
               messageId: result.messageId,
-              reviewUrl: 'https://uk.trustpilot.com/review/resolvemyclaim.co.uk'
+              reviewUrl: result.reviewUrl
             },
-            reasoning: 'Review link sent to satisfied user'
+            error: result.error,
+            reasoning: 'Trustpilot review link sent to satisfied user'
           }
 
         } catch (error) {
@@ -199,7 +335,87 @@ export class ActionRegistry {
             success: false,
             actionType: 'send_review_link',
             error: error instanceof Error ? error.message : 'Review link send failed',
-            reasoning: 'Failed to send review link'
+            reasoning: 'Failed to send Trustpilot review link'
+          }
+        }
+      }
+    })
+
+    // Signup Link Action - For unknown users who need to register
+    this.register({
+      type: 'send_signup_link',
+      name: 'Send Signup Link',
+      description: 'Send signup link to users not found in system to direct them to registration',
+      requiredParams: ['phoneNumber'],
+      optionalParams: ['userName', 'customMessage', 'reasoning'],
+      execute: async (context: ActionExecutionContext, params: any): Promise<ActionResult> => {
+        try {
+          // This action is specifically for unknown users, so we don't require userId
+          // Delegate to action file
+          const result = await sendSignupLinkAction(context.smsService, {
+            phoneNumber: params.phoneNumber || context.userContext?.phoneNumber || '',
+            userName: params.userName || context.userContext?.userName,
+            customMessage: params.customMessage,
+            reasoning: context.conversationContext?.reasoning || params.reasoning || 'User not found in system - sending signup link',
+            fromE164: context.conversationContext?.fromE164
+          })
+
+          return {
+            success: result.success,
+            actionType: 'send_signup_link',
+            data: {
+              messageId: result.messageId
+            },
+            error: result.error,
+            reasoning: result.reasoning || 'Signup link sent to unknown user for registration'
+          }
+
+        } catch (error) {
+          return {
+            success: false,
+            actionType: 'send_signup_link',
+            error: error instanceof Error ? error.message : 'Signup link send failed',
+            reasoning: 'Failed to send signup link to unknown user'
+          }
+        }
+      }
+    })
+
+    // Schedule Callback Action - Creates missed call entry for agent callback
+    this.register({
+      type: 'schedule_callback',
+      name: 'Schedule Callback',
+      description: 'Schedule a callback by creating a missed call entry with reason "a.i sms agent callback"',
+      requiredParams: ['phoneNumber'],
+      optionalParams: ['userId', 'userName', 'reason', 'requestedTime'],
+      execute: async (context: ActionExecutionContext, params: any): Promise<ActionResult> => {
+        try {
+          // Delegate to action file
+          const result = await scheduleCallbackAction(context.smsService, {
+            userId: context.userContext?.userId || params.userId,
+            phoneNumber: params.phoneNumber || context.userContext?.phoneNumber || '',
+            userName: params.userName || context.userContext?.userName,
+            reason: params.reason || 'User requested callback via AI SMS agent',
+            requestedTime: params.requestedTime,
+            fromE164: context.conversationContext?.fromE164
+          })
+
+          return {
+            success: result.success,
+            actionType: 'schedule_callback',
+            data: {
+              missedCallId: result.missedCallId
+            },
+            error: result.error,
+            reasoning: result.reasoning
+          }
+
+        } catch (error) {
+          return {
+            success: false,
+            actionType: 'schedule_callback',
+            error: error instanceof Error ? error.message : 'Callback scheduling failed',
+            reasoning: 'Unexpected error in callback scheduling execution'
           }
         }
       }
