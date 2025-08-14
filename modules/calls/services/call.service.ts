@@ -24,6 +24,7 @@ import { PriorityScoringService } from '../../scoring/services/priority-scoring.
 import { CallOutcomeManager } from '@/modules/call-outcomes/services/call-outcome-manager.service'
 import type { CallOutcomeContext } from '@/modules/call-outcomes/types/call-outcome.types'
 import { createMissedCallService } from '@/modules/missed-calls/services/missed-call.service';
+import { universalQueueTransitionService } from '@/modules/queue/services/universal-queue-transition.service';
 
 // Dependencies that will be injected
 interface CallServiceDependencies {
@@ -420,7 +421,10 @@ export class CallService {
         const outcomeResult = await this.callOutcomeManager.processOutcome(
           outcome.outcomeType as any,
           outcomeContext,
-          outcome
+          {
+            ...outcome,
+            notes: outcome.outcomeNotes  // Map outcomeNotes to notes for handlers
+          }
         );
 
         // 1. Create CallOutcome record (preserve existing pattern)
@@ -516,11 +520,34 @@ export class CallService {
    * Get call history with filtering and pagination
    */
   async getCallHistory(options: GetCallHistoryOptions): Promise<CallHistoryResult> {
-    const { page = 1, limit = 20, agentId, userId, startDate, endDate, outcome, status } = options;
+    const { page = 1, limit = 20, agentId, userId, startDate, endDate, outcome, status, phoneNumber } = options;
+
+    // Handle phone number search first if provided
+    let userIdsFromPhoneSearch: number[] | undefined;
+    if (phoneNumber) {
+      userIdsFromPhoneSearch = await this.userService.getUserIdsByPhonePattern(phoneNumber);
+      
+      // If no users found with this phone pattern, return empty result
+      if (userIdsFromPhoneSearch.length === 0) {
+        return {
+          calls: [],
+          meta: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0
+          }
+        };
+      }
+    }
 
     const where: any = {};
     if (agentId) where.agentId = agentId;
     if (userId) where.userId = BigInt(userId);
+    // Add phone number filter if we found matching user IDs
+    if (userIdsFromPhoneSearch) {
+      where.userId = { in: userIdsFromPhoneSearch.map(id => BigInt(id)) };
+    }
     if (startDate || endDate) {
       where.startedAt = {};
       if (startDate) where.startedAt.gte = startDate;
@@ -1052,7 +1079,9 @@ export class CallService {
         currentTime: new Date(),
         lastResetDate: userScore?.lastResetDate || undefined,
         currentQueueType: userScore?.currentQueueType || undefined,
-        previousQueueType: undefined, // Would need to track this separately
+        // 🚨 FIX: Set previousQueueType to current queue type to prevent false fresh starts
+        // When processing call outcomes, the user hasn't actually changed queues
+        previousQueueType: userScore?.currentQueueType || undefined,
         lastOutcome: outcomeType,
         totalAttempts: newAttemptCount, // FIXED: Use incremented count for proper scoring
         lastCallAt: new Date(),
@@ -1061,8 +1090,26 @@ export class CallService {
         currentScore: userScore?.currentScore || 0
       };
 
+      // 🐛 DEBUG: Log scoring context for troubleshooting
+      this.deps.logger.info(`📊 Score calculation for user ${userId}:`, {
+        outcomeType,
+        currentScore: userScore?.currentScore || 0,
+        hasExistingRecord: !!userScore,
+        currentQueueType: userScore?.currentQueueType,
+        previousQueueType: userScore?.currentQueueType, // Should match current to prevent false fresh starts
+        totalAttempts: newAttemptCount
+      });
+
       // Calculate new score using enhanced scoring service
       const newPriorityScore = await this.deps.scoringService.calculatePriority(scoringContext);
+
+      // 🐛 DEBUG: Log score calculation result
+      this.deps.logger.info(`📈 Score calculation result for user ${userId}:`, {
+        oldScore: userScore?.currentScore || 0,
+        newScore: newPriorityScore.finalScore,
+        scoreAdjustment: newPriorityScore.finalScore - (userScore?.currentScore || 0),
+        factors: newPriorityScore.factors?.map(f => `${f.name}: ${f.value} (${f.reason})`)
+      });
 
       // CRITICAL FIX: Calculate next call time based on outcome delay hours
       const effectiveDelayHours = delayHours !== undefined ? delayHours : this.getDefaultDelayHours(outcomeType);
@@ -1119,13 +1166,34 @@ export class CallService {
       // REMOVED: shouldConvert is always false now - no immediate conversion logic
       // Users are only marked as converted by cleanup cron services after signature verification
       
+      // 🔥 CRITICAL FIX: Handle queue transitions with conversion tracking
+      const currentQueue = userScore?.currentQueueType || null;
+      if (currentQueue !== currentQueueType) {
+        // Use Universal Queue Transition Service for queue changes
+        await universalQueueTransitionService.transitionUserQueue({
+          userId,
+          fromQueue: currentQueue,
+          toQueue: currentQueueType,
+          reason: `Call completed with outcome: ${outcomeType}`,
+          source: 'call_completion',
+          agentId: agentId,
+          metadata: { 
+            outcomeType, 
+            finalScore: newPriorityScore.finalScore,
+            needsReset,
+            delayHours: effectiveDelayHours
+          }
+        });
+      }
+      
       // Normal score update for all outcomes (no immediate conversions)
+      // Note: currentQueueType update handled by Universal Queue Transition Service above
       await tx.userCallScore.upsert({
         where: { userId: BigInt(userId) },
         update: {
           currentScore: newPriorityScore.finalScore,
           isActive: true,
-          currentQueueType: currentQueueType,
+          // currentQueueType: currentQueueType, // REMOVED: Handled by Universal Queue Transition Service
           // FIXED: Set lastResetDate for existing users who don't have it (prevents future fresh start treatment)
           lastResetDate: needsReset ? new Date() : (userScore?.lastResetDate || new Date()),
           lastOutcome: outcomeType,
@@ -1140,7 +1208,7 @@ export class CallService {
           userId: BigInt(userId),
           currentScore: newPriorityScore.finalScore,
           isActive: true,
-          currentQueueType: currentQueueType,
+          currentQueueType: currentQueueType, // For new records, set directly
           lastResetDate: new Date(),
           lastOutcome: outcomeType,
           lastCallAt: new Date(),
