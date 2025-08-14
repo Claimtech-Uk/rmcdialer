@@ -194,6 +194,7 @@ export interface GetCallHistoryOptions {
   endDate?: Date;
   outcome?: string;
   status?: string;
+  phoneNumber?: string;
 }
 
 export interface CallHistoryResult {

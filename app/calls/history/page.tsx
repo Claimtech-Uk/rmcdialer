@@ -5,6 +5,7 @@ import { CallHistoryTable } from '@/modules/calls/components/CallHistoryTable'
 import { api } from '@/lib/trpc/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/modules/core/components/ui/card'
 import { Button } from '@/modules/core/components/ui/button'
+import { Input } from '@/modules/core/components/ui/input'
 import { AlertCircle, BarChart3, Clock, Phone, TrendingUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { DateRangePicker } from '@/modules/core/components/ui/date-range-picker'
 
@@ -15,6 +16,7 @@ export default function CallHistoryPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<number | undefined>(undefined)
   const [customRange, setCustomRange] = useState<{ startDate: Date; endDate: Date} | null>(null)
   const [missedOnly, setMissedOnly] = useState(false)
+  const [phoneNumberSearch, setPhoneNumberSearch] = useState('')
 
   const { 
     data: callHistoryData, 
@@ -27,6 +29,7 @@ export default function CallHistoryPage() {
     ...(selectedAgentId && { agentId: selectedAgentId }),
     ...(selectedOutcome && { outcome: selectedOutcome }),
     ...(missedOnly && { status: 'missed_call' as any }),
+    ...(phoneNumberSearch && { phoneNumber: phoneNumberSearch }),
     ...(customRange ? { startDate: customRange.startDate, endDate: customRange.endDate } : undefined)
   })
 
@@ -83,6 +86,31 @@ export default function CallHistoryPage() {
           <CardContent className="p-0 relative">
             {/* Server-driven Filters */}
             <div className="p-4 flex flex-wrap items-center gap-3 border-b bg-white/60">
+              {/* Phone Number Search */}
+              <div className="flex items-center gap-2">
+                <Phone className="w-4 h-4 text-slate-500" />
+                <Input
+                  type="text"
+                  placeholder="Search by phone number..."
+                  value={phoneNumberSearch}
+                  onChange={(e) => { 
+                    setPhoneNumberSearch(e.target.value); 
+                    setCurrentPage(1); 
+                  }}
+                  className="w-48 text-sm"
+                />
+                {phoneNumberSearch && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setPhoneNumberSearch(''); setCurrentPage(1) }}
+                    className="p-1 h-8 w-8"
+                  >
+                    ×
+                  </Button>
+                )}
+              </div>
+
               {/* Quick toggles */}
               <div className="flex gap-2 mr-2">
                 <Button
@@ -185,7 +213,7 @@ export default function CallHistoryPage() {
                 )}
               </div>
 
-              <Button variant="outline" size="sm" onClick={() => { setSelectedOutcome(undefined); setSelectedAgentId(undefined); setCustomRange(null); setCurrentPage(1) }}>Clear</Button>
+              <Button variant="outline" size="sm" onClick={() => { setSelectedOutcome(undefined); setSelectedAgentId(undefined); setCustomRange(null); setPhoneNumberSearch(''); setCurrentPage(1) }}>Clear</Button>
               <div className="ml-auto" />
             </div>
             {isLoading ? (

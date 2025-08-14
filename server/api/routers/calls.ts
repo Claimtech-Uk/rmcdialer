@@ -90,7 +90,8 @@ const CallHistoryFiltersSchema = z.object({
   endDate: z.date().optional(),
   outcome: z.string().optional(),
   status: z.string().optional(),
-  direction: z.enum(['inbound', 'outbound']).optional()
+  direction: z.enum(['inbound', 'outbound']).optional(),
+  phoneNumber: z.string().optional()
 });
 
 const CallAnalyticsFiltersSchema = z.object({

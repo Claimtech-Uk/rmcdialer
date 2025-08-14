@@ -1779,6 +1779,53 @@ export class UserService {
   }
 
   /**
+   * Search for users by phone number pattern for call history search
+   * Uses partial matching for better search experience
+   */
+  async getUserIdsByPhonePattern(phonePattern: string): Promise<number[]> {
+    try {
+      console.log(`🔍 Searching users by phone pattern: ${phonePattern}`);
+      
+      // Clean the input pattern
+      const cleanPattern = phonePattern.replace(/\D/g, ''); // Remove non-digits
+      
+      if (cleanPattern.length < 3) {
+        console.log(`❓ Phone pattern too short: ${cleanPattern}`);
+        return [];
+      }
+
+      // Search for users whose phone numbers contain this pattern
+      const users = await replicaDb.user.findMany({
+        where: {
+          AND: [
+            {
+              phone_number: {
+                contains: cleanPattern
+              }
+            },
+            {
+              is_enabled: true
+            }
+          ]
+        },
+        select: {
+          id: true,
+          phone_number: true
+        },
+        take: 100 // Limit results to prevent too many matches
+      });
+
+      const userIds = users.map(user => Number(user.id));
+      console.log(`✅ Found ${userIds.length} users matching phone pattern: ${cleanPattern}`);
+      
+      return userIds;
+    } catch (error) {
+      console.error(`❌ Failed to search users by phone pattern ${phonePattern}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Smart phone number normalization for better matching
    * Handles UK phone number formats
    */
