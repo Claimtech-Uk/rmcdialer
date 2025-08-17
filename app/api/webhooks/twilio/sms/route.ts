@@ -175,6 +175,8 @@ export async function POST(request: NextRequest) {
           phoneNumber: conversationPhoneNumber, // Copy from conversation for indexing
           userId: matchedUserId || null,       // Link to user if found
           messageSid: validatedData.MessageSid // Use MessageSid for processing tracking
+          // 🎯 PHASE 2: Will store destination number after schema migration
+          // destinationNumber: validatedData.To  // Track which Twilio number was contacted
         }
       });
 

@@ -218,6 +218,9 @@ async function processSingleBatch(primaryBatchId: string): Promise<void> {
   const userId = messages[0].userId;
   const conversationId = messages[0].conversationId;
   
+  // 🎯 TODO PHASE 2: Smart routing will use destination numbers after schema deployment
+  // For now, maintaining current behavior while capturing destination data
+  
   // Combine all message bodies (from all batches)
   const combinedMessage = messages
     .map(msg => msg.body)
@@ -248,14 +251,15 @@ async function processSingleBatch(primaryBatchId: string): Promise<void> {
       channel: 'sms'
     });
     
-    // Send SMS with the AI test number manually (runtime doesn't handle SMS sending)
+    // 🎯 PHASE 1: Schema deployment - maintaining current routing behavior
+    // PHASE 2 will add smart routing once schema is deployed
     if (result.reply?.text) {
       const accountSid = process.env.TWILIO_ACCOUNT_SID;
       const authToken = process.env.TWILIO_AUTH_TOKEN;
       const aiTestNumber = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
       
       if (accountSid && authToken && aiTestNumber) {
-        console.log(`📨 [CRON] Sending AI response from ${aiTestNumber} to ${phoneNumber}`);
+        console.log(`📨 [CRON] Sending AI response from ${aiTestNumber} to ${phoneNumber} (Phase 1: current behavior)`);
         
         const twilioResponse = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
           method: 'POST',
@@ -290,6 +294,8 @@ async function processSingleBatch(primaryBatchId: string): Promise<void> {
                 userId: userId ? BigInt(userId) : null,
                 processed: true,
                 processedAt: new Date()
+                // 🎯 PHASE 2: Will store destination number after schema migration  
+                // destinationNumber: aiTestNumber
               }
             });
 

@@ -384,12 +384,16 @@ model SmsMessage {
   batchResponseSent Boolean        @default(false) @map("batch_response_sent")
   batchCreatedAt   DateTime?       @map("batch_created_at")
   
+  // SMS Routing field - tracks which Twilio number was contacted
+  destinationNumber String?        @map("destination_number")
+  
   conversation     SmsConversation @relation(fields: [conversationId], references: [id])
 
   @@index([conversationId, createdAt])
   @@index([phoneNumber, processed, createdAt], name: "idx_phone_processed")
   @@index([messageSid], name: "idx_message_sid")
   @@index([batchId, batchProcessed], name: "idx_batch_processing")
+  @@index([destinationNumber], name: "idx_destination_number")
   @@map("sms_messages")
 }
 
