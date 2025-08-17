@@ -273,6 +273,43 @@ async function processSingleBatch(primaryBatchId: string): Promise<void> {
         if (twilioResponse.ok) {
           const smsResult = await twilioResponse.json();
           console.log(`📨 SMS sent via AI test number:`, { sid: smsResult.sid });
+          
+          // 🎯 CRITICAL FIX: Save the AI response to database
+          try {
+            // Create the outbound SMS record for AI response
+            await prisma.smsMessage.create({
+              data: {
+                conversationId: conversationId!, // Use existing conversation from inbound messages
+                direction: 'outbound',
+                body: result.reply.text,
+                twilioMessageSid: smsResult.sid,
+                isAutoResponse: true,
+                sentAt: new Date(), // ✅ This fixes the NULL sent_at issue!
+                messageType: 'ai_agent', // ✅ Set as requested!
+                phoneNumber: phoneNumber,
+                userId: userId ? BigInt(userId) : null,
+                processed: true,
+                processedAt: new Date()
+              }
+            });
+
+            console.log(`✅ AI response saved to database:`, { 
+              conversationId,
+              twilioSid: smsResult.sid,
+              messageType: 'ai_agent',
+              phoneNumber: phoneNumber,
+              responseLength: result.reply.text.length
+            });
+
+          } catch (dbError) {
+            console.error(`❌ Failed to save AI response to database:`, {
+              error: dbError instanceof Error ? dbError.message : dbError,
+              phoneNumber,
+              twilioSid: smsResult.sid
+            });
+            // Don't throw - SMS was sent successfully, just log the DB error
+          }
+          
         } else {
           const error = await twilioResponse.text();
           console.error(`❌ Failed to send SMS:`, error);
