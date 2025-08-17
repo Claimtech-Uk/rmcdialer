@@ -1,9 +1,10 @@
 import { SMSService, MagicLinkService } from '@/modules/communications'
 import { AgentRuntimeService, type AgentTurnInput, type AgentTurnOutput } from '../../core/agent-runtime.service'
 import { SmsAgentRouter } from './router/sms-agent-router'
-import { popDueFollowups } from '../../core/followup.store'
+// REMOVED: import { popDueFollowups } from '../../core/followup.store' - legacy follow-up service
 import { containsAbuseIntent, containsComplaintIntent } from '../../core/guardrails'
-import { isAutomationHalted, setAutomationHalt, checkAndBumpRate, isIdempotencyKeyUsed, markIdempotencyKeyUsed, getLastReviewAskAt, setLastReviewAskAt, recordLinkSent } from '../../core/memory.store'
+import { isAutomationHalted, setAutomationHalt, isIdempotencyKeyUsed, markIdempotencyKeyUsed, getLastReviewAskAt, setLastReviewAskAt, recordLinkSent } from '../../core/memory.store'
+import { databaseSmsHandler, type InboundMessage } from './database-sms-handler'
 
 export class SmsAgentService {
   constructor(
@@ -13,84 +14,160 @@ export class SmsAgentService {
     private readonly router = new SmsAgentRouter()
   ) {}
 
-  async handleInbound(input: Omit<AgentTurnInput, 'channel'> & { channel?: 'sms'; replyFromE164?: string }): Promise<AgentTurnOutput> {
-    const startedAt = Date.now()
-    console.log('AI SMS | 🤖 Handling inbound', { from: input.fromPhone })
-    // Respect existing automation halt window
+
+  async handleInbound(input: Omit<AgentTurnInput, 'channel'> & { channel?: 'sms'; replyFromE164?: string; messageSid?: string }): Promise<AgentTurnOutput> {
+    
+    // Basic automation halt guard
     if (await isAutomationHalted(input.fromPhone)) {
-      console.log('AI SMS | 🚫 Automation halted for this number; skipping AI turn')
-      return { actions: [], reply: undefined as any }
+      console.log('AI SMS | 🚫 Automation halted for phone', { from: input.fromPhone })
+      return { actions: [], reply: { text: 'Automation is paused for this number. Text RESUME to continue.' } }
     }
 
-    // Safety: complaint/abuse handling – acknowledge and halt automation for 24h
-    const lower = (input.message || '').toLowerCase()
-    // Detect STOP first elsewhere. Here, only treat as abuse if truly abusive.
-    if (containsComplaintIntent(lower) || containsAbuseIntent(lower)) {
-      const { formatSms } = await import('./formatter')
-      const toE164 = (n: string) => (n?.startsWith('+') ? n : `+${n}`)
-      const toNumber = toE164(input.fromPhone)
-      const msg = containsComplaintIntent(lower)
-        ? 'Thanks for letting us know—we’ll flag this for a specialist to review and contact you.'
-        : 'Understood. I’ll pause automated messages and arrange human follow-up.'
-      await this.smsService.sendSMS({
-        phoneNumber: toNumber,
-        message: formatSms(msg),
-        messageType: 'auto_response',
-         userId: input.userId
-        // Note: SMS service automatically uses test number for auto_response messages
-      })
-      await setAutomationHalt(input.fromPhone)
-      console.log('AI SMS | 🚩 Complaint/abuse acknowledged; automation halted 24h')
+    // Basic guardrails
+    if (containsAbuseIntent(input.message) || containsComplaintIntent(input.message)) {
+      console.log('AI SMS | 🛡️ Guardrails triggered, halting automation', { from: input.fromPhone })
+      await setAutomationHalt(input.fromPhone, 7200) // 2 hours halt
+      const msg = 'I understand your frustration. A human agent will reach out to you shortly.'
+      
       return { actions: [], reply: { text: msg } }
     }
 
-    // Cancel/consume any due follow-ups first (send them now, then proceed with current turn)
-    try {
-      const due = await popDueFollowups(input.fromPhone)
-      if (due.length) {
-        const { formatSms } = await import('./formatter')
-        const { withinBusinessHours, scheduleFollowup } = await import('../../core/followup.store')
-        for (const f of due) {
-          if (!withinBusinessHours()) {
-            // Outside business hours: reschedule to next 08:00
-            const now = new Date()
-            const next = new Date(now)
-            next.setDate(now.getDate() + 1)
-            next.setHours(8, 0, 0, 0)
-            const delaySec = Math.max(1, Math.ceil((next.getTime() - now.getTime()) / 1000))
-            await scheduleFollowup(input.fromPhone, { text: f.text, delaySec, metadata: f.metadata })
-            continue
-          }
-          await this.smsService.sendSMS({
-            phoneNumber: input.fromPhone.startsWith('+') ? input.fromPhone : `+${input.fromPhone}`,
-            message: formatSms(f.text),
-            messageType: 'auto_response',
-            userId: input.userId
-            // Note: SMS service now automatically uses test number for auto_response messages
-          })
+    // Use database-first SMS handler - NO REDIS, atomic database operations only
+    // Goal: Use database as single source of truth, eliminate Redis dependencies
+    const inboundMessage: InboundMessage = {
+      messageSid: input.messageSid || `generated-${Date.now()}`,
+      phoneNumber: input.fromPhone,
+      text: input.message,
+      timestamp: Date.now(),
+      userId: input.userId
+    }
+    
+    // Process with database-first atomic handler
+    const result = await databaseSmsHandler.handleMessage(
+      inboundMessage,
+      async (messages, attempt) => {
+        console.log('AI SMS | 📝 Database processing batch', {
+          messageCount: messages.length,
+          attempt,
+          preview: messages.map(m => m.text.substring(0, 30)),
+          processingMode: 'database_atomic',
+          goal: 'eliminate_redis_dependencies'
+        })
+        
+        // Combine messages for context
+        const combinedInput = {
+          ...input,
+          message: messages.map(m => m.text).join(' '),
+          channel: 'sms' as const
         }
-        console.log('AI SMS | ⏰ Sent due follow-ups', { count: due.length })
+        
+        // Process with runtime
+        const turn = await this.runtime.handleTurn(combinedInput)
+        console.log('AI SMS | 🤖 Runtime output', { 
+          reply: turn.reply?.text?.substring(0, 50), 
+          actions: turn.actions?.map(a => a.type),
+          attempt,
+          processingMode: 'database_first'
+        })
+        
+        // 🎯 FIXED: Don't send SMS in callback - only generate response text
+        // This prevents multiple SMS sends during retries
+        // SMS will be sent once after successful database completion
+        
+        return JSON.stringify({
+          reply: turn.reply?.text || 'Message received',
+          actions: turn.actions || [],
+          idempotencyKey: turn.idempotencyKey
+        })
       }
-    } catch {}
-    // Lightweight routing: choose agent type via sticky session and user signals
-    const userSignals = await this.runtime.getUserSignalsForRouting(input.fromPhone)
-    const route = await this.router.route(input.fromPhone, userSignals)
-    console.log('AI SMS | 🧭 Route decision', { type: route.type, reason: route.reason, sessionStarted: route.sessionStarted })
-    // Basic per-number rate limit to avoid bursts
-    if (!(await checkAndBumpRate(input.fromPhone))) {
-      console.log('AI SMS | ⏳ Rate limited; skipping turn', { from: input.fromPhone })
+    )
+    
+    if (!result.processed) {
+      console.log('AI SMS | ⏳ Database processing deferred or failed', {
+        reason: result.reason,
+        phoneNumber: input.fromPhone,
+        error: result.error,
+        messageId: result.messageId,
+        retryAfterSeconds: result.retryAfterSeconds,
+        processingMode: 'database_first'
+      })
+      
+      // If processing failed with error, send fallback response  
+      if (result.reason === 'processing_error') {
+        console.log('AI SMS | 🚨 Database processing failed, sending fallback response')
+        return { 
+          actions: [], 
+          reply: { 
+            text: 'Thanks for your message. We\'re experiencing a temporary issue. A team member will get back to you shortly.' 
+          } 
+        }
+      }
+      
+      // Message was deferred (another process handling) - no response needed
       return { actions: [], reply: undefined as any }
     }
-
-    const turn = await this.runtime.handleTurn({ ...input, channel: 'sms', /* future: profile */ } as any)
-    console.log('AI SMS | 🤖 Runtime output', { reply: turn.reply?.text, actions: turn.actions?.map(a => a.type) })
-
+    
+    // Success - message was processed using database-first approach
+    console.log('AI SMS | ✅ Database processing completed successfully', {
+      reason: result.reason,
+      responseLength: result.response?.length,
+      phoneNumber: input.fromPhone,
+      messageId: result.messageId,
+      processingMode: 'database_atomic',
+      goal: 'reliable_sms_processing'
+    })
+    
+    // 🎯 FIXED: Parse the turn data and send SMS only ONCE after successful batch processing
+    try {
+      const turnData = JSON.parse(result.response || '{}')
+      const turn = {
+        reply: { text: turnData.reply },
+        actions: turnData.actions || [],
+        idempotencyKey: turnData.idempotencyKey
+      }
+      
+      console.log('AI SMS | 📤 Sending final batch response (no retry duplicates)', {
+        hasReply: !!turn.reply?.text,
+        actionCount: turn.actions?.length || 0,
+        idempotencyKey: turn.idempotencyKey
+      })
+      
+      await this.processTurnOutput(turn, input)
+      
+    } catch (parseError) {
+      console.error('AI SMS | ⚠️ Failed to parse turn data, sending basic reply', {
+        error: parseError,
+        response: result.response?.substring(0, 100)
+      })
+      
+      // Fallback: send the basic response
+      if (result.response) {
+        await this.smsService.sendSMS({
+          phoneNumber: input.fromPhone,
+          message: result.response,
+          messageType: 'auto_response',
+          userId: input.userId
+        })
+      }
+    }
+    
+    // Return empty reply since SMS was already sent
+    return { actions: [], reply: undefined as any }
+  }
+  
+  /**
+   * Process the turn output - extracted for use by check-before-send handler
+   */
+  private async processTurnOutput(
+    turn: AgentTurnOutput, 
+    input: Omit<AgentTurnInput, 'channel'> & { channel?: 'sms'; replyFromE164?: string }
+  ): Promise<void> {
     // Idempotency guard: if this plan was already executed, skip sending duplicates
     if (turn.idempotencyKey) {
       const used = await isIdempotencyKeyUsed(turn.idempotencyKey)
       if (used) {
         console.log('AI SMS | 🧿 Idempotency: duplicate plan detected, skipping sends', { key: turn.idempotencyKey })
-        return { actions: [], reply: undefined as any, idempotencyKey: turn.idempotencyKey }
+        return
       }
     }
 
@@ -122,20 +199,15 @@ export class SmsAgentService {
       }
     }
 
+    // Send main reply immediately (no more business hours scheduling)
     if (turn.reply && typeof turn.reply.text === 'string' && turn.reply.text.length > 0) {
       // Ensure SMS length stays reasonable (160-ish characters)
       const { formatSms } = await import('./formatter')
       const replyText = turn.reply.text
       const replyKey = turn.idempotencyKey ? `${turn.idempotencyKey}:reply` : `reply:${toNumber}:${replyText}`
-      console.log('AI SMS | 📤 Sending reply', { to: toNumber, fromOverride: input.replyFromE164 })
+      console.log('AI SMS | 📤 Sending reply immediately', { to: toNumber, fromOverride: input.replyFromE164 })
       await sendOnce(replyKey, async () => {
-        const { withinBusinessHours, scheduleAtBusinessOpen } = await import('../../core/followup.store')
         const msg = formatSms(replyText)
-        if (!withinBusinessHours()) {
-          console.log('AI SMS | 🕗 Outside business hours, deferring reply to open')
-          await scheduleAtBusinessOpen(input.fromPhone, msg, { kind: 'primary_reply' })
-          return
-        }
         await sendSmsWithRetry({
           phoneNumber: toNumber,
           message: msg,
@@ -144,10 +216,10 @@ export class SmsAgentService {
           // Note: SMS service automatically uses test number for auto_response messages
         })
       })
-      console.log('AI SMS | ✅ Reply send invoked')
+      console.log('AI SMS | ✅ Reply sent immediately')
     }
 
-    // Execute actions with proper ordering for multi-SMS sequences
+    // Execute actions immediately (no more follow-up scheduling)
     const smsActions = turn.actions.filter(a => a.type === 'send_sms')
     const nonSmsActions = turn.actions.filter(a => a.type !== 'send_sms')
     
@@ -158,59 +230,40 @@ export class SmsAgentService {
       
       if (action.type === 'send_magic_link') {
         await sendOnce(actionKeyBase, async () => {
-          console.log('AI SMS | 🔗 Sending magic link', { userId: action.userId, to: action.phoneNumber || input.fromPhone })
-          const { withinBusinessHours, scheduleAtBusinessOpen } = await import('../../core/followup.store')
-          if (!withinBusinessHours()) {
-            console.log('AI SMS | 🕗 Outside business hours, deferring magic link to open')
-            await scheduleAtBusinessOpen(input.fromPhone, 'I can send your secure portal link when we open at 8am. Shall I do that?', { kind: 'magic_link_prompt' })
-          } else {
+          console.log('AI SMS | 🔗 Sending magic link', { to: action.phoneNumber })
+          // Only send if we have a valid userId
+          if (input.userId) {
             await this.magicLinkService.sendMagicLink({
-              userId: action.userId,
-              linkType: action.linkType,
-              deliveryMethod: 'sms',
-              phoneNumber: toE164(action.phoneNumber || input.fromPhone),
-              // Note: SMS service automatically uses test number for auto_response messages
+              phoneNumber: action.phoneNumber,
+              linkType: 'claimPortal',
+              userId: input.userId,
+              deliveryMethod: 'sms'
+              // Note: Magic link service now uses proper number routing (manual vs AI)
             })
-            
-            // Record link send for smart conversation intelligence
-            await recordLinkSent(input.fromPhone, 'portal_link_sent')
-            console.log('AI SMS | 🔗 Recorded portal link send for conversation intelligence')
+          } else {
+            console.warn('AI SMS | ⚠️ No userId provided for magic link action')
           }
-          const userSignalsAfter = await this.runtime.getUserSignalsForRouting(input.fromPhone)
-          await this.router.endIfGoalAchieved(input.fromPhone, route.type, userSignalsAfter)
         })
-      } else if (action.type === 'send_review_link') {
+      }
+      
+      if (action.type === 'send_review_link') {
         await sendOnce(actionKeyBase, async () => {
-          const reviewUrl = process.env.TRUSTPILOT_REVIEW_URL || 'https://uk.trustpilot.com/review/resolvemyclaim.co.uk'
-          const { formatSms } = await import('./formatter')
-          const { withinBusinessHours, scheduleAtBusinessOpen } = await import('../../core/followup.store')
-          // Throttle monthly
-          const cooldownSec = Number(process.env.AI_SMS_REVIEW_THROTTLE_SECONDS || 30 * 24 * 60 * 60)
-          const lastAsk = await getLastReviewAskAt(input.fromPhone)
-          const now = Date.now()
-          if (lastAsk && now - lastAsk < cooldownSec * 1000) {
-            console.log('AI SMS | ⏳ Review link throttled; skipping send', { to: action.phoneNumber })
+          const reviewUrl = process.env.TRUSTPILOT_REVIEW_URL
+          if (!reviewUrl) {
+            console.error('AI SMS | ❌ TRUSTPILOT_REVIEW_URL not set')
             return
           }
+          const { formatSms } = await import('./formatter')
           console.log('AI SMS | ⭐ Sending review link', { to: action.phoneNumber })
-          const msg = formatSms(`Here's the review link: ${reviewUrl}`)
-          if (!withinBusinessHours()) {
-            console.log('AI SMS | 🕗 Outside business hours, deferring review link to open')
-            await scheduleAtBusinessOpen(input.fromPhone, msg, { kind: 'review_link' })
-          } else {
-            await sendSmsWithRetry({
-              phoneNumber: toE164(action.phoneNumber || input.fromPhone),
-              message: msg,
-              messageType: 'auto_response',
-              userId: input.userId,
-              // Note: SMS service automatically uses test number for auto_response messages
-            })
-            
-            // Record review link send for conversation intelligence  
-            await recordLinkSent(input.fromPhone, 'review_link_sent')
-            console.log('AI SMS | ⭐ Recorded review link send for conversation intelligence')
-          }
-          await setLastReviewAskAt(input.fromPhone, now, cooldownSec)
+          const msg = formatSms(`Our trustpilot: ${reviewUrl}`)
+          await sendSmsWithRetry({
+            phoneNumber: toNumber,
+            message: msg,
+            messageType: 'auto_response',
+            userId: input.userId
+            // Note: SMS service automatically uses test number for auto_response messages
+          })
+
           // End review session immediately
           const signalsAfter = await this.runtime.getUserSignalsForRouting(input.fromPhone)
           await this.router.endIfGoalAchieved(input.fromPhone, 'review_collection' as any, signalsAfter)
@@ -218,98 +271,34 @@ export class SmsAgentService {
       }
     }
 
-    // Move multi-SMS sequencing to Redis follow-ups for guaranteed delivery
+    // Send SMS actions immediately with small delays (no Redis follow-ups)
     if (smsActions.length > 0) {
-      await sendOnce(turn.idempotencyKey ? `${turn.idempotencyKey}:redis_sequence` : `redis_sequence:${toNumber}:${smsActions.length}`, async () => {
-        const { withinBusinessHours, scheduleFollowup, scheduleAtBusinessOpen } = await import('../../core/followup.store')
-        const baseDelaySec = 2 // first follow-up in 2s to feel immediate but use queue
-        let offset = 0
+      await sendOnce(turn.idempotencyKey ? `${turn.idempotencyKey}:sms_sequence` : `sms_sequence:${toNumber}:${smsActions.length}`, async () => {
         for (let i = 0; i < smsActions.length; i++) {
           const action = smsActions[i]
-          offset += i === 0 ? baseDelaySec : 2 // subsequent +2s steps
-          const metadata = { kind: 'sequential_sms', sequenceIndex: i + 1, totalInSequence: smsActions.length }
-          if (!withinBusinessHours()) {
-            await scheduleAtBusinessOpen(input.fromPhone, action.text, metadata)
-          } else {
-            await scheduleFollowup(input.fromPhone, { text: action.text, delaySec: offset, metadata })
+          if (i > 0) {
+            // Small delay between messages to avoid spam detection
+            await sleep(2000)
           }
+          
+          const { formatSms } = await import('./formatter')
+          const msg = formatSms(action.text)
+          await sendSmsWithRetry({
+            phoneNumber: toNumber,
+            message: msg,
+            messageType: 'auto_response',
+            userId: input.userId
+          })
         }
-        console.log('AI SMS | 🗄️ Sequenced SMS via Redis follow-ups', { count: smsActions.length, baseDelaySec })
+        console.log('AI SMS | ✅ Multi-SMS sequence sent immediately', { count: smsActions.length })
       })
     }
 
-    // TESTING MODE: Use Promise.all with delays - work directly with turn followups, no Redis needed
-    const isTestingMode = process.env.AI_SMS_IMMEDIATE_MULTIMSGS === 'true'
-    if (isTestingMode && turn.reply?.text && turn.followups && turn.followups.length > 0) {
-      console.log('AI SMS | 🚀 Testing mode: using Promise.all with delays (direct from AI)', { 
-        count: turn.followups.length, 
-        delays: turn.followups.map(f => `${f.delaySec || 2}s`) 
-      })
-      
-      // Elegant Promise.all solution - all delays start immediately, resolve at scheduled times
-      const sendWithDelay = (message: string, delay: number) => 
-        new Promise<void>((resolve) => {
-          setTimeout(async () => {
-            try {
-              await sendSmsWithRetry({
-                phoneNumber: toE164(input.fromPhone),
-                message: message,
-                messageType: 'auto_response',
-                userId: input.userId
-              })
-              console.log('AI SMS | ✅ Testing mode message sent', { 
-                delay: delay + 'ms', 
-                messageLength: message.length
-              })
-            } catch (err) {
-              console.error('AI SMS | ❌ Testing mode message failed', { delay, message: message.slice(0, 50), err })
-            }
-            resolve() // Always resolve to not block other messages
-          }, delay)
-        })
+    // REMOVED: Testing mode code that was dependent on follow-ups
 
-      // Fire all delayed messages in parallel - they'll send at their scheduled times
-      const delayedSends = turn.followups.map(f => 
-        sendWithDelay(f.text, (f.delaySec || 2) * 1000)
-      )
-      
-      // Don't await - let them fire in background so main request completes immediately
-      Promise.all(delayedSends).then(() => {
-        console.log('AI SMS | 🎉 All testing mode messages completed')
-      }).catch(err => {
-        console.error('AI SMS | ❌ Testing mode Promise.all error:', err)
-      })
-    }
-
-    // Mark idempotency key after successful sends
+    // Mark the plan as completed
     if (turn.idempotencyKey) {
       await markIdempotencyKeyUsed(turn.idempotencyKey)
     }
-
-    // If goal achieved, end sticky session
-    const closed = await this.router.endIfGoalAchieved(input.fromPhone, route.type, await this.runtime.getUserSignalsForRouting(input.fromPhone))
-    // Collect current KB IDs used (from prompt builder’s selection) for telemetry
-    try {
-      const { selectKbIdsForMessage } = await import('../../core/prompt-builder')
-      const kbIds = selectKbIdsForMessage(input.message)
-      console.log('AI SMS | 📚 KB', { phone: input.fromPhone, kb_ids_used: kbIds })
-    } catch {}
-    // Minimal telemetry (Phase 4)
-    try {
-      const latencyMs = Date.now() - startedAt
-      console.log('AI SMS | 📊 Telemetry', {
-        phone: input.fromPhone,
-        agentType: route.type,
-        reason: route.reason,
-        actions: turn.actions?.map(a => a.type),
-        goalClosed: closed,
-        idempotencyKey: turn.idempotencyKey,
-        latencyMs
-      })
-    } catch {}
-    console.log('AI SMS | 🏁 Turn completed')
-    return turn
   }
 }
-
-

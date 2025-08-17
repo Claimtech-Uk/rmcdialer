@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { logger } from '@/modules/core';
 import { UserService } from '@/modules/users';
+import { withRetry } from '@/lib/utils/db-retry';
 
 // Prevent static generation - this route requires runtime
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,8 @@ export async function GET(request: NextRequest) {
     // Find callbacks that need to be queued:
     // 1. Upcoming callbacks (4-6 minutes from now) with status 'pending'
     // 2. Overdue callbacks (past scheduled time) with status 'pending' OR 'accepted'
-    const dueCallbacks = await prisma.callback.findMany({
+    const dueCallbacks = await withRetry(
+      () => prisma.callback.findMany({
       where: {
         OR: [
           // Upcoming callbacks for advance notification
@@ -75,7 +77,9 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-    });
+    }),
+      'fetch due callbacks'
+    );
 
     if (dueCallbacks.length === 0) {
       console.log('📭 No callbacks due for notification or overdue callbacks to process');
@@ -206,7 +210,8 @@ export async function GET(request: NextRequest) {
  * Find an available agent
  */
 async function findAvailableAgent() {
-  const availableAgent = await prisma.agent.findFirst({
+  const availableAgent = await withRetry(
+    () => prisma.agent.findFirst({
     where: {
       isActive: true,
       sessions: {
@@ -230,7 +235,9 @@ async function findAvailableAgent() {
         _count: 'desc' // Prefer agents with more session activity
       }
     }
-  });
+  }),
+    'find available agent'
+  );
 
   return availableAgent;
 }
@@ -280,15 +287,19 @@ async function queueCallbackForAgent({
   try {
     // Add to appropriate queue based on user's status
     // First check which queue this user belongs to
-    const userScore = await prisma.userCallScore.findUnique({
-      where: { userId: callback.userId },
-      select: { currentQueueType: true }
-    });
+    const userScore = await withRetry(
+      () => prisma.userCallScore.findUnique({
+        where: { userId: callback.userId },
+        select: { currentQueueType: true }
+      }),
+      'fetch user score'
+    );
 
     const queueType = userScore?.currentQueueType || 'outstanding_requests';
 
     // Add to the main call queue with callback reference
-    await prisma.callQueue.create({
+    await withRetry(
+      () => prisma.callQueue.create({
       data: {
         userId: callback.userId,
         queueType: queueType,
@@ -300,7 +311,9 @@ async function queueCallbackForAgent({
         availableFrom: callback.scheduledFor,
         status: 'assigned'
       }
-    });
+    }),
+      'queue callback'
+    );
 
     console.log(`✅ Queued callback for ${userName} to agent ${agentId} in ${queueType} queue`);
     

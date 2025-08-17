@@ -3,7 +3,7 @@
 
 import { AgentContextBuilder } from './context-builder'
 import { getConversationSummary, setConversationSummary, getLastReply, setLastReply, getLastLinkSentAt, setLastLinkSentAt, getLastReviewAskAt, setLastReviewAskAt } from './memory.store'
-import { chat } from './llm.client'
+import { chat } from './multi-provider-llm.client'
 import { hybridChat, convertToolCallsToActions, SMS_AGENT_TOOLS, getSystemPromptForMode, isToolCallingEnabled } from './modern-llm.client'
 import { buildSystemPrompt, buildUserPrompt, buildUserPromptIntelligent } from './prompt-builder'
 import { analyzeAndStoreConversationInsights } from './intelligent-kb-selector'
@@ -21,7 +21,7 @@ import { RequirementsProfile } from '../channels/sms/agents/requirements.profile
 import { ReviewCollectionProfile } from '../channels/sms/agents/review-collection.profile'
 import { redactPII } from './guardrails'
 import { prisma } from '@/lib/db'
-import { scheduleFollowup, popDueFollowups } from './followup.store'
+// REMOVED: import { scheduleFollowup, popDueFollowups } from './followup.store' - legacy follow-up service
 import { generateAIMagicLink, formatMagicLinkForSMS } from './ai-magic-link-generator'
 import { actionRegistry, type ActionExecutionContext } from '../actions'
 import { SMSService } from '@/modules/communications/services/sms.service'
@@ -44,13 +44,16 @@ export type AgentTurnOutput = {
   reply?: { text: string }
   actions: AgentAction[]
   idempotencyKey?: string
-  followups?: Array<{ text: string; delaySec?: number }>
+  // REMOVED: followups field - no longer used in immediate response system
 }
 
 export class AgentRuntimeService {
   private readonly contextBuilder = new AgentContextBuilder()
   private readonly router = new SmsAgentRouter()
-  private readonly smsService = new SMSService({}) // For action execution
+  private readonly smsService = new SMSService({ 
+    authService: undefined as any, 
+    userService: undefined as any 
+  }) // For action execution - minimal dependencies
 
   async handleTurn(input: AgentTurnInput): Promise<AgentTurnOutput> {
     // Build user context (by phone). Used to tailor response and choose actions
@@ -152,7 +155,7 @@ export class AgentRuntimeService {
     let planVersion: string | undefined
     let replyText: string | undefined
     let personalized: string | undefined
-    let followups: Array<{ text: string; delaySec?: number }> = []
+    // REMOVED: followups array - no longer used in immediate response system
     
     // Check if we should use the new simplified AI-controlled mode
     const useSimplifiedMode = process.env.AI_SMS_SIMPLIFIED_MODE === 'true' || 
@@ -185,35 +188,29 @@ export class AgentRuntimeService {
           userId: userCtx.userId,
           queueType: userCtx.queueType || undefined,
           hasSignature: userCtx.queueType === 'unsigned_users' ? false : userCtx.queueType ? true : null,
-          pendingRequirements: userCtx.pendingRequirements || 0
+          pendingRequirementTypes: userCtx.pendingRequirementTypes || [],
+          primaryClaimStatus: userCtx.primaryClaimStatus,
+          claimLenders: userCtx.claimLenders || []
         }
       }
       
       // Get AI's intelligent response with actions
       const intelligentResponse = await buildSimplifiedResponse(input.fromPhone, simplifiedContext)
       
-      // Extract messages and send immediately with small delays
+      // Extract single message (enforced in simplified response builder)
       const messages = intelligentResponse.messages || []
       if (messages.length > 0) {
-        replyText = messages[0] // First message as immediate reply
+        replyText = messages[0] // Single unified message
         
-        // Schedule remaining messages with 2-second delays for natural flow
-        for (let i = 1; i < messages.length; i++) {
-          followups.push({
-            text: messages[i],
-            delaySec: i * 2 // 2s, 4s, 6s delays
-          })
-        }
-        
-        console.log('AI SMS | 🧠 AI-controlled response generated', {
-          messageCount: messages.length,
+        console.log('AI SMS | 🧠 AI-controlled single message generated', {
+          messageLength: messages[0]?.length || 0,
           actionCount: intelligentResponse.actions.length,
           tone: intelligentResponse.conversationTone,
           reasoning: intelligentResponse.reasoning?.substring(0, 100) + '...'
         })
       }
       
-      // Execute AI-decided actions using the action registry system
+      // Execute AI-decided actions immediately (no delays needed)
       await this.executeAIActions(
         intelligentResponse.actions.map(action => ({
           type: action.type as any,
@@ -223,7 +220,7 @@ export class AgentRuntimeService {
         input.fromPhone,
         userCtx,
         actions,
-        followups
+        [] // No follow-ups in immediate system
       )
       
       // Apply intelligent personalization
@@ -259,60 +256,16 @@ export class AgentRuntimeService {
       
       const conversationalResponse = await buildConversationalResponse(input.fromPhone, responseContext)
       
-      // Handle AI's natural decision on 1-3 messages
+      // Handle AI's single message response (enforced in response builder)
       const messages = conversationalResponse.messages || []
       
-      if (messages.length === 1) {
-        // Single message
+      if (messages.length > 0) {
+        // Single unified message
         replyText = messages[0]
-        console.log('AI SMS | 💬 Single message response', {
-          messageLength: messages[0].length,
+        console.log('AI SMS | 💬 Single unified message response', {
+          messageLength: messages[0]?.length || 0,
           tone: conversationalResponse.conversationTone
         })
-      } else if (messages.length > 1) {
-        // Multi-message sequence (2-3 messages)
-        
-        // Check if we should send all messages immediately for testing
-        const sendImmediately = process.env.AI_SMS_IMMEDIATE_MULTIMSGS === 'true'
-        
-        if (sendImmediately) {
-          // Send each message with 2-second in-app delays (testing mode)
-          replyText = messages[0] // First message goes as immediate reply
-          
-          // Schedule remaining messages with simple delays
-          for (let i = 1; i < messages.length; i++) {
-            followups.push({
-              text: messages[i],
-              delaySec: i * 2 // 2s, 4s, 6s, etc.
-            })
-          }
-          
-          console.log('AI SMS | 🚀 Testing mode: using 2s delays between messages', {
-            totalMessages: messages.length,
-            immediateMessage: messages[0].length,
-            delayedMessages: messages.length - 1,
-            delays: followups.map((f, idx) => `${idx + 2}s`).join(', '),
-            tone: conversationalResponse.conversationTone
-          })
-        } else {
-          // Normal behavior: send first message now; schedule remaining with simple delays
-          replyText = messages[0]
-          const remaining = messages.slice(1)
-          if (remaining.length > 0) {
-            // Schedule remaining messages with 2-second delays (simplified approach)
-            for (let i = 0; i < remaining.length; i++) {
-              followups.push({
-                text: remaining[i],
-                delaySec: (i + 1) * 2 // 2s, 4s, 6s delays
-              })
-            }
-          }
-          console.log('AI SMS | ✅ Multi-message followups scheduled', {
-            totalMessages: messages.length,
-            remaining: remaining.length,
-            delays: remaining.map((_, idx) => `${(idx + 1) * 2}s`).join(', ')
-          })
-        }
       } else {
         // Fallback if no messages (shouldn't happen)
         replyText = "I understand your question. How can I help you further?"
@@ -345,11 +298,7 @@ export class AgentRuntimeService {
             // User wants link but it's in cooldown - replace with cooldown message
             replyText = 'I sent your portal link recently. Would you like me to resend it, or answer anything else first?'
             
-            // Remove placeholder from follow-ups
-            followups = followups.map(f => ({
-              ...f,
-              text: f.text.replace(/\[link placeholder\]/g, '')
-            })).filter(f => f.text.trim().length > 0)
+            // Single message mode - no followups to process
             
           } else {
             // User has given consent, generate actual magic link and replace placeholder
@@ -366,11 +315,7 @@ export class AgentRuntimeService {
             // Replace [link placeholder] with the actual generated magic link
             replyText = replyText.replace(/\[link placeholder\]/g, formattedUrl)
             
-            // Replace placeholder in follow-ups too (remove placeholder since link is in first message)
-            followups = followups.map(f => ({
-              ...f,
-              text: f.text.replace(/\[link placeholder\]/g, '')
-            }))
+            // Single message mode - link is integrated into the single message
             
             // Also replace in any SMS actions that might contain the placeholder
             actions = actions.map(action => {
@@ -394,11 +339,7 @@ export class AgentRuntimeService {
           replyText = replyText.replace(/\[link placeholder\]/g, '')
           replyText += ` ${conversationalResponse.linkOffer || 'Would you like me to send your secure portal link?'}`
           
-          // Remove placeholder from follow-ups
-          followups = followups.map(f => ({
-            ...f,
-            text: f.text.replace(/\[link placeholder\]/g, '')
-          })).filter(f => f.text.trim().length > 0)
+          // Single message mode - all content is in one unified message
         }
         
       } else if (consentStatus.hasConsent && userCtx.found && userCtx.userId && !hasLinkPlaceholder) {
@@ -423,14 +364,14 @@ export class AgentRuntimeService {
         replyText += ` ${conversationalResponse.linkOffer}`
       }
       
-      // Process AI-decided actions using the action registry
+      // Process AI-decided actions using the action registry (immediate execution)
       if (conversationalResponse.actions) {
         await this.executeAIActions(
           conversationalResponse.actions,
           input.fromPhone,
           userCtx,
           actions,
-          followups
+          [] // No follow-ups in immediate system
         )
       }
 
@@ -556,14 +497,8 @@ export class AgentRuntimeService {
         replyText = parsed.reply.trim()
       }
         
-      // Collect optional messages for follow-ups
-      if (Array.isArray(parsed?.messages)) {
-        type PlannedMsg = { text?: string; send_after_seconds?: number }
-        followups = (parsed.messages as PlannedMsg[])
-          .slice(1) // first message corresponds to reply
-          .map((m: PlannedMsg) => ({ text: String(m.text || '').trim(), delaySec: typeof m.send_after_seconds === 'number' ? m.send_after_seconds : undefined }))
-          .filter((m: { text: string; delaySec?: number }) => m.text)
-      }
+      // Single message mode - no multi-message followups needed
+      // All actions execute immediately
         
       } catch (error) {
         // If JSON parsing fails, degrade gracefully
@@ -648,68 +583,11 @@ export class AgentRuntimeService {
     // Record AI link actions for future intelligence
     await recordAILinkAction(input.fromPhone, personalized)
 
-    // Intelligent multi-turn conversation planning
-    if (isFeatureEnabled('CONVERSATION_PLANNING_ENABLED')) {
-      try {
-        console.log('AI SMS | 🧠 Planning multi-turn conversation sequence')
-        
-        const planningContext: PlanningContext = {
-          userMessage: input.message,
-          currentResponse: personalized,
-          userFound: userCtx.found,
-          userName: userCtx.firstName,
-          queueType: userCtx.queueType || undefined,
-          recentMessages
-        }
-        
-        const conversationPlan = await conversationPlanner.planConversation(
-          input.fromPhone,
-          planningContext
-        )
-        
-        if (conversationPlan) {
-          await conversationPlanner.executePlan(
-            input.fromPhone,
-            conversationPlan,
-            userCtx.firstName,
-            userCtx.found
-          )
-          
-          console.log('AI SMS | ✅ Executed conversation plan:', {
-            planId: conversationPlan.planId,
-            goal: conversationPlan.goal,
-            strategy: conversationPlan.strategy,
-            messagesScheduled: conversationPlan.messages.length
-          })
-        } else {
-          console.log('AI SMS | ℹ️ No conversation plan needed for this turn')
-        }
-      } catch (error) {
-        console.error('AI SMS | ❌ Error in conversation planning:', error)
-      }
-    } else {
-      console.log('AI SMS | ⚠️ Conversation planning disabled by feature flag')
-    }
+    // Intelligent multi-turn conversation planning (disabled - immediate responses only)
+    console.log('AI SMS | ℹ️ Conversation planning disabled - using immediate response system')
     
-    // Handle legacy followups if they still exist or if planning is disabled
-    // Schedule any follow-ups that were queued during response generation
-    // Skip Redis scheduling in testing mode since we handle them directly
-    const isTestingMode = process.env.AI_SMS_IMMEDIATE_MULTIMSGS === 'true'
-    if (!isTestingMode) {
-      try {
-        // Ensure any leftover placeholders are removed and no duplicate offers are added
-        const legacyPersonalize = createLegacyPersonalizeFunction()
-        for (let i = 0; i < followups.length; i++) {
-          const f = followups[i]
-                  const cleaned = String(f.text || '')
-          .replace(/\[link placeholder\]/g, '') // no dead placeholders in queued texts
-          .replace(/\s+/g, ' ')
-          .trim()
-          if (!cleaned) continue
-          await scheduleFollowup(input.fromPhone, { text: legacyPersonalize(cleaned, userCtx.firstName, userCtx.found), delaySec: f.delaySec || 120 })
-      }
-    } catch {}
-    }
+    // REMOVED: Legacy follow-up scheduling code - all messages sent immediately
+    console.log('AI SMS | ✅ All actions execute immediately (follow-up service removed)')
 
     // Update short-term conversation summary (very lightweight heuristic)
     try {
@@ -764,7 +642,8 @@ export class AgentRuntimeService {
       personalized = replyText || 'I\'m here to help with your claim. What can I assist you with?'
     }
     
-    return { reply: { text: personalized }, actions, idempotencyKey, followups }
+    // REMOVED: followups field from return - immediate response system only
+    return { reply: { text: personalized }, actions, idempotencyKey }
   }
 
   async getUserSignalsForRouting(fromPhone: string) {
@@ -773,23 +652,23 @@ export class AgentRuntimeService {
     return {
       found: ctx.found,
       hasSignature,
-      pendingRequirements: ctx.pendingRequirements || 0
+      pendingRequirements: ctx.pendingRequirementTypes?.length || 0
     }
   }
 
   /**
-   * Execute AI-decided actions using the action registry
+   * Execute AI-decided actions immediately (no scheduling)
    */
   private async executeAIActions(
     aiActions: Array<{
-      type: 'send_magic_link' | 'send_portal_link' | 'send_review_link' | 'schedule_followup' | 'none'
+      type: 'send_magic_link' | 'send_portal_link' | 'send_review_link' | 'schedule_followup' | 'schedule_callback' | 'none'
       reasoning: string
       confidence: number
     }>,
     phoneNumber: string,
     userCtx: any,
     actions: AgentAction[],
-    followups: Array<{ text: string; delaySec?: number }>
+    followups: Array<{ text: string; delaySec?: number }> // Kept for compatibility but unused
   ): Promise<void> {
     
     const executionContext: ActionExecutionContext = {
@@ -801,19 +680,19 @@ export class AgentRuntimeService {
         found: userCtx.found
       },
       conversationContext: {
-        reasoning: 'AI conversational decision',
+        reasoning: 'AI immediate decision',
         confidence: 0.8
       }
     }
 
     for (const actionDecision of aiActions) {
       try {
-        console.log(`AI SMS | 🎯 Executing AI action: ${actionDecision.type}`, {
+        console.log(`AI SMS | 🎯 Executing AI action immediately: ${actionDecision.type}`, {
           reasoning: actionDecision.reasoning,
           confidence: actionDecision.confidence
         })
 
-        // Execute action through registry
+        // Execute action through registry (immediate execution)
         const result = await actionRegistry.execute(
           actionDecision.type,
           executionContext,
@@ -824,29 +703,8 @@ export class AgentRuntimeService {
         )
 
         if (result.success) {
-          // Convert registry results to legacy actions for backward compatibility
-          if (actionDecision.type === 'send_magic_link' || actionDecision.type === 'send_portal_link') {
-            if (userCtx.found && userCtx.userId) {
-              actions.push({
-                type: 'send_magic_link',
-                userId: userCtx.userId,
-                phoneNumber: phoneNumber,
-                linkType: 'claimPortal'
-              })
-            }
-          } else if (actionDecision.type === 'send_review_link') {
-            actions.push({
-              type: 'send_review_link',
-              phoneNumber: phoneNumber
-            })
-          } else if (actionDecision.type === 'schedule_followup') {
-            followups.push({
-              text: "Hope you're doing well! Any questions about your motor finance claim?",
-              delaySec: 24 * 60 * 60 // 24 hours
-            })
-          }
-
-          console.log(`AI SMS | ✅ Action executed successfully: ${actionDecision.type}`, {
+          // All actions execute immediately - no follow-up scheduling needed
+          console.log(`AI SMS | ✅ Action executed immediately: ${actionDecision.type}`, {
             trackingId: result.trackingId,
             reasoning: result.reasoning
           })

@@ -623,9 +623,13 @@ export function CallInterface({
   }, [isInCall, wasInCall, callStatus?.state, showOutcomeModal]);
 
   const handleMakeCall = async () => {
-    // Prevent double-clicking during call initiation
-    if (isInitiatingCall) {
-      console.log('🚫 Call already in progress, ignoring duplicate click');
+    // Enhanced safeguards: Prevent clicking during any phase of call process
+    if (isInitiatingCall || callStatus?.state === 'connecting' || isInCall) {
+      console.log('🚫 Call process already in progress, ignoring duplicate click', {
+        isInitiatingCall,
+        callState: callStatus?.state,
+        isInCall
+      });
       return;
     }
     
@@ -651,21 +655,44 @@ export function CallInterface({
         }
       });
       
-      console.log('✅ Twilio call initiated - database session will be created when call connects');
+      console.log('✅ Twilio call initiated successfully - will create DB session when call connects');
+      
+      // Show connecting status to user
+      toast({
+        title: "Call Connecting",
+        description: "Please wait while we connect your call...",
+      });
       
       // Note: Database session creation now happens in the useEffect when call connects
       // This prevents orphaned sessions for failed/unanswered calls
       
     } catch (error: any) {
       console.error('❌ Failed to start Twilio call:', error);
+      
+      // Enhanced error handling with specific error types
+      let errorMessage = "Could not start call";
+      if (error.message?.includes('device not ready')) {
+        errorMessage = "Device not ready - please refresh and try again";
+      } else if (error.message?.includes('permission')) {
+        errorMessage = "Microphone permission required for calls";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Call Failed",
-        description: error.message || "Could not start call",
+        description: errorMessage,
         variant: "destructive"
       });
+      
+      // Ensure no stale connecting state on error
+      // The Twilio hook should handle this, but extra safety
+      console.log('🧹 Ensuring clean state after call failure');
+      
     } finally {
       // Always reset loading state, regardless of success or failure
       setIsInitiatingCall(false);
+      console.log('🔄 Call initiation state reset');
     }
   };
 
@@ -1302,7 +1329,7 @@ export function CallInterface({
                 {!isInCall ? (
                   <Button
                     onClick={handleMakeCall}
-                    disabled={!isReady || isInitiatingCall}
+                    disabled={!isReady || isInitiatingCall || callStatus?.state === 'connecting'}
                     size="xl"
                     responsive="nowrap"
                     className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
@@ -1311,6 +1338,11 @@ export function CallInterface({
                       <>
                         <Loader2 className="w-6 h-6 mr-2 flex-shrink-0 animate-spin" />
                         Starting Call...
+                      </>
+                    ) : callStatus?.state === 'connecting' ? (
+                      <>
+                        <Loader2 className="w-6 h-6 mr-2 flex-shrink-0 animate-spin" />
+                        Connecting...
                       </>
                     ) : (
                       <>

@@ -50,6 +50,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
             (op.direction === 'down' && op.result instanceof Error),
         }),
         unstable_httpBatchStreamLink({
+          // Use a simple relative URL - Next.js handles this correctly for both SSR and client
           url: '/api/trpc',
           headers() {
             const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null

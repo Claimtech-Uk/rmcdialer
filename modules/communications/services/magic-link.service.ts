@@ -100,7 +100,8 @@ export class MagicLinkService {
     const message = customMessage || this.buildMessage(
       options.linkType, 
       magicLink.shortUrl || magicLink.url, 
-      firstName
+      firstName,
+      options.agentId // Pass agentId to determine if this is AI or manual action
     );
 
     let deliveryResult: any;
@@ -494,13 +495,30 @@ export class MagicLinkService {
     return url.toString();
   }
 
-  private buildMessage(linkType: MagicLinkType, url: string, firstName?: string): string {
-    const name = firstName || 'there';
-    
+  private buildMessage(linkType: MagicLinkType, url: string, firstName?: string, agentId?: number): string {
     // Remove https:// prefix for cleaner SMS messages
     const cleanUrl = url.replace(/^https?:\/\//, '');
     
-    // Updated message format as requested
+    // AI actions: Simple functional format (no agentId means AI-triggered)
+    if (!agentId) {
+      switch (linkType) {
+        case 'claimPortal':
+          return `Portal link: ${cleanUrl}`;
+        case 'documentUpload':
+          return `Document upload link: ${cleanUrl}`;
+        case 'statusUpdate':
+          return `Status update link: ${cleanUrl}`;
+        case 'requirementReview':
+          return `Requirement review link: ${cleanUrl}`;
+        case 'profileUpdate':
+          return `Profile update link: ${cleanUrl}`;
+        default:
+          return `Link: ${cleanUrl}`;
+      }
+    }
+    
+    // Manual agent actions: Keep friendly personalized format
+    const name = firstName || 'there';
     return `Hi ${name},\n\nAccess your secure claim portal here:\n\n${cleanUrl}`;
   }
 
@@ -546,11 +564,23 @@ export class MagicLinkService {
     
     const smsService = new SMSService(smsServiceDeps);
     
+    // CRITICAL SEPARATION: Determine message type based on agent context
+    // Manual agent actions (from dialler) have agentId → use 'manual' → main number  
+    // AI agent actions (from AI system) have no agentId → use 'magic_link' → test number
+    const messageType = options.agentId ? 'manual' : 'magic_link';
+    
+    console.log('AI SMS | 🎯 Action separation applied', {
+      hasAgentId: !!options.agentId,
+      agentId: options.agentId,
+      messageType: messageType,
+      routingNote: messageType === 'manual' ? 'MAIN NUMBER (manual agent)' : 'TEST NUMBER (AI agent)'
+    });
+    
     try {
       const result = await smsService.sendSMS({
         phoneNumber,
         message,
-        messageType: 'magic_link',
+        messageType: messageType,
         agentId: options.agentId,
         userId: options.userId,
         callSessionId: options.callSessionId,

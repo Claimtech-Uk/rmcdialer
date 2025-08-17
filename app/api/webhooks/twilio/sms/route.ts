@@ -4,25 +4,9 @@ import { prisma } from '@/lib/db';
 import { replicaDb } from '@/lib/mysql';
 import { normalizePhoneNumber } from '@/modules/twilio-voice/utils/phone.utils';
 import { FEATURE_FLAGS } from '@/lib/config/features';
-import { SmsAgentService } from '@/modules/ai-agents';
-import { SMSService, MagicLinkService } from '@/modules/communications';
+import { SMSService } from '@/modules/communications';
 import { containsStopIntent } from '@/modules/ai-agents/core/guardrails'
-
-// Simple singleton for the SMS agent during runtime
-let smsAgentSingleton: SmsAgentService | null = null;
-function getSmsAgent(): SmsAgentService {
-  if (!smsAgentSingleton) {
-    smsAgentSingleton = new SmsAgentService(
-      new SMSService({
-        authService: { getCurrentAgent: async () => ({ id: 0, role: 'system' }) }
-      }),
-      new MagicLinkService({
-        authService: { getCurrentAgent: async () => ({ id: 0, role: 'system' }) }
-      })
-    );
-  }
-  return smsAgentSingleton;
-}
+// Using batch processing - messages are stored and processed by cron job
 
 // Twilio SMS Webhook Schema
 const TwilioSMSWebhookSchema = z.object({
@@ -71,6 +55,20 @@ export async function POST(request: NextRequest) {
     // Clean phone numbers (remove + prefix for consistency) and ensure we pass E.164 to lookup helpers
     const fromPhone = validatedData.From.replace(/^\+/, '');
     const toPhone = validatedData.To.replace(/^\+/, '');
+    
+    // Validate phone numbers to prevent NULL entries
+    if (!fromPhone || !toPhone) {
+      console.error('AI SMS | ❌ Invalid phone numbers received', {
+        from: validatedData.From,
+        to: validatedData.To,
+        fromCleaned: fromPhone,
+        toCleaned: toPhone
+      });
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Invalid phone numbers' 
+      }, { status: 400 });
+    }
 
     // Only allow AI SMS agent auto-replies on the designated test number
     const aiSmsTestNumberE164 = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
@@ -160,7 +158,8 @@ export async function POST(request: NextRequest) {
       // Handle STOP/UNSUBSCRIBE before any auto-reply
       const isStop = containsStopIntent(validatedData.Body)
 
-      // Create the SMS message
+      // Create the SMS message with ALL tracking fields populated
+      // Goal: Populate database fields that were added for SMS processing tracking
       const smsMessage = await prisma.smsMessage.create({
         data: {
           conversationId: conversation.id,
@@ -169,7 +168,13 @@ export async function POST(request: NextRequest) {
           twilioMessageSid: validatedData.MessageSid,
           isAutoResponse: false,
           receivedAt: new Date(),
-          messageType: validatedData.NumMedia && parseInt(validatedData.NumMedia) > 0 ? 'media' : 'text'
+          messageType: validatedData.NumMedia && parseInt(validatedData.NumMedia) > 0 ? 'media' : 'text',
+          // ✅ NEW: Database-first SMS processing tracking fields
+          processed: false,                    // Explicitly set - not processed yet
+          processedAt: null,                   // No processing timestamp yet
+          phoneNumber: conversationPhoneNumber, // Copy from conversation for indexing
+          userId: matchedUserId || null,       // Link to user if found
+          messageSid: validatedData.MessageSid // Use MessageSid for processing tracking
         }
       });
 
@@ -204,28 +209,58 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ message: 'STOP acknowledged', status: 'processed_stop' })
       }
 
-      // Fire AI SMS auto-reply only for the test number and when feature is enabled
+      // NEW: Batch-based AI SMS processing (prevents duplicate responses)
       if (FEATURE_FLAGS.ENABLE_AI_SMS_AGENT && isTestNumber) {
         try {
-          const agent = getSmsAgent();
-          void agent.handleInbound({
-            fromPhone: conversationPhoneNumber,
-            message: validatedData.Body,
-            userId: matchedUserId,
-            replyFromE164: aiSmsTestNumberE164
-          })
-          .then(() => {
-            console.log('AI SMS | 🤖 Agent dispatched', {
-              conversationId: conversation.id,
-              fromPhone: conversationPhoneNumber,
-              to: validatedData.From
-            })
-          })
-          .catch((agentError: any) => {
-            console.error('AI SMS | 🤖 Agent failed', agentError)
+          // Create batch ID using 15-second windows
+          // This groups rapid-fire messages together for single AI response
+          const batchId = `${conversationPhoneNumber}:${Math.floor(Date.now() / 15000)}`;
+          const batchTimestamp = new Date();
+          
+          console.log('AI SMS | 📦 Message added to batch', {
+            batchId,
+            from: validatedData.From,
+            conversationId: conversation.id,
+            messageSid: validatedData.MessageSid,
+            messagePreview: validatedData.Body.substring(0, 50),
+            batchWindow: '15 seconds'
           });
-        } catch (agentError) {
-          console.error('AI SMS | Agent invoke failed', agentError);
+          
+          // Update the message with batch information
+          await prisma.smsMessage.update({
+            where: { id: smsMessage.id },
+            data: {
+              batchId,
+              batchCreatedAt: batchTimestamp,
+              batchProcessed: false,
+              batchResponseSent: false
+            }
+          });
+          
+          // Create or update batch status (tracks processing state)
+          await prisma.smsBatchStatus.upsert({
+            where: { batchId },
+            create: {
+              batchId,
+              phoneNumber: conversationPhoneNumber,
+              messageCount: 1,
+              createdAt: batchTimestamp
+            },
+            update: {
+              messageCount: { increment: 1 }
+            }
+          });
+          
+          console.log('AI SMS | ✅ Message batched successfully', {
+            batchId,
+            info: 'Will be processed by cron job within 10-15 seconds'
+          });
+          
+        } catch (batchError) {
+          console.error('AI SMS | ❌ Batching failed', {
+            error: batchError instanceof Error ? batchError.message : batchError,
+            fallback: 'Message saved but may not be processed'
+          });
         }
       } else {
         console.log('AI SMS | ℹ️ Agent not triggered', {

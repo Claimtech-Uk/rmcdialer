@@ -523,11 +523,21 @@ export default function UserDetailPage() {
                   console.log('📞 Call completed:', outcome);
                   setShowCallInterface(false);
                   
-                  // Clear URL parameters
-                  const url = new URL(window.location.href);
-                  url.searchParams.delete('inbound_call');
-                  url.searchParams.delete('call_sid');
-                  window.history.replaceState({}, '', url.pathname + url.search);
+                  // Clear URL parameters safely
+                  try {
+                    if (typeof window !== 'undefined' && window.location?.href) {
+                      // Safer URL construction with validation
+                      const href = window.location.href;
+                      if (href && href !== 'null' && href.startsWith('http')) {
+                        const url = new URL(href);
+                        url.searchParams.delete('inbound_call');
+                        url.searchParams.delete('call_sid');
+                        window.history.replaceState({}, '', url.pathname + url.search);
+                      }
+                    }
+                  } catch (urlError) {
+                    console.warn('Failed to clear URL parameters:', urlError);
+                  }
                   
                   toast({
                     title: "Call Completed",

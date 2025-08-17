@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+// Force dynamic rendering to prevent static generation issues
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const hours = parseInt(searchParams.get('hours') || '24');
+    // Safely extract search params with validation
+    let hours = 24
+    
+    try {
+      const searchParams = request.nextUrl?.searchParams || new URLSearchParams()
+      hours = parseInt(searchParams.get('hours') || '24')
+    } catch (urlError) {
+      console.warn(`⚠️ [API] URL parsing failed, using defaults:`, urlError)
+    }
+    
     const since = new Date(Date.now() - hours * 60 * 60 * 1000);
     
     console.log(`📊 CALLBACK MONITORING - Last ${hours} hours`);

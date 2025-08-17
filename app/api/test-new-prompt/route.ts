@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildConversationalResponse } from '@/modules/ai-agents/core/conversational-response-builder'
 
+// Force dynamic rendering to prevent static generation issues
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   console.log('🧪 Testing new 3-part conversational response structure...')
   
   try {
-    const { searchParams } = new URL(request.url)
-    const message = searchParams.get('message') || 'What are your fees?'
-    const userName = searchParams.get('userName') || 'James'
+    // Safely extract search params with validation
+    let message = 'What are your fees?'
+    let userName = 'James'
+    
+    try {
+      const searchParams = request.nextUrl?.searchParams || new URLSearchParams()
+      message = searchParams.get('message') || 'What are your fees?'
+      userName = searchParams.get('userName') || 'James'
+    } catch (urlError) {
+      console.warn(`⚠️ [API] URL parsing failed, using defaults:`, urlError)
+    }
     
     console.log(`📝 Testing with message: "${message}" from user: "${userName}"`)
     

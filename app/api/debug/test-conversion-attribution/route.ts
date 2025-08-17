@@ -13,10 +13,17 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🧪 [DEBUG] Manual conversion attribution test starting...')
     
-    // Get query parameters for configuration
-    const url = new URL(request.url)
-    const dryRun = url.searchParams.get('dryRun') === 'true'
-    const hoursBack = parseInt(url.searchParams.get('hoursBack') || '1')
+    // Get query parameters for configuration with safe parsing
+    let dryRun = false;
+    let hoursBack = 1;
+    
+    try {
+      const url = new URL(request.url || 'http://localhost:3000');
+      dryRun = url.searchParams.get('dryRun') === 'true';
+      hoursBack = parseInt(url.searchParams.get('hoursBack') || '1');
+    } catch (urlError) {
+      console.warn('Failed to parse URL parameters, using defaults:', urlError);
+    }
     const batchSize = parseInt(url.searchParams.get('batchSize') || '50')
     
     console.log(`🔧 [DEBUG] Configuration: dryRun=${dryRun}, hoursBack=${hoursBack}, batchSize=${batchSize}`)

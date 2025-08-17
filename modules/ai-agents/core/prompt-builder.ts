@@ -89,9 +89,7 @@ export async function buildUserPromptIntelligent(input: {
   if (conversationContext?.userSentiment && conversationContext.userSentiment !== 'neutral') {
     lines.push(`User sentiment: ${conversationContext.userSentiment}`)
   }
-  if (conversationContext?.conversationPhase && conversationContext.conversationPhase !== 'discovery') {
-    lines.push(`Conversation phase: ${conversationContext.conversationPhase}`)
-  }
+  // Remove phase pre-determination - let AI assess journey stage naturally from conversation context
   
   // Add personalization context for smart name/link usage
   if (input.personalizationContext) {

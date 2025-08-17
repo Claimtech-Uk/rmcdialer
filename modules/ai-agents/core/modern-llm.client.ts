@@ -176,7 +176,7 @@ export async function modernChat(options: ModernChatOptions): Promise<ModernChat
       messages: options.messages,
       tools: options.tools,
       tool_choice: options.toolChoice || 'auto',
-      max_tokens: options.maxTokens || 500,
+      max_completion_tokens: options.maxTokens || 325,  // Optimal balance for SMS
       temperature: options.temperature || 0.1
     })
 

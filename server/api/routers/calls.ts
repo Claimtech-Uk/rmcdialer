@@ -789,15 +789,80 @@ export const callsRouter = createTRPCRouter({
         // Allow all agents to see full call history for better user context
         const filters = { ...input };
 
+        // Handle phone number search first if provided
+        let userIdsFromPhoneSearch: number[] | undefined;
+        if (filters.phoneNumber) {
+          console.log(`📞 Phone number search requested: "${filters.phoneNumber}"`);
+          const cleanPhone = filters.phoneNumber.replace(/\D/g, ''); // Remove non-digits
+          console.log(`📞 Cleaned phone pattern: "${cleanPhone}"`);
+          
+          if (cleanPhone.length >= 3) {
+            try {
+              const usersWithMatchingPhone = await replicaDatabaseCircuitBreaker.execute(
+                async () => {
+                  return await replicaDb.user.findMany({
+                    where: {
+                      AND: [
+                        {
+                          phone_number: {
+                            contains: cleanPhone // Use contains for partial matching
+                          }
+                        },
+                        {
+                          is_enabled: true
+                        }
+                      ]
+                    },
+                    select: {
+                      id: true
+                    },
+                    take: 100 // Limit results to prevent too many matches
+                  });
+                },
+                'callHistory.phoneNumberSearch'
+              );
+              
+              userIdsFromPhoneSearch = usersWithMatchingPhone.map(u => Number(u.id));
+              
+              // If no users found with this phone number, return empty result
+              if (userIdsFromPhoneSearch.length === 0) {
+                console.log(`📞 No users found matching phone pattern: ${cleanPhone}`);
+                return {
+                  calls: [],
+                  meta: {
+                    page: filters.page,
+                    limit: filters.limit || 50,
+                    total: 0,
+                    totalPages: 0
+                  }
+                };
+              }
+              
+              console.log(`📞 Found ${userIdsFromPhoneSearch.length} users matching phone pattern: ${cleanPhone}`);
+            } catch (error) {
+              console.warn('❌ Phone number search failed, proceeding without filter:', error);
+              // Continue without phone filter if search fails
+            }
+          } else {
+            console.log(`📞 Phone pattern too short, ignoring: ${cleanPhone}`);
+          }
+        }
+
         // Build where clause once so both findMany and count stay in sync
         const where: any = {
           ...(filters.agentId && { agentId: filters.agentId }),
-          ...(filters.userId && { userId: filters.userId }),
           ...(filters.startDate && { startedAt: { gte: filters.startDate } }),
           ...(filters.endDate && { startedAt: { lte: filters.endDate } }),
           ...(filters.status && { status: filters.status }),
           ...(filters.direction && { direction: filters.direction })
         };
+
+        // Handle user filtering - phone search takes precedence over explicit userId
+        if (userIdsFromPhoneSearch) {
+          where.userId = { in: userIdsFromPhoneSearch };
+        } else if (filters.userId) {
+          where.userId = filters.userId;
+        }
 
         // Outcome filter should return a page fully matching the outcome.
         // Prefer consolidated CallSession.lastOutcomeType, but fall back to CallOutcome relation

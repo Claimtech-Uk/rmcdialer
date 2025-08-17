@@ -1,7 +1,7 @@
 // Simplified conversational response builder with AI-controlled actions
 // Gives AI full autonomy to decide messages and actions naturally
 
-import { chat } from './llm.client'
+import { universalChat, type MultiProviderChatResult } from './multi-provider-llm.client'
 import { getConversationInsights, type ConversationInsights } from './memory.store'
 import { checkLinkConsent } from './consent-manager'
 import { FEATURE_FLAGS, isFeatureEnabled } from '../config/feature-flags'
@@ -16,15 +16,13 @@ export type SimplifiedAgentResponse = {
 }
 
 export type AgentActionWithReasoning = {
-  type: 'send_magic_link' | 'send_case_status_link' | 'send_document_upload_link' | 'send_review_link' | 'send_signup_link' | 'schedule_followup' | 'schedule_callback' | 'none'
-  reasoning: string          // Why this action was chosen
-  timing?: 'immediate' | 'after_messages'
+  type: 'schedule_callback' | 'none'  // Only callback remains as a true action
+  reasoning: string          // Why this action was chosen (links are handled in messages)
+  timing?: 'scheduled' | 'none'
   params?: {
-    userId?: number
     phoneNumber?: string
-    linkType?: 'claimPortal' | 'documentUpload'
-    delaySeconds?: number
-    message?: string
+    window?: string
+    reason?: string
   }
 }
 
@@ -43,6 +41,17 @@ export type SimplifiedResponseContext = {
     pendingRequirementTypes?: string[]
     primaryClaimStatus?: string
     claimLenders?: string[]
+    // ENHANCED: Claim-specific requirements grouped by lender
+    claimRequirements?: Array<{
+      claimId: number
+      lender: string
+      status: string
+      pendingRequirements: string[]
+    }>
+    // New fields for 7-step structure
+    claims?: Array<{ id: string, status: string, lender?: string }>
+    locale?: string
+    pii_risk?: boolean
   }
 }
 
@@ -66,7 +75,10 @@ export async function buildSimplifiedResponse(
     recentMessages: context.recentMessages
   })
 
-  const systemPrompt = buildIntelligentSystemPrompt(context, consentStatus, insights)
+  // Pre-generate links for the AI to use in messages
+  const links = await generateLinks(context)
+
+  const systemPrompt = buildIntelligentSystemPrompt(context, consentStatus, insights, links)
   const userPrompt = buildIntelligentUserPrompt(context, recentTranscript)
 
   try {
@@ -74,19 +86,20 @@ export async function buildSimplifiedResponse(
     const modelConfig = {
       system: systemPrompt,
       user: userPrompt,
-      model: process.env.AI_SMS_MODEL || 'gpt-4o-mini',
+      model: process.env.AI_SMS_MODEL || 'claude-sonnet-4-20250514',
       responseFormat: { type: 'json_object' as const }
     }
     
     // Enhanced logging for Phase 2 
     const estimatedTokens = (systemPrompt.length + userPrompt.length) / 4 // rough estimate
-    console.log('AI SMS | 🧠 Starting intelligent response generation', {
-      model: modelConfig.model,
+    console.log('AI SMS | 🧠 Starting Sonnet 4.0 response generation', {
+      requestedModel: modelConfig.model,
       estimatedInputTokens: Math.round(estimatedTokens),
       phase2Features: {
         fullKB: true,
         structuredPrompt: true,
-        enhancedTokenTracking: true
+        enhancedTokenTracking: true,
+        claudeUpgrade: true
       },
       promptSections: {
         systemPromptLength: systemPrompt.length,
@@ -95,34 +108,41 @@ export async function buildSimplifiedResponse(
       }
     })
     
-    const response = await chat(modelConfig)
+    // Use enhanced universal chat with Claude Sonnet 4.0 and fallback support
+    const chatResult: MultiProviderChatResult = await universalChat(modelConfig)
 
-    const parsed = JSON.parse(response || '{}') as SimplifiedAgentResponse
+    const parsed = JSON.parse(chatResult.content || '{}') as SimplifiedAgentResponse
     
     // Validate and enhance the response
-    const validatedResponse = validateAndEnhanceResponse(parsed, context)
+    const validatedResponse = validateAndEnhanceResponse(parsed, context, phoneNumber)
     
-    // Comprehensive success logging for monitoring
+    // Enhanced success logging with model details
     const successLog: any = {
       messageCount: validatedResponse.messages.length,
       actionCount: validatedResponse.actions.length,
       primaryAction: validatedResponse.actions[0]?.type || 'none',
-      reasoning: validatedResponse.reasoning?.substring(0, 100) + '...'
+      reasoning: validatedResponse.reasoning?.substring(0, 100) + '...',
+      // Enhanced tracking from universal chat
+      modelUsed: chatResult.modelUsed,
+      provider: chatResult.provider,
+      fallbacksUsed: chatResult.fallbacksUsed,
+      totalTime: chatResult.totalTime
     }
     
     // Add enhanced tracking if enabled
     if (FEATURE_FLAGS.ENHANCED_TOKEN_TRACKING) {
       successLog.tokenUsage = {
         estimatedInput: Math.round((systemPrompt.length + userPrompt.length) / 4),
-        estimatedOutput: Math.round((response?.length || 0) / 4),
-        estimatedCost: Math.round(((systemPrompt.length + userPrompt.length) / 4 * 0.15 + (response?.length || 0) / 4 * 0.60) / 1000000 * 100) / 100
+        estimatedOutput: Math.round((chatResult.content?.length || 0) / 4),
+        // Updated cost calculation for Claude Sonnet 4.0 (much cheaper!)
+        estimatedCost: Math.round(((systemPrompt.length + userPrompt.length) / 4 * 0.003 + (chatResult.content?.length || 0) / 4 * 0.015) / 1000 * 100) / 100
       }
     }
     
     // Knowledge base is now integrated directly into prompt structure
     // Legacy context.knowledgeContext is rarely used in simplified mode
     
-    console.log('AI SMS | ✅ Intelligent response generated', successLog)
+    console.log('AI SMS | ✅ Sonnet 4.0 response generated', successLog)
 
     return validatedResponse
 
@@ -157,385 +177,426 @@ export async function buildSimplifiedResponse(
   }
 }
 
-// Removed unused prepareKnowledgeBase() function - was dead code
-// Knowledge base is now integrated directly into the 6-step prompt structure
-
-// Build the structured 6-step decision process prompt
-function preparePromptStructure(existingPrompt: string, context: SimplifiedResponseContext): string {
-  console.log('AI SMS | 📝 Structured prompt - applying 6-step checklist format')
+// Generate pre-built links for the AI to include in messages
+async function generateLinks(context: SimplifiedResponseContext): Promise<{
+  portalLink: string | null
+  reviewLink: string | null
+  signupLink: string | null
+}> {
+  const baseUrl = process.env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk'
   
-  // Knowledge base injected directly into STEP 3 template
+  let portalLink = null
+  
+  // Generate portal link for existing users
+  if (context.userContext.found && context.userContext.userId) {
+    try {
+      // Generate a magic link token for this user
+      const { generateAIMagicLink } = await import('./ai-magic-link-generator')
+      const magicLink = generateAIMagicLink(context.userContext.userId)
+      portalLink = magicLink.url // Keep full URL with https:// for mobile compatibility
+    } catch (error) {
+      console.error('Failed to generate portal link:', error)
+      portalLink = null
+    }
+  }
+  
+  // Review link from environment
+  const reviewLink = process.env.TRUSTPILOT_REVIEW_URL || null
+  
+  // Signup link is just the base URL without magic token (keep https:// for mobile)
+  const signupLink = `${baseUrl}/claims`
+  
+  return {
+    portalLink,
+    reviewLink,
+    signupLink
+  }
+}
+
+// Build the structured 7-step deterministic decision process prompt
+function preparePromptStructure(existingPrompt: string, context: SimplifiedResponseContext): string {
+  console.log('AI SMS | 📝 Structured prompt - applying 6-step format with link integration')
+  
+  // Build enhanced context awareness section
+  const contextAwarenessSection = buildContextAwarenessSection(context)
   
   // Build logically structured prompt that follows the 6-step progression
   const structuredPrompt = `
-CRITICAL: Respond with valid JSON in the exact format specified in STEP 6.
-
-🎯 FOLLOW THIS 6-STEP DECISION PROCESS IN ORDER:
+CRITICAL: Return valid JSON that matches the Output Schema in STEP 6.
+Do not include explanations, system messages, or extra fields outside the schema.
 
 ═══════════════════════════════════════════════════════════════════════════════
-📋 STEP 1: ANALYZE CONVERSATION
+🔄 SEQUENTIAL EXECUTION PROTOCOL
+═══════════════════════════════════════════════════════════════════════════════
+
+Process each step in order: 1→2→3→4→5→6
+• Complete each step fully before moving to the next
+• Use each step's output as the next step's input  
+• Follow explicit redirects when a step instructs them (e.g., "skip to", "override", "clarity gate")
+• Never look ahead or revise earlier decisions
+
+═══════════════════════════════════════════════════════════════════════════════
+📌 INPUTS PROVIDED
 ═══════════════════════════════════════════════════════════════════════════════
 
 ${existingPrompt}
 
-💡 STEP 1 COMPLETE: You now understand the conversation context and user situation.
-   → PROCEED TO STEP 2
+${contextAwarenessSection}
 
 ═══════════════════════════════════════════════════════════════════════════════
-📋 STEP 2: UNDERSTAND THE REQUEST
+📋 STEP 1 — CONVERSATION ANALYSIS (produce a single mode)
 ═══════════════════════════════════════════════════════════════════════════════
 
-🔍 ANALYZE what the user really needs (may be multiple things):
+Analyze current_user_message in the context of conversation_history.
 
-🔍 INFORMATION SEEKING
-• Questions about fees, process, timelines, eligibility
-• "What", "How", "When", "Why" questions
-• Seeking clarity or understanding
+📝 Language: Mirror the user's language where possible.
 
-🛡️ CONCERNS OR OBJECTIONS  
-• Scam worries, DIY preference, not interested, court ruling concerns
-• Skeptical, hesitant, or pushback language
-• Underlying fears or doubts
+🔍 Clarity Check (CRITICAL GATE):
+• Unclear/gibberish/one-word message detected?
+  → Set mode = "needs_clarification"
+  → SKIP STEPS 2-6
+  → Go directly to Step 7 with clarification message
+• Clear intent → continue to classification below
 
-✅ READINESS TO PROCEED
-• "Yes", "send it", "ready", "go ahead", "let's do it"
-• Clear agreement to move forward
-• Action-oriented language
+📊 Classify mode (choose exactly ONE based on intent, not specific phrases):
+• action_request – user explicitly asks for/accepts an action or link (intent: requesting or accepting services)
+• info_request – seeking information/education (intent: questions starting with why/how/when/who/what about claims, process, fees, eligibility, etc.)
+• status_request – wants claim progress updates
+• satisfaction – expresses thanks/praise/positive milestone
+• objection – declines service or shows preference to self-service 
+• consent_needed – set by Step 3 when we need to offer before sending
+• needs_routing – mixed/complex intent that isn't clearly any above
+• needs_clarification – unclear/gibberish input requiring clarification
 
-❓ NEEDS CLARIFICATION
-• Unclear message, ambiguous intent
-• Multiple possible interpretations
-• Follow-up questions needed
+⚠️ Explicit consent rule: If mode === action_request, treat that as valid consent (skip consent checks later).
 
-💡 IMPORTANT: Many messages contain multiple elements (e.g., information request + underlying concern).
-   Consider ALL aspects when selecting knowledge in STEP 3.
-
-💡 STEP 2 COMPLETE: You understand what the user really needs.
-   → PROCEED TO STEP 3
+💡 Output of Step 1: a single mode
 
 ═══════════════════════════════════════════════════════════════════════════════
-📋 STEP 3: SELECT KNOWLEDGE
+📋 STEP 1B — OBJECTION DETECTION (if objection or concern detected)
 ═══════════════════════════════════════════════════════════════════════════════
 
-🧠 USE YOUR INTELLIGENT JUDGMENT - Select and combine the most relevant knowledge:
+If mode === "objection" OR user shows concern/objection, identify the type:
 
-📚 FACTS - Direct information about claims, process, timelines:
-${KB_SUMMARY.facts.map((fact: string, i: number) => `${i + 1}. ${fact}`).join('\n')}
+🧠 Objection Psychology Map:
+• legitimacyConcerns: (e.g., questions about authenticity, scams, company identity) → Address with FCA regulation
+• autonomyConcerns: (e.g., expressions of self-sufficiency or declining assistance) → Show value of finding old agreements
+• valueConcerns: (e.g., inquiries about pricing, fees, or value proposition) → Emphasize no-win-no-fee structure
+• timelineConcerns: (e.g., concerns about duration, delays, or waiting periods) → Set realistic expectations
+• newsHeadlineConcerns: (e.g., references to Supreme Court ruling or claims being dead) → Clarify DCA still valid
 
-💼 BENEFITS - Value propositions and advantages of our service:
-${KB_SUMMARY.benefits.map((benefit: string, i: number) => `${i + 1}. ${benefit}`).join('\n')}
+📝 Quick Response Patterns:
+${Object.entries(KB_SUMMARY.objectionQuickResponses || {}).slice(0, 4).map(([key, response]) => 
+  `• ${key}: "${response.substring(0, 80)}..."`
+).join('\n')}
 
-🎯 OBJECTION PSYCHOLOGY - Understand and address concerns naturally:
+🎯 If objection detected, apply LAARC-Lite in Step 6:
+1. ACKNOWLEDGE: Show genuine understanding of their concern
+2. ADDRESS: Use relevant facts + the linkedBenefit from the KB section
+3. GUIDE: Offer a soft next step, not a pushy directive
 
-PSYCHOLOGY FRAMEWORK:
-• Understand emotional and logical drivers behind each objection
-• Address the underlying psychology naturally using facts and benefits  
-• Adapt your approach to their communication style and energy
-• No rigid scripts - use your conversational intelligence
-
-CORE OBJECTION PSYCHOLOGIES:
-• LEGITIMACY CONCERNS: Fear of scams → Validate caution, provide verification (FCA regulation, Prowse Phillips Law)
-• AUTONOMY CONCERNS: "I'll do it myself" → Respect capability, highlight practical challenges  
-• VALUE CONCERNS: "Is it worth it?" → Acknowledge practical mindset, clarify no-win-no-fee value
-• TIMELINE CONCERNS: "Takes too long" → Empathize with frustration, provide realistic expectations
-• NEWS CONCERNS: Supreme Court confusion → Acknowledge confusing coverage, clarify current status
-
-INTELLIGENT RESPONSE APPROACH:
-• Acknowledge their concern as valid and smart
-• Address the underlying fear/need, not just surface objection
-• Use relevant facts/benefits to build confidence naturally
-• Guide toward next steps when conversation context supports it
-• Craft original responses - no templates or repeated phrases
-
-COMPLIANCE REQUIREMENTS:
-• No outcome guarantees • No legal/financial advice • Keep PII in portal • Respect consent/cooldowns
-
-💡 KNOWLEDGE SELECTION STRATEGY:
-• Choose the most relevant information for THIS specific user and situation
-• Combine different knowledge types if that creates a better response
-• Consider both explicit questions AND underlying concerns
-• Match the depth of response to the user's demonstrated knowledge level
-• Prioritize information that moves the conversation toward conversion
-• ALWAYS verify accuracy - use only factual information from the knowledge base
-• If unsure about any detail, stick to what's explicitly stated in the facts
-
-🔒 COMPLIANCE RULES (ALWAYS FOLLOW):
-• No guarantees or promises of specific outcomes
-• No legal or financial advice
-• Keep PII discussions in portal
-• Ask permission before sending links
-• ENSURE nothing goes against the facts - all information must be accurate and consistent with knowledge base
-
-💡 STEP 3 COMPLETE: You've intelligently selected the most relevant knowledge.
-   → PROCEED TO STEP 4
+💡 Output of Step 1B: objection_type (if detected) or null
 
 ═══════════════════════════════════════════════════════════════════════════════
-📋 STEP 4: CHOOSE ACTION
+📋 STEP 2 — BUSINESS PRIORITY (deterministic lane selection)
 ═══════════════════════════════════════════════════════════════════════════════
 
-🎯 INTELLIGENT ACTION DECISION based on STEP 1 context and STEP 2 understanding:
+Choose the business lane BEFORE reading knowledge.
 
-⚠️ CRITICAL: Choose exactly ONE action. Multiple actions cause system conflicts.
+🚨 CRITICAL OVERRIDE - OBJECTION:
+If mode === "objection" → lane = "none" → NO ACTIONS ALLOWED
+⛔ User is declining service - respect autonomy completely - answer only, no offers/links
 
-🔍 FIRST PRIORITY CHECK - USER EXISTENCE:
+🔐 Authorization / Risk Gate (override):
+• If userContext.found === false → only send_signup_link is eligible (for interest in services) or none
+• If userContext.pii_risk === true → prefer schedule_callback (security concern acknowledged)
 
-🆔 SEND_SIGNUP_LINK when:
-• User is NOT found in system (userContext.found = false)
-• User asks about claims, process, eligibility, or shows interest in services
-• First-time interactions with unknown users
-• CRITICAL: This is the ONLY action allowed for unknown users - no other actions permitted
+📊 Enhanced Priority Matrix with Stage Intelligence (first match wins):
 
-🚨 UNKNOWN USER RESTRICTION:
-• If userContext.found = false, you can ONLY choose SEND_SIGNUP_LINK or NONE
-• NO magic links, case status, document uploads, reviews, or callbacks for unknown users
-• They must register first before accessing any other services
+1. UNSIGNED STAGE: if hasSignature === false → lane = "signature"
+   why: "We need your signature to run a soft credit check, and investigate your claims"
+   whatWeNeed: "signature + photo ID if availible"
+   completionPromise: "Once you've signed and uploaded your ID, we'll investigate all your agreements for multiple claim types"
+   supportOffer: "If you have trouble with the portal, just reply and I'll guide you through it"
 
-═══════════════════════════════════════════════════════════════════════════════
+2. REQUIREMENTS STAGE: if pendingRequirementTypes.length > 0 → lane = "requirements"
+   why: "We need additional evidence to help us investigate your claims"
+   whatWeNeed: "[Dynamic based on pendingRequirementTypes]"
+   completionPromise: "Once you've uploaded [specific requirements], we'll fast-track your case to our legal team"
+   supportOffer: "If you can't provide the requirements, let me know and we'll work through it together."
 
-📋 FOR EXISTING USERS ONLY (userContext.found = true):
+3. STATUS STAGE: if user asks for updates and account is up to date → lane = "status"
+   why: "Your case is actively being processed - we're handling all lender communications"
+   completionPromise: "we'll keep you updated with any progress"
+   supportOffer: "If you have any questions about the process, I'm here to help"
 
-🚨 CRITICAL CONSENT-FIRST RULE FOR ALL LINK ACTIONS:
-📋 CHECK PREVIOUS MESSAGES FIRST:
-• Did you offer this specific link in your previous messages?
-  → NO: You must OFFER the link in your message, not send it
-  → YES: You can send the link if user shows positive readiness
+4. SATISFACTION STAGE: if positive milestone/thanks → lane = "review"
+   why: "You've achieved a great result - help others by sharing your experience"
+   completionPromise: "Your review helps other people understand what to expect from the process"
+   supportOffer: "If you're not sure what to write, I can suggest some key points to cover"
 
-🔗 SEND_MAGIC_LINK when:
-• You offered a portal link in your last message AND user shows clear positive response
-• User explicitly asks to "send", "resend", or "get" the portal link
-• Only if no actual portal URL was sent recently (check STEP 1 conversation history)
+5. Support priority: if complexity or explicit human help requested → lane = "support"
+6. None: if questions must be answered first or trust-building needed → lane = "none"
 
-📋 SEND_CASE_STATUS_LINK when:
-• You offered a case status link in your last message AND user shows positive response
-• User explicitly says they want to check their status after you offered
-• Clear follow-up to a previous offer, not first-time questions
-
-📤 SEND_DOCUMENT_UPLOAD_LINK when:
-• You offered a document upload link in your last message AND user shows positive response  
-• User says they want to upload, submit, or send documents after you offered
-• User confirms they have documents ready after you offered the upload option
-• NOT for questions about what documents are needed (that's information, not action)
-
-⭐ SEND_REVIEW_LINK when:
-• User has shown a positive response AND no other link is required
-• User expresses genuine satisfaction, gratitude, or positive feedback about the service
-• User just completed a positive milestone (signed up, uploaded docs, etc.) AND shows appreciation
-• You offered a review link in your last message AND user shows positive response
-
-📞 SCHEDULE_CALLBACK when:
-• User explicitly requests a callback ("Can someone call me?", "I'd like a callback", "Please call me back")
-• User says they prefer phone calls over text messages
-• User mentions they're available at specific times for a call
-• Complex issues that would be better resolved over the phone
-
-🚫 NONE for all other scenarios:
-• User has questions that need answering first
-• User has concerns or objections to address
-• User needs clarification or more information
-• Building trust and rapport is needed
-• You're offering to send a link (asking permission)
-
-
-
-💡 STEP 4 COMPLETE: You've chosen the appropriate action based on user readiness.
-   → PROCEED TO STEP 5
+💡 Output of Step 2: a single lane (signature|requirements|status|review|support|none)
 
 ═══════════════════════════════════════════════════════════════════════════════
-📋 STEP 5: CRAFT MESSAGE
+📋 STEP 3 — CONSENT VALIDATION (gate actions unless explicit)
 ═══════════════════════════════════════════════════════════════════════════════
 
-👋 NOW become Sophie from RMC, helping with motor finance claims (PCP, HP, car loans).
+Execute only if mode ∉ {"action_request"} (action_request = automatic consent).
 
-Using knowledge from STEP 3 and action from STEP 4, craft your message as Sophie:
+🔍 Analyze conversation_history[-1] for offer detection:
+• If we offered in last message → check current response for acceptance/refusal
+• Track offer type for appropriate follow-up
 
-📝 MESSAGE STRUCTURE & FORMAT:
+📊 If last_offer exists:
+• Positive acceptance (clear agreement intent) → consent = true
+• Refusal/objection → mode = objection, consent = false  
+• Unclear/no response to offer → mode = info_request, consent = false (answer their topic; do not push)
 
-🔄 FOR OBJECTIONS - Use LAARC-LITE format:
-1. **Listen/Acknowledge**: Show understanding of their concern
-2. **Align/Ask**: Brief empathy or clarifying question if needed
-3. **Respond**: Provide 1 key benefit/fact from STEP 3 knowledge
-4. **Confirm**: Strong conversion-focused next step
+📊 If no last_offer:
+• If userContext.linkCooldownActive === true → consent = false, mode = "consent_needed"
+• Else if mode === "info_request" AND business lane requires action → consent = false, mode = "consent_needed" (must offer first)
+• Else if mode ∈ {"status_request", "satisfaction"} → consent = true (these can proceed directly)
+• Else → consent = false, mode = "consent_needed" (default: offer before action)
 
-
-📋 FOR INFORMATION REQUESTS - Use ANSWER + VALUE ADD + CTA format:
-1. **Answer**: Direct response using facts from STEP 3
-2. **Value Add**: Include 1 relevant benefit that enhances the answer
-3. **CTA**: Strong conversion-focused call-to-action
-
-📝 GENERAL MESSAGE REQUIREMENTS:
-• Use warm, professional tone with their name: ${context.userName || 'there'}
-• Use name sparingly - once at greeting, avoid overuse
-• NEVER repeat same information within response  
-• 1-3 messages based on complexity
-• Be natural and conversational as Sophie
-• ENSURE you have not repeated yourself (check for duplicate information)
-• ENSURE no profanity or inappropriate language
-
-📱 MESSAGE FORMATTING:
-• Add line breaks for readability: "Hi [Name],\n\n[main content]\n\n[closing]"
-• Use double line breaks (\n\n) between logical sections for mobile-friendly reading
-• Keep paragraphs concise and scannable
-• CRITICAL: When providing numbered or bulleted lists, start each item on a new line:
-  ❌ BAD: "1. First item. 2. Second item. 3. Third item."
-  ✅ GOOD: "1. First item.\n\n2. Second item.\n\n3. Third item."
-• Use approved emojis naturally when they enhance communication
-  Available palette: ✅ ☑️ ✔️ 👍 🎉 💪 🙌 ⭐ 🔒 🛡️ 🔐 🏦 📋 💼 📄 📝 📊 📞 💬 📲 📧 ⏱️ ⏰ 📅 🔄 ➡️ 🚀 ❓ ❗ 💭 💡 🤔 😊 👋 ☺️
-
-🎯 NATURAL CONVERSATION ENDINGS:
-• Let your response flow naturally based on the adaptive user journey intelligence from STEP 1
-• Trust the context awareness - your ending should feel organic to the conversation
-• If your response naturally includes a question or direction, that's perfect
-• Only add explicit next steps when the conversation lacks clear direction
-
-❌ AVOID GENERIC ENDINGS:
-• "let me know", "any questions?", "more information", "how can I help"
-• Forced or robotic-sounding phrases that don't match conversation flow
-
-💡 STEP 5 COMPLETE: You've crafted your response messages.
-   → PROCEED TO STEP 6
+💡 Output of Step 3: consent = true|false AND potentially updated mode
+Note: If consent === false, mode should be "consent_needed" and action will be none (offer in message instead).
 
 ═══════════════════════════════════════════════════════════════════════════════
-📋 STEP 6: VALIDATE & FORMAT
+📋 STEP 4 — KNOWLEDGE SELECTION
 ═══════════════════════════════════════════════════════════════════════════════
 
-✅ FINAL VALIDATION CHECKLIST:
-□ Action from STEP 4 matches message intent and user readiness
-□ Message uses most relevant knowledge from STEP 3 intelligently
-□ Response addresses what the user really needs from STEP 2
-□ Conversation context from STEP 1 is acknowledged and built upon
-□ Compliance rules followed (no promises/guarantees)
-□ Natural conversation flow with appropriate next steps (if action = none)
-□ Professional yet natural tone with user's name
-□ NO repetition of information within response
-□ NO profanity or inappropriate language used
-□ Response feels natural and human, not templated or robotic
-□ NOTHING contradicts or goes against the facts from the knowledge base
+📚 KNOWLEDGE BASE (select relevant facts naturally):
 
-🔍 ACTION PRIORITY VALIDATION:
-□ Is this action definitely required right now?
-□ Are there more important actions the user needs first?
-□ For SEND_REVIEW_LINK specifically: Is this a good time to offer the review link?
-  • Has user completed their primary goal (signing, uploading docs)?
-  • Are they expressing genuine satisfaction?
-  • Would a portal/document link be more valuable right now? or has it been sent recently? 
-  • Is this the natural flow moment for feedback?
+${JSON.stringify(KB_SUMMARY, null, 2)}
 
-🎯 REQUIRED JSON OUTPUT FORMAT:
+💡 Output of Step 4: Select relevant knowledge for your response
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 STEP 5 — WRITE THE MESSAGE (with link integration)
+═══════════════════════════════════════════════════════════════════════════════
+
+You've made all decisions. Now write Sophie's response using what you determined:
+• Mode from Step 1
+• Business lane from Step 2
+• Consent status from Step 3
+• KB facts from Step 4
+
+🔗 Link Inclusion Rules (based on lane + consent):
+• Lane "signature|requirements|status" + consent === true → Include portal_link in message
+• Lane "review" + consent === true → Include review_link in message
+• Lane "none" + userContext.found === false + interest shown → Include signup_link
+• Mode "consent_needed" → OFFER links but don't include them yet
+• Mode "objection" → NEVER include or offer any links
+
+
+
+📝 Structured Block Message Format by Mode:
+
+🎭 Sophie's voice: Professional pcp claims advisor, warm, friendly, likeable. Use natural language within each block.
+
+info_request/consent_needed:
+(Greeting if first) + (FIRST: Answer their specific questions completely using KB facts) + \\n\\n + (THEN: Stage.why + Stage.completionPromise from stage intelligence) + \\n\\n + (FINALLY: Link offer based on consent rules)
+
+action_request:
+(Confirmation acknowledgment) + \\n\\n + (Include relevant link) + \\n\\n + (Stage.completionPromise) + \\n\\n + (Stage.supportOffer)
+
+objection:
+(Acknowledge their concern genuinely) + \\n\\n + (Objection-specific benefit addressing their worry) + \\n\\n + (Respect their autonomy - no pressure)
+⛔ NEVER include or offer links when objection detected
+
+status_request:
+(Direct status response) + \\n\\n + (Stage.completionPromise if applicable) + \\n\\n + (Include portal link if consent allows)
+
+satisfaction:
+(Thank them for positive feedback) + \\n\\n + (Stage.completionPromise for reviews) + \\n\\n + (Include review link if appropriate)
+
+📱 Format: 
+• Use double line breaks (\\n\\n) between paragraphs and sentences for mobile readability. 
+• Max 900 chars total. 
+• use emojis where appropriate. 
+• add a line break (\\n\\n) before the closing statement or question.
+
+🚨 CRITICAL PRIORITY: 
+For info_request modes, you MUST answer their specific questions FIRST before discussing what you need from them. Questions come before requirements, always.
+
+
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 STEP 6 — OUTPUT JSON
+═══════════════════════════════════════════════════════════════════════════════
+
+Trust your work from Steps 1-5. Simply format as JSON.
+
+⚡ CLARITY GATE SHORTCUT:
+If mode = "needs_clarification" from Step 1:
+→ Output: { "messages": ["Could you tell me more about what you need help with?"], 
+           "actions": [{ "type": "none", "reasoning": "Unclear input - requesting clarification" }],
+           "conversationTone": "helpful" }
+
+🎯 OUTPUT SCHEMA (return ONLY this JSON):
 {
-  "messages": ["message1", "message2?"],
+  "messages": ["single_unified_message_with_links_included"],
   "actions": [{
-    "type": "send_magic_link|send_case_status_link|send_document_upload_link|send_review_link|send_signup_link|schedule_callback|none",
-    "reasoning": "Why you chose this action (reference steps 1-4)",
-    "timing": "immediate", 
+    "type": "schedule_callback|none",
+    "reasoning": "Only callbacks remain as actions - links are handled in messages",
+    "timing": "scheduled|none",
     "params": {}
   }],
   "conversationTone": "helpful|reassuring|informative|encouraging",
-  "reasoning": "Your overall strategy (reference your 6-step process)"
-}
-
-CRITICAL: Only return ONE action. Multiple actions will cause system conflicts.
-
-Be intelligent, natural, and conversion-focused.`
+  "reasoning": "Mode: [step1_mode], Lane: [step2_lane], Consent: [step3_consent]"
+}`
   
   return structuredPrompt
+}
+
+// Helper function to detect if we offered a link/action in the last message
+function detectLastOffer(lastMessage: any): any {
+  if (!lastMessage || lastMessage.direction !== 'outbound') {
+    return null
+  }
+  
+  const body = lastMessage.body.toLowerCase()
+  
+  // Check for common offer patterns
+  if (body.includes('should i send') || body.includes('can i send') || body.includes('would you like me to send')) {
+    if (body.includes('portal') || body.includes('link')) {
+      return { type: 'magic_link', timestamp: new Date().toISOString() }
+    }
+    if (body.includes('upload') || body.includes('document')) {
+      return { type: 'document_upload_link', timestamp: new Date().toISOString() }
+    }
+    if (body.includes('status') || body.includes('update')) {
+      return { type: 'case_status_link', timestamp: new Date().toISOString() }
+    }
+    if (body.includes('review') || body.includes('trustpilot')) {
+      return { type: 'review_link', timestamp: new Date().toISOString() }
+    }
+    if (body.includes('call') || body.includes('callback')) {
+      return { type: 'callback', timestamp: new Date().toISOString() }
+    }
+  }
+  
+  return null
 }
 
 function buildIntelligentSystemPrompt(
   context: SimplifiedResponseContext, 
   consentStatus: any, 
-  insights: ConversationInsights | null
+  insights: ConversationInsights | null,
+  links: { portalLink: string | null, reviewLink: string | null, signupLink: string | null }
 ): string {
   // Removed pre-assessment - let AI determine readiness naturally through conversation analysis
   
-  // Knowledge base now integrated directly into STEP 3 of the structured prompt
+  // Knowledge base now integrated directly into STEP 5 of the structured prompt
   
-  const currentPrompt = `�� CONVERSATION ANALYSIS - Study these details:
+  // Build conversation transcript for embedding in STEP 1
+  const conversationTranscript = context.recentMessages
+    .slice(-6)
+    .map(m => `${m.direction === 'inbound' ? 'User' : 'Sophie'}: ${m.body}`)
+    .join('\n')
 
-📞 CUSTOMER INFORMATION:
-• Name: ${context.userName || 'Customer'}
-• Status: ${context.userStatus || 'Unknown'}
-• Message Count: ${insights?.messageCount || 0} (conversation stage context)
-• Link Cooldown: ${consentStatus.hasConsent ? 'Recently gave consent' : 'No recent consent - ask permission first'}
+  // Build last offer detection
+  const lastMessage = context.recentMessages.length > 0 ? context.recentMessages[context.recentMessages.length - 1] : null
+  const lastOffer = detectLastOffer(lastMessage)
+  
+  const currentPrompt = `📊 customer_info:
+• name: ${context.userName || null}
+• locale: ${context.userContext?.locale || 'en-GB'}
 
-${buildAdaptiveUserContext(context)}
+📊 userContext:
+• found: ${context.userContext.found}
+• hasSignature: ${context.userContext.hasSignature}
+• pendingRequirementTypes: [${context.userContext.pendingRequirementTypes?.map(t => `"${t}"`).join(', ') || ''}]
+• claims: ${JSON.stringify(
+    context.userContext.claims || 
+    context.userContext.claimRequirements?.map(cr => ({ 
+      id: cr.claimId.toString(), 
+      status: cr.status, 
+      lender: cr.lender 
+    })) || 
+    []
+  )}
+• linkCooldownActive: ${consentStatus.hasConsent ? false : true}
+• pii_risk: ${context.userContext.pii_risk || false}
+
+📊 available_links:
+• portal_link: ${links.portalLink || '[NOT_AVAILABLE]'}
+• review_link: ${links.reviewLink || '[NOT_AVAILABLE]'}
+• signup_link: ${links.signupLink || '[ALWAYS_AVAILABLE]'}
+
+📊 conversation_history:
+${conversationTranscript}
+
+📊 current_user_message: "${context.userMessage}"
+
+📊 last_offer: ${JSON.stringify(lastOffer)}
 `
   
-  // Apply structured 6-step formatting to system prompt
+  // Apply structured 7-step formatting to system prompt
   const enhancedPrompt = preparePromptStructure(currentPrompt, context)
   
   return enhancedPrompt
+}
+
+function buildContextAwarenessSection(context: SimplifiedResponseContext): string {
+  const { userContext } = context
+  
+  return `📚 Compliance Context (always true):
+• No guarantees of outcomes or timelines
+• No legal/financial advice
+• Only use the authorized knowledge provided
+• Respect "offer before send" unless explicit user request provides consent
+• Do not ask for information you already have (check customer_info and userContext)`
 }
 
 function buildIntelligentUserPrompt(
   context: SimplifiedResponseContext,
   recentTranscript: string
 ): string {
-  const lines: string[] = []
-  
-  if (context.userName) lines.push(`Customer: ${context.userName}`)
-  if (context.userStatus) lines.push(`Status: ${context.userStatus}`)
-  if (context.knowledgeContext) lines.push(`Relevant info: ${context.knowledgeContext}`)
-  
-  lines.push(`Recent conversation:\n${recentTranscript}`)
-  lines.push(`User: ${context.userMessage}`)
-  
-  return lines.join('\n')
+  // Conversation history is now embedded in the INPUTS PROVIDED section
+  // User prompt now just needs to trigger the analysis
+  return `Please analyze the inputs provided and follow the 7-step decision process to craft your response as Sophie.`
 }
 
 // Removed assessUserReadiness function - AI now determines readiness naturally
 // No more rigid pattern matching like /(yes|send|ready)/ - trust AI intelligence
 // Let the AI analyze conversation context and user intent organically
 
-function buildAdaptiveUserContext(context: SimplifiedResponseContext): string {
-  // User found status - CRITICAL for action routing
-  const userFoundStatus = context.userContext.found 
-    ? 'EXISTING USER ✅ (Found in system - full access to actions)' 
-    : 'NEW USER ⚠️ (Not found - ONLY send_signup_link or none allowed)'
-    
-  const signatureStatus = context.userContext.hasSignature 
-    ? 'SIGNED ✅ (Can proceed with claim process)' 
-    : 'UNSIGNED ⚠️ (Needs signature to unlock claim investigation)'
-    
-  const pendingTypes = context.userContext.pendingRequirementTypes || []
-  const requirementsStatus = pendingTypes.length > 0 
-    ? `Outstanding: ${pendingTypes.join(', ')} ⚠️ (Portal enables document uploads)` 
-    : 'Up-to-date ✅ (No outstanding requirements)'
-
-  const claimStatus = context.userContext.primaryClaimStatus 
-    ? `Primary Claim: ${context.userContext.primaryClaimStatus}` 
-    : 'No active claims found'
-
-  const lenders = context.userContext.claimLenders || []
-  const lenderInfo = lenders.length > 0 
-    ? `Lenders: ${lenders.join(', ')}` 
-    : 'Lender information not available'
-    
-  return `
-📊 USER JOURNEY INTELLIGENCE:
-
-👤 USER STATUS: ${userFoundStatus}
-🔒 SIGNATURE STATUS: ${signatureStatus}
-📋 REQUIREMENTS STATUS: ${requirementsStatus}
-🏦 CLAIM CONTEXT: ${claimStatus} | ${lenderInfo}
-
-🎯 ADAPTIVE CONVERSATION STRATEGY:
-• ALWAYS answer their actual question thoroughly FIRST
-• Naturally weave in relevant next steps when appropriate  
-• Let their responses guide the conversation direction
-• Be genuinely helpful, not agenda-driven or pushy
-• Match your approach to what they actually need right now
-• Use approved emojis naturally when they enhance your message tone and clarity
-  Available palette: ✅ ☑️ ✔️ 👍 🎉 💪 🙌 ⭐ 🔒 🛡️ 🔐 🏦 📋 💼 📄 📝 📊 📞 💬 📲 📧 ⏱️ ⏰ 📅 🔄 ➡️ 🚀 ❓ ❗ 💭 💡 🤔 😊 👋 ☺️`
-}
+// Removed buildAdaptiveUserContext, buildPriorityMatrix, buildRequirementsStatus, buildDetailedRequirementsDisplay
+// These functions are no longer needed with the new 7-step deterministic structure
+// Priority is now handled deterministically in STEP 2 of the prompt
 
 function validateAndEnhanceResponse(
   response: any, 
-  context: SimplifiedResponseContext
+  context: SimplifiedResponseContext,
+  phoneNumber: string
 ): SimplifiedAgentResponse {
-  // Ensure we have valid messages
-  let messages = Array.isArray(response.messages) ? response.messages : [response.message || "How can I help with your motor finance claim?"]
-  messages = messages.filter((msg: any) => typeof msg === 'string' && msg.trim())
-  if (messages.length === 0) messages = ["How can I help with your motor finance claim?"]
+  // Enforce single message - combine multiple messages if AI provides them
+  let messages: string[]
+  if (Array.isArray(response.messages) && response.messages.length > 0) {
+    // If multiple messages, combine them into one with proper spacing
+    const validMessages = response.messages.filter((msg: any) => typeof msg === 'string' && msg.trim())
+    if (validMessages.length > 1) {
+      // Combine multiple messages with line breaks
+      messages = [validMessages.join('\n\n')]
+      console.log('AI SMS | 🔄 Combined multiple messages into single message', {
+        originalCount: validMessages.length,
+        combinedLength: messages[0].length
+      })
+    } else {
+      messages = validMessages.length > 0 ? [validMessages[0]] : ["How can I help with your motor finance claim?"]
+    }
+  } else {
+    messages = [response.message || "How can I help with your motor finance claim?"]
+  }
+  
+  // Ensure we have exactly one message
+  if (messages.length === 0 || !messages[0] || !messages[0].trim()) {
+    messages = ["How can I help with your motor finance claim?"]
+  }
   
   // Trust natural conversation flow - no forced CTAs
   // The adaptive user journey intelligence from STEP 1 guides appropriate endings
@@ -543,16 +604,16 @@ function validateAndEnhanceResponse(
   
   // Only enhance if message seems genuinely incomplete (very short or no direction)
   const hasNoneAction = response.actions?.some((action: any) => action.type === 'none')
-  if (hasNoneAction && messages.length > 0) {
-    const lastMessage = messages[messages.length - 1]
+  if (hasNoneAction && messages[0]) {
+    const message = messages[0]
     
     // Only add guidance if message is very short and lacks any direction
-    const hasNaturalDirection = /[?!]|\b(should|would|can|ready|next|let me|help)\b/i.test(lastMessage)
-    const isVeryShort = lastMessage.length < 20
+    const hasNaturalDirection = /[?!]|\b(should|would|can|ready|next|let me|help)\b/i.test(message)
+    const isVeryShort = message.length < 20
     
     if (isVeryShort && !hasNaturalDirection) {
       // Only in genuinely incomplete responses, add minimal guidance
-      messages[messages.length - 1] = lastMessage + " How can I help you further?"
+      messages[0] = message + " How can I help you further?"
     }
   }
   
@@ -579,42 +640,17 @@ function validateAndEnhanceResponse(
     params: action.params || {}
   }))
   
-  // Enhance with user context
+  // Enhance callback actions with user context
   actions = actions.map((action: any) => {
-    if (action.type === 'send_magic_link' && context.userContext.userId) {
+    if (action.type === 'schedule_callback') {
       action.params = {
         ...action.params,
+        phoneNumber: action.params.phoneNumber || phoneNumber, // Use the phoneNumber from the main function parameter
         userId: context.userContext.userId,
-        linkType: action.params.linkType || 'claimPortal'
-      }
-    }
-    if (action.type === 'send_case_status_link' && context.userContext.userId) {
-      action.params = {
-        ...action.params,
-        userId: context.userContext.userId,
-        linkType: action.params.linkType || 'statusUpdate'
-      }
-    }
-    if (action.type === 'send_document_upload_link' && context.userContext.userId) {
-      action.params = {
-        ...action.params,
-        userId: context.userContext.userId,
-        linkType: action.params.linkType || 'documentUpload'
-      }
-    }
-    if (action.type === 'send_review_link') {
-      action.params = {
-        ...action.params,
-        userId: context.userContext.userId, // Optional for Trustpilot, but useful for tracking
         userName: context.userName
       }
     }
-    if (action.type === 'send_signup_link') {
-      action.params = {
-        ...action.params,
-        userName: context.userName
-      }
-    }
+    // Links are now included directly in messages, not as actions
     return action
   })
   

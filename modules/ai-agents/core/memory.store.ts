@@ -3,13 +3,11 @@ import { cacheService, CACHE_KEYS, CACHE_TTL } from '@/lib/redis'
 // Enhanced conversation context types
 export type ConversationInsights = {
   userSentiment: 'positive' | 'neutral' | 'cautious' | 'frustrated' | 'confused'
-  conversationPhase: 'discovery' | 'objection_handling' | 'decision_making' | 'post_signup'
   topicsDiscussed: string[]
   userStyle: 'concise' | 'detailed' | 'reassuring_needed' | 'technical'
   objectionsSeen: string[]
   lastUpdated: number
   messageCount: number
-  engagementLevel: 'high' | 'medium' | 'low'
   successfulPatterns: string[]
   // Smart personalization tracking
   lastNameUsedAt?: number
@@ -158,11 +156,9 @@ export async function updateConversationInsights(
   
   const updated: ConversationInsights = {
     userSentiment: 'neutral',
-    conversationPhase: 'discovery',
     topicsDiscussed: [],
     userStyle: 'detailed',
     objectionsSeen: [],
-    engagementLevel: 'medium',
     successfulPatterns: [],
     nameUsageCount: 0,
     linkSentCount: 0,

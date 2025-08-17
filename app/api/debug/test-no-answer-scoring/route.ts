@@ -246,9 +246,17 @@ export async function POST(request: NextRequest) {
  * GET method for quick test with defaults
  */
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url);
-  const userId = parseInt(url.searchParams.get('userId') || '99999');
-  const initialScore = parseInt(url.searchParams.get('initialScore') || '50');
+  // Safe URL parsing with fallback
+  let userId = 99999;
+  let initialScore = 50;
+  
+  try {
+    const url = new URL(request.url || 'http://localhost:3000');
+    userId = parseInt(url.searchParams.get('userId') || '99999');
+    initialScore = parseInt(url.searchParams.get('initialScore') || '50');
+  } catch (e) {
+    console.warn('Failed to parse URL parameters, using defaults:', e);
+  }
   const dryRun = url.searchParams.get('dryRun') !== 'false';
   
   // Forward to POST with default parameters

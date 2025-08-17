@@ -1,7 +1,7 @@
 // Builds more natural, conversational responses that flow from recent context
 // AI naturally decides between 1-3 messages based on context and question complexity
 
-import { chat } from './llm.client'
+import { chat } from './multi-provider-llm.client'
 import { getConversationInsights, type ConversationInsights } from './memory.store'
 import { checkLinkConsent, offerPortalLink } from './consent-manager'
 

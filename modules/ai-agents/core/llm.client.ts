@@ -28,7 +28,7 @@ export async function chat(options: LlmCallOptions): Promise<string> {
       { role: 'system', content: options.system },
       { role: 'user', content: options.user }
     ],
-    max_tokens: 400
+    max_completion_tokens: 325  // Optimal balance: quality + SMS compliance
   }
   
   // Only add response_format if specified
@@ -41,5 +41,3 @@ export async function chat(options: LlmCallOptions): Promise<string> {
   const content = response.choices?.[0]?.message?.content
   return typeof content === 'string' ? content : ''
 }
-
-

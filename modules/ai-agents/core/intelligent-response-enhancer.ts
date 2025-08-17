@@ -1,4 +1,4 @@
-import { chat } from './llm.client'
+import { chat } from './multi-provider-llm.client'
 import { getConversationInsights } from './memory.store'
 import type { ConversationInsights } from './memory.store'
 
@@ -96,7 +96,6 @@ Return only the category name.`
 
 ${insights ? `Conversation context:
 - User sentiment: ${insights.userSentiment}
-- Conversation phase: ${insights.conversationPhase}
 - Topics discussed: ${insights.topicsDiscussed.join(', ')}` : ''}
 
 Classify this question:`
@@ -211,46 +210,36 @@ function selectCallToActionVariant(
   
   if (!insights) return 'get_started'
   
-  const { conversationPhase, messageCount, topicsDiscussed } = insights
+  const { messageCount, topicsDiscussed } = insights
   
   // If they've asked multiple questions, use "questions before signup"
   if (messageCount > 4 || topicsDiscussed.length > 2) {
     return 'questions_before_signup'
   }
   
-  // Based on conversation phase
-  switch (conversationPhase) {
-    case 'discovery':
-      return messageCount > 2 ? 'get_started' : 'next_steps'
-      
-    case 'objection_handling':
+  // Use engagement patterns instead of rigid phase detection
+  // Default to encouraging next steps based on conversation context
+  if (messageCount > 2) {
+    return 'get_started'
+  }
+  
+  // Based on question type and engagement
+  switch (questionType) {
+    case 'fees_pricing':
+    case 'timeline_payment':
       return 'questions_before_signup'
       
-    case 'decision_making':
+    case 'process_how_it_works':
+      return 'get_started'
+      
+    case 'safety_legitimacy':
       return 'ready_to_proceed'
       
-    case 'post_signup':
+    case 'documents_requirements':
       return 'upload_documents'
       
     default:
-      // Based on question type for discovery phase
-      switch (questionType) {
-        case 'fees_pricing':
-        case 'timeline_payment':
-          return 'questions_before_signup'
-          
-        case 'process_how_it_works':
-          return 'get_started'
-          
-        case 'safety_legitimacy':
-          return 'ready_to_proceed'
-          
-        case 'documents_requirements':
-          return 'upload_documents'
-          
-        default:
-          return 'next_steps'
-      }
+      return 'next_steps'
   }
 }
 

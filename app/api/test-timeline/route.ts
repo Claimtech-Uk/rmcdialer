@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildConversationalResponse } from '@/modules/ai-agents/core/conversational-response-builder'
 
+// Force dynamic rendering to prevent static generation issues
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   console.log('🧪 Testing updated FCA timeline knowledge...')
   
   try {
-    const { searchParams } = new URL(request.url)
-    const message = searchParams.get('message') || 'How long will this take?'
-    const userName = searchParams.get('userName') || 'James'
+    // Safely extract search params with validation
+    let message = 'How long will this take?'
+    let userName = 'James'
+    
+    try {
+      const searchParams = request.nextUrl?.searchParams || new URLSearchParams()
+      message = searchParams.get('message') || 'How long will this take?'
+      userName = searchParams.get('userName') || 'James'
+    } catch (urlError) {
+      console.warn(`⚠️ [API] URL parsing failed, using defaults:`, urlError)
+    }
     
     console.log(`📝 Testing timeline question: "${message}" from user: "${userName}"`)
     
@@ -85,3 +96,4 @@ export async function GET(request: NextRequest) {
     }, { status: 500 })
   }
 }
+

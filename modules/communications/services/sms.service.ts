@@ -90,17 +90,20 @@ export class SMSService {
   }
 
   /**
-   * Get the appropriate sender number for AI SMS messages
+   * Get the appropriate sender number based on action type
+   * CRITICAL SEPARATION: Manual vs AI actions use different numbers
    */
   private getAiSmsFromNumber(messageType?: string, fromNumberOverride?: string): string {
-    // For AI SMS messages, always use the test number to prevent production spam
+    // AI-ONLY actions: Use test number to prevent production spam from AI experiments
     if (messageType === 'auto_response' || messageType === 'magic_link') {
       const testNumber = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
       console.log('AI SMS | 🧪 Using AI test number for message type:', messageType, 'Number:', testNumber);
       return testNumber;
     }
     
-    // For manual messages, respect override or use default
+    // MANUAL agent actions: Use main number (includes 'manual' messageType from dialler portal links)
+    // This ensures human-initiated actions use the production number
+    console.log('AI SMS | 👥 Using main number for message type:', messageType || 'default', 'Number:', fromNumberOverride || this.fromNumber);
     return fromNumberOverride || this.fromNumber;
   }
 
@@ -123,7 +126,8 @@ export class SMSService {
         from: senderNumber,
         length: message.length,
         type: messageType,
-        isAiSms: messageType === 'auto_response' || messageType === 'magic_link'
+        isAiSms: messageType === 'auto_response' || messageType === 'magic_link',
+        isManual: messageType === 'manual'
       })
       // Send via Twilio
       // Determine status callback base URL from environment with fallbacks

@@ -9,6 +9,9 @@ import { prisma } from '@/lib/db';
 import { createAgentHeartbeatService } from '@/modules/agents/services/agent-heartbeat.service';
 import { INBOUND_CALL_FLAGS } from '@/lib/config/features';
 
+// Force dynamic rendering to prevent static generation issues
+export const dynamic = 'force-dynamic'
+
 // Heartbeat request schema
 const HeartbeatSchema = z.object({
   agentId: z.number(),
@@ -97,8 +100,15 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const agentId = searchParams.get('agentId');
+    // Safely extract search params with validation
+    let agentId: string | null = null
+    
+    try {
+      const searchParams = request.nextUrl?.searchParams || new URLSearchParams()
+      agentId = searchParams.get('agentId')
+    } catch (urlError) {
+      console.warn(`⚠️ [API] URL parsing failed:`, urlError)
+    }
 
     const heartbeatService = createAgentHeartbeatService(prisma);
 

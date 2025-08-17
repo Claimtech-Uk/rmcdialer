@@ -59,12 +59,12 @@ export function generateAIMagicLink(userId: number): AIGeneratedMagicLink {
 }
 
 /**
- * Format the magic link URL for SMS display (removes https:// prefix)
- * Follows the same formatting logic as MagicLinkService.buildMessage()
+ * Format the magic link URL for SMS display (keeps https:// for mobile compatibility)
+ * Updated to ensure links open properly on mobile devices
  */
 export function formatMagicLinkForSMS(url: string): string {
-  // Remove https:// prefix for cleaner SMS messages (same as MagicLinkService)
-  return url.replace(/^https?:\/\//, '');
+  // Keep full URL with https:// for mobile compatibility
+  return url;
 }
 
 /**
@@ -102,3 +102,4 @@ export function extractUserIdFromMagicLink(url: string): number | null {
     return null;
   }
 }
+

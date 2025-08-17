@@ -25,6 +25,11 @@ interface ICacheService {
   del(key: string): Promise<void>
   delPattern(pattern: string): Promise<void>
   exists(key: string): Promise<boolean>
+  
+  // Atomic operations for SMS locking
+  setNX(key: string, value: any, ttlSeconds: number): Promise<boolean>
+  eval(script: string, keys: string[], args: any[]): Promise<any>
+  
   getStats(): Promise<{ redisConnected: boolean; memoryCacheSize: number }>
 }
 
@@ -65,6 +70,24 @@ class MemoryCacheService implements ICacheService {
     return cached ? Date.now() <= cached.expires : false
   }
 
+  async setNX(key: string, value: any, ttlSeconds: number): Promise<boolean> {
+    if (this.memoryCache.has(key)) {
+      const cached = this.memoryCache.get(key)
+      if (cached && Date.now() <= cached.expires) {
+        return false // Key exists and hasn't expired
+      }
+    }
+    // Set if not exists
+    const expires = Date.now() + ttlSeconds * 1000
+    this.memoryCache.set(key, { data: value, expires })
+    return true
+  }
+
+  async eval(_script: string, _keys: string[], _args: any[]): Promise<any> {
+    // Memory cache doesn't support Lua scripts - return null
+    return null
+  }
+
   async getStats(): Promise<{ redisConnected: boolean; memoryCacheSize: number }> {
     return { redisConnected: false, memoryCacheSize: this.memoryCache.size }
   }
@@ -73,11 +96,12 @@ class MemoryCacheService implements ICacheService {
 // Upstash Redis (serverless HTTP) ---------------------------------------------
 type UpstashRedisClient = {
   get: (key: string) => Promise<any | null>
-  set: (key: string, value: any, opts?: { ex?: number; px?: number }) => Promise<'OK' | null>
+  set: (key: string, value: any, opts?: { ex?: number; px?: number; nx?: boolean }) => Promise<'OK' | null>
   del: (...keys: string[]) => Promise<number>
   exists: (key: string) => Promise<number>
   scan: (cursor: number, opts?: { match?: string; count?: number }) => Promise<[number, string[]]>
   ping: () => Promise<string>
+  eval: (script: string, keys: string[], args: any[]) => Promise<any>
 }
 
 class UpstashCacheService implements ICacheService {
@@ -143,6 +167,23 @@ class UpstashCacheService implements ICacheService {
       return n > 0
     } catch {
       return false
+    }
+  }
+
+  async setNX(key: string, value: any, ttlSeconds: number): Promise<boolean> {
+    try {
+      const result = await this.redis.set(key, value, { ex: ttlSeconds, nx: true })
+      return result === 'OK'
+    } catch {
+      return false
+    }
+  }
+
+  async eval(script: string, keys: string[], args: any[]): Promise<any> {
+    try {
+      return await this.redis.eval(script, keys, args)
+    } catch {
+      return null
     }
   }
 

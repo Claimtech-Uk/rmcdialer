@@ -7,6 +7,7 @@ import { communicationsRouter } from './routers/communications'
 import { usersRouter } from './routers/users'
 import { autoDialerRouter } from './routers/auto-dialer'
 import { analyticsRouter } from './routers/analytics'
+import { transcriptionRouter } from './routers/transcription'
 
 /**
  * This is the primary router for your server.
@@ -22,6 +23,7 @@ export const appRouter = createTRPCRouter({
   users: usersRouter,
   autoDialer: autoDialerRouter,
   analytics: analyticsRouter,
+  transcription: transcriptionRouter,
 })
 
 // export type definition of API

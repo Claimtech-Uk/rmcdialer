@@ -370,10 +370,46 @@ model SmsMessage {
   receivedAt       DateTime?       @map("received_at")
   createdAt        DateTime        @default(now()) @map("created_at")
   messageType      String?         @map("message_type")
+  
+  // New fields for check-before-send processing
+  processed        Boolean         @default(false) @map("processed")
+  processedAt      DateTime?       @map("processed_at")
+  phoneNumber      String?         @map("phone_number")
+  userId           BigInt?         @map("user_id")
+  messageSid       String?         @map("message_sid")
+  
+  // Batch processing fields
+  batchId          String?         @map("batch_id")
+  batchProcessed   Boolean         @default(false) @map("batch_processed")
+  batchResponseSent Boolean        @default(false) @map("batch_response_sent")
+  batchCreatedAt   DateTime?       @map("batch_created_at")
+  
   conversation     SmsConversation @relation(fields: [conversationId], references: [id])
 
   @@index([conversationId, createdAt])
+  @@index([phoneNumber, processed, createdAt], name: "idx_phone_processed")
+  @@index([messageSid], name: "idx_message_sid")
+  @@index([batchId, batchProcessed], name: "idx_batch_processing")
   @@map("sms_messages")
+}
+
+model SmsBatchStatus {
+  batchId                  String    @id @map("batch_id")
+  phoneNumber              String    @map("phone_number")
+  messageCount             Int       @default(0) @map("message_count")
+  processingStarted        Boolean   @default(false) @map("processing_started")
+  processingStartedAt      DateTime? @map("processing_started_at")
+  processingCompleted      Boolean   @default(false) @map("processing_completed")
+  processingCompletedAt    DateTime? @map("processing_completed_at")
+  responseText             String?   @map("response_text") @db.Text
+  responseSent             Boolean   @default(false) @map("response_sent")
+  responseSentAt           DateTime? @map("response_sent_at")
+  errorMessage             String?   @map("error_message")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  
+  @@index([phoneNumber, createdAt])
+  @@index([processingStarted, createdAt])
+  @@map("sms_batch_status")
 }
 
 model AutoDialerSettings {

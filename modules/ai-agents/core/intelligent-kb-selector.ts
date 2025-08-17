@@ -1,11 +1,10 @@
-import { chat } from './llm.client'
+import { chat } from './multi-provider-llm.client'
 import { KNOWLEDGE_KB } from '../knowledge/knowledge-index'
 import { getConversationInsights, updateConversationInsights, type ConversationInsights } from './memory.store'
 
 export type ConversationContext = {
   recentMessages?: string[]
   userSentiment?: 'positive' | 'neutral' | 'cautious' | 'frustrated' | 'confused'
-  conversationPhase?: 'discovery' | 'objection_handling' | 'decision_making' | 'post_signup'
   topicsDiscussed?: string[]
 }
 
@@ -58,7 +57,6 @@ Return a JSON object with:
 ${context ? `Conversation Context:
 - Recent Messages: ${context.recentMessages?.join(' → ') || 'None'}
 - User Sentiment: ${context.userSentiment || 'unknown'}
-- Conversation Phase: ${context.conversationPhase || 'unknown'}
 - Topics Previously Discussed: ${context.topicsDiscussed?.join(', ') || 'None'}` : ''}
 
 Select the most relevant knowledge base items to help answer this user's message effectively.`
@@ -179,15 +177,7 @@ export async function analyzeConversationContext(
     userSentiment = 'confused'
   }
 
-  // Enhanced conversation phase detection
-  let conversationPhase: ConversationContext['conversationPhase'] = 'discovery'
-  if (/sign|signature|portal|link|ready|proceed|continue/.test(allText)) {
-    conversationPhase = 'decision_making'
-  } else if (/but|however|concern|worry|problem|issue|disagree/.test(allText)) {
-    conversationPhase = 'objection_handling'
-  } else if (/signed|uploaded|completed|done|finished/.test(allText)) {
-    conversationPhase = 'post_signup'
-  }
+  // Remove rigid phase detection - let AI determine journey stage naturally from conversation context
 
   // Enhanced topics discussed
   const topicsDiscussed: string[] = []
@@ -210,7 +200,6 @@ export async function analyzeConversationContext(
     // Update insights with new analysis
     await updateConversationInsights(phoneNumber, {
       userSentiment,
-      conversationPhase,
       topicsDiscussed: uniqueTopics.slice(-10) // Keep last 10 topics
     })
   }
@@ -218,7 +207,6 @@ export async function analyzeConversationContext(
   return {
     recentMessages: userMessages.slice(-3), // Last 3 user messages
     userSentiment,
-    conversationPhase,
     topicsDiscussed
   }
 }
@@ -246,28 +234,18 @@ export async function analyzeAndStoreConversationInsights(
     userStyle = 'reassuring_needed'
   }
 
-  // Detect engagement level
-  let engagementLevel: ConversationInsights['engagementLevel'] = 'medium'
-  const responseTime = recentMessages.length // Simple proxy for engagement
-  if (responseTime > 8) {
-    engagementLevel = 'high'
-  } else if (responseTime < 3) {
-    engagementLevel = 'low'
-  }
+  // Remove rigid engagement detection - let AI assess engagement naturally from conversation quality
 
   // Store comprehensive insights
   const insights = await updateConversationInsights(phoneNumber, {
     userSentiment: context.userSentiment || 'neutral',
-    conversationPhase: context.conversationPhase || 'discovery',
     topicsDiscussed: context.topicsDiscussed || [],
-    userStyle,
-    engagementLevel
+    userStyle
   })
 
   console.log('AI SMS | 🧠 Conversation insights updated', {
     phone: phoneNumber.substring(0, 8) + '***',
     sentiment: insights.userSentiment,
-    phase: insights.conversationPhase,
     style: insights.userStyle,
     topics: insights.topicsDiscussed.length
   })

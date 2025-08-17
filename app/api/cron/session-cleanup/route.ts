@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { withRetry } from '@/lib/utils/db-retry';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,7 +14,8 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     
     // 🎯 ENHANCED: Clean up sessions that are clearly abandoned (no activity for 2+ hours)
-    const result = await prisma.agentSession.updateMany({
+    const result = await withRetry(
+      () => prisma.agentSession.updateMany({
       where: {
         logoutAt: null, // Only active sessions
         status: { in: ['available', 'break', 'on_call'] }, // Include stuck on_call sessions
@@ -26,16 +28,21 @@ export async function GET(request: NextRequest) {
         logoutAt: now,
         currentCallSessionId: null // Clear any stuck call references
       }
-    });
+    }),
+      'cleanup abandoned sessions'
+    );
 
     console.log(`✅ Session cleanup completed: ${result.count} sessions cleaned`);
 
     // Get current session statistics for monitoring
-    const stats = await prisma.agentSession.groupBy({
+    const stats = await withRetry(
+      () => prisma.agentSession.groupBy({
       by: ['status'],
       where: { logoutAt: null },
       _count: { id: true }
-    });
+    }),
+      'get session statistics'
+    );
 
     const sessionStats = stats.reduce((acc, stat) => {
       acc[stat.status] = stat._count.id;

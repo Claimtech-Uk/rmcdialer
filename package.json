@@ -4,7 +4,6 @@
   "private": true,
   "scripts": {
     "openai:test": "tsx scripts/test-openai-sms-agent.ts",
-     
     "schema:diff:prod": "bash -lc 'URL=${PROD_DATABASE_URL:-$DATABASE_URL}; if [ -z \"$URL\" ]; then echo Missing DATABASE_URL/PROD_DATABASE_URL; exit 1; fi; prisma migrate diff --from-url=\"$URL\" --to-schema-datamodel=./prisma/schema.prisma'",
     "schema:diff:prod:sql": "bash -lc 'URL=${PROD_DATABASE_URL:-$DATABASE_URL}; if [ -z \"$URL\" ]; then echo Missing DATABASE_URL/PROD_DATABASE_URL; exit 1; fi; prisma migrate diff --from-url=\"$URL\" --to-schema-datamodel=./prisma/schema.prisma --script > scripts/diff-prod-to-schema.sql'",
     "schema:check": "node --env-file=.env scripts/check-production-schema.ts",
@@ -49,7 +48,7 @@
     "vercel:deploy:dev": "npx vercel@latest deploy --prebuilt --yes --target=preview"
   },
   "dependencies": {
-    "@upstash/redis": "^1.31.4",
+    "@anthropic-ai/sdk": "^0.60.0",
     "@aws-sdk/client-s3": "^3.850.0",
     "@aws-sdk/client-sqs": "^3.848.0",
     "@hookform/resolvers": "^3.3.2",
@@ -68,6 +67,8 @@
     "@trpc/server": "^10.45.0",
     "@twilio/voice-sdk": "^2.11.1",
     "@types/ws": "^8.18.1",
+    "@upstash/redis": "^1.31.4",
+    "autoprefixer": "^10.4.16",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.0.0",
@@ -87,7 +88,6 @@
     "superjson": "^2.2.1",
     "tailwind-merge": "^2.2.0",
     "tailwindcss": "^3.4.0",
-    "autoprefixer": "^10.4.16",
     "tailwindcss-animate": "^1.0.7",
     "twilio": "^4.23.0",
     "winston": "^3.11.0",
