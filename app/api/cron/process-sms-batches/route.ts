@@ -218,8 +218,16 @@ async function processSingleBatch(primaryBatchId: string): Promise<void> {
   const userId = messages[0].userId;
   const conversationId = messages[0].conversationId;
   
-  // 🎯 TODO PHASE 2: Smart routing will use destination numbers after schema deployment
-  // For now, maintaining current behavior while capturing destination data
+  // 🎯 PHASE 2: Smart routing using captured destination numbers
+  const originalDestinationNumber = messages[0].destinationNumber || 
+    messages.find(m => m.destinationNumber)?.destinationNumber;
+    
+  console.log('🎯 Smart routing data extracted:', {
+    customerPhone: phoneNumber,
+    originalDestination: originalDestinationNumber,
+    messageCount: messages.length,
+    allHaveDestination: messages.every(m => m.destinationNumber)
+  });
   
   // Combine all message bodies (from all batches)
   const combinedMessage = messages
@@ -251,15 +259,56 @@ async function processSingleBatch(primaryBatchId: string): Promise<void> {
       channel: 'sms'
     });
     
-    // 🎯 PHASE 1: Schema deployment - maintaining current routing behavior
-    // PHASE 2 will add smart routing once schema is deployed
+    // 🎯 PHASE 2: SMART SMS ROUTING - Send response from the same number customer contacted
     if (result.reply?.text) {
       const accountSid = process.env.TWILIO_ACCOUNT_SID;
       const authToken = process.env.TWILIO_AUTH_TOKEN;
-      const aiTestNumber = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
       
-      if (accountSid && authToken && aiTestNumber) {
-        console.log(`📨 [CRON] Sending AI response from ${aiTestNumber} to ${phoneNumber} (Phase 1: current behavior)`);
+      // Smart routing function - determines correct response number
+      function getSmartResponseNumber(originalDestination: string | null): string {
+      const aiTestNumber = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
+        const mainNumber = process.env.TWILIO_PHONE_NUMBER || '+447488879172';
+        
+        console.log('🔍 Smart routing analysis:', {
+          originalDestination,
+          availableNumbers: { aiTestNumber, mainNumber },
+          routingContext: 'batch_processing'
+        });
+        
+        // Routing logic: Match original destination if available and valid
+        if (originalDestination) {
+          // Clean the destination number for comparison
+          const cleanDestination = originalDestination.replace(/^\+/, '');
+          const cleanAiTest = aiTestNumber.replace(/^\+/, '');
+          const cleanMain = mainNumber.replace(/^\+/, '');
+          
+          if (cleanDestination === cleanAiTest || originalDestination === aiTestNumber) {
+            console.log('✅ Routing to AI test number (original destination)');
+            return aiTestNumber;
+          }
+          
+          if (cleanDestination === cleanMain || originalDestination === mainNumber) {
+            console.log('✅ Routing to main number (original destination)');
+            return mainNumber;
+          }
+          
+          // If original destination matches neither known number, log for investigation
+          console.log('⚠️ Unknown original destination, using fallback:', {
+            originalDestination,
+            knownNumbers: [aiTestNumber, mainNumber],
+            fallback: aiTestNumber
+          });
+        }
+        
+        // Safe fallback: Use AI test number (current behavior)
+        console.log('🔄 Using fallback routing (AI test number)');
+        return aiTestNumber;
+      }
+      
+      const responseFromNumber = getSmartResponseNumber(originalDestinationNumber);
+      
+      if (accountSid && authToken && responseFromNumber) {
+        console.log(`📨 [CRON] Smart routing: Sending AI response from ${responseFromNumber} to ${phoneNumber}`);
         
         const twilioResponse = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
           method: 'POST',
@@ -268,7 +317,7 @@ async function processSingleBatch(primaryBatchId: string): Promise<void> {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
           body: new URLSearchParams({
-            From: aiTestNumber,
+            From: responseFromNumber,
             To: phoneNumber!,
             Body: result.reply.text,
           }),
@@ -293,9 +342,9 @@ async function processSingleBatch(primaryBatchId: string): Promise<void> {
                 phoneNumber: phoneNumber,
                 userId: userId ? BigInt(userId) : null,
                 processed: true,
-                processedAt: new Date()
-                // 🎯 PHASE 2: Will store destination number after schema migration  
-                // destinationNumber: aiTestNumber
+                processedAt: new Date(),
+                // 🎯 PHASE 2: Store which number we responded from for routing history
+                destinationNumber: responseFromNumber
               }
             });
 
