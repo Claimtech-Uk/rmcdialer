@@ -19,10 +19,7 @@
     }
   },
   "crons": [
-    {
-      "path": "/api/cron/callback-notifications",
-      "schedule": "* * * * *"
-    },
+
     {
       "path": "/api/cron/queue-level-check",
       "schedule": "*/5 * * * *"

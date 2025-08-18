@@ -1,0 +1,864 @@
+{"execution_start": "2025-08-18T14:32:49+02:00", "batches": [
+{
+  "batch_number": 1,
+  "offset": 2400,
+  "processed": 600,
+  "updated": 107,
+  "update_rate": 17.8,
+  "unsigned_users": 117,
+  "outstanding_requests": 0,
+  "none": 483,
+  "duration_seconds": 28.8,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 107,
+    "markedInactive": 2,
+    "inCooldown": 4,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 487
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 2,
+  "offset": 3000,
+  "processed": 200,
+  "updated": 116,
+  "update_rate": 58.0,
+  "unsigned_users": 48,
+  "outstanding_requests": 0,
+  "none": 152,
+  "duration_seconds": 28.8,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 22,
+    "wrongQueueType": 94,
+    "markedInactive": 2,
+    "inCooldown": 0,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 82
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 3,
+  "offset": 3200,
+  "processed": 400,
+  "updated": 206,
+  "update_rate": 51.5,
+  "unsigned_users": 97,
+  "outstanding_requests": 0,
+  "none": 303,
+  "duration_seconds": 50.7,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 15,
+    "wrongQueueType": 191,
+    "markedInactive": 2,
+    "inCooldown": 3,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 189
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 4,
+  "offset": 3600,
+  "processed": 200,
+  "updated": 114,
+  "update_rate": 57.0,
+  "unsigned_users": 29,
+  "outstanding_requests": 0,
+  "none": 171,
+  "duration_seconds": 27.9,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 114,
+    "markedInactive": 0,
+    "inCooldown": 2,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 84
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 5,
+  "offset": 3800,
+  "processed": 200,
+  "updated": 130,
+  "update_rate": 65.0,
+  "unsigned_users": 33,
+  "outstanding_requests": 0,
+  "none": 167,
+  "duration_seconds": 32.8,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 12,
+    "wrongQueueType": 118,
+    "markedInactive": 4,
+    "inCooldown": 2,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 64
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 6,
+  "offset": 4000,
+  "processed": 200,
+  "updated": 107,
+  "update_rate": 53.5,
+  "unsigned_users": 44,
+  "outstanding_requests": 0,
+  "none": 156,
+  "duration_seconds": 26.2,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 5,
+    "wrongQueueType": 102,
+    "markedInactive": 0,
+    "inCooldown": 4,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 89
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 7,
+  "offset": 4200,
+  "processed": 200,
+  "updated": 101,
+  "update_rate": 50.5,
+  "unsigned_users": 31,
+  "outstanding_requests": 0,
+  "none": 169,
+  "duration_seconds": 25.4,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 5,
+    "wrongQueueType": 96,
+    "markedInactive": 1,
+    "inCooldown": 5,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 93
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 8,
+  "offset": 4400,
+  "processed": 200,
+  "updated": 107,
+  "update_rate": 53.5,
+  "unsigned_users": 55,
+  "outstanding_requests": 0,
+  "none": 145,
+  "duration_seconds": 26.4,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 16,
+    "wrongQueueType": 91,
+    "markedInactive": 0,
+    "inCooldown": 2,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 91
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 9,
+  "offset": 4600,
+  "processed": 400,
+  "updated": 193,
+  "update_rate": 48.2,
+  "unsigned_users": 36,
+  "outstanding_requests": 0,
+  "none": 364,
+  "duration_seconds": 47.5,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 2,
+    "wrongQueueType": 191,
+    "markedInactive": 4,
+    "inCooldown": 4,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 199
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 10,
+  "offset": 5000,
+  "processed": 200,
+  "updated": 101,
+  "update_rate": 50.5,
+  "unsigned_users": 14,
+  "outstanding_requests": 0,
+  "none": 186,
+  "duration_seconds": 25.5,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 101,
+    "markedInactive": 1,
+    "inCooldown": 0,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 98
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 11,
+  "offset": 5200,
+  "processed": 400,
+  "updated": 199,
+  "update_rate": 49.8,
+  "unsigned_users": 34,
+  "outstanding_requests": 0,
+  "none": 366,
+  "duration_seconds": 48.8,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 4,
+    "wrongQueueType": 195,
+    "markedInactive": 3,
+    "inCooldown": 5,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 193
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 12,
+  "offset": 5600,
+  "processed": 200,
+  "updated": 105,
+  "update_rate": 52.5,
+  "unsigned_users": 32,
+  "outstanding_requests": 0,
+  "none": 168,
+  "duration_seconds": 26.3,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 105,
+    "markedInactive": 1,
+    "inCooldown": 0,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 94
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 13,
+  "offset": 5800,
+  "processed": 200,
+  "updated": 134,
+  "update_rate": 67.0,
+  "unsigned_users": 42,
+  "outstanding_requests": 0,
+  "none": 158,
+  "duration_seconds": 33.2,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 11,
+    "wrongQueueType": 123,
+    "markedInactive": 2,
+    "inCooldown": 2,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 62
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 14,
+  "offset": 6000,
+  "processed": 200,
+  "updated": 109,
+  "update_rate": 54.5,
+  "unsigned_users": 49,
+  "outstanding_requests": 0,
+  "none": 151,
+  "duration_seconds": 27.8,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 109,
+    "markedInactive": 0,
+    "inCooldown": 10,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 81
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 15,
+  "offset": 6200,
+  "processed": 200,
+  "updated": 130,
+  "update_rate": 65.0,
+  "unsigned_users": 61,
+  "outstanding_requests": 0,
+  "none": 139,
+  "duration_seconds": 31.8,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 29,
+    "wrongQueueType": 101,
+    "markedInactive": 1,
+    "inCooldown": 4,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 65
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 16,
+  "offset": 6400,
+  "processed": 200,
+  "updated": 106,
+  "update_rate": 53.0,
+  "unsigned_users": 47,
+  "outstanding_requests": 0,
+  "none": 153,
+  "duration_seconds": 26.9,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 106,
+    "markedInactive": 2,
+    "inCooldown": 5,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 87
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 17,
+  "offset": 6600,
+  "processed": 200,
+  "updated": 129,
+  "update_rate": 64.5,
+  "unsigned_users": 47,
+  "outstanding_requests": 0,
+  "none": 153,
+  "duration_seconds": 32.2,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 20,
+    "wrongQueueType": 109,
+    "markedInactive": 1,
+    "inCooldown": 2,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 68
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 18,
+  "offset": 6800,
+  "processed": 200,
+  "updated": 118,
+  "update_rate": 59.0,
+  "unsigned_users": 54,
+  "outstanding_requests": 0,
+  "none": 146,
+  "duration_seconds": 29.1,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 118,
+    "markedInactive": 0,
+    "inCooldown": 4,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 78
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 19,
+  "offset": 7000,
+  "processed": 200,
+  "updated": 123,
+  "update_rate": 61.5,
+  "unsigned_users": 48,
+  "outstanding_requests": 0,
+  "none": 152,
+  "duration_seconds": 31.5,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 17,
+    "wrongQueueType": 106,
+    "markedInactive": 1,
+    "inCooldown": 3,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 73
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 20,
+  "offset": 7200,
+  "processed": 200,
+  "updated": 125,
+  "update_rate": 62.5,
+  "unsigned_users": 41,
+  "outstanding_requests": 0,
+  "none": 159,
+  "duration_seconds": 30.8,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 14,
+    "wrongQueueType": 111,
+    "markedInactive": 2,
+    "inCooldown": 3,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 70
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 21,
+  "offset": 7400,
+  "processed": 200,
+  "updated": 112,
+  "update_rate": 56.0,
+  "unsigned_users": 44,
+  "outstanding_requests": 0,
+  "none": 156,
+  "duration_seconds": 27.9,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 112,
+    "markedInactive": 5,
+    "inCooldown": 3,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 80
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 22,
+  "offset": 7600,
+  "processed": 1000,
+  "updated": 94,
+  "update_rate": 9.4,
+  "unsigned_users": 223,
+  "outstanding_requests": 0,
+  "none": 777,
+  "duration_seconds": 27.8,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 50,
+    "wrongQueueType": 44,
+    "markedInactive": 17,
+    "inCooldown": 21,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 868
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 23,
+  "offset": 8600,
+  "processed": 1400,
+  "updated": 98,
+  "update_rate": 7.0,
+  "unsigned_users": 310,
+  "outstanding_requests": 0,
+  "none": 1090,
+  "duration_seconds": 31.1,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 69,
+    "wrongQueueType": 29,
+    "markedInactive": 37,
+    "inCooldown": 85,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 1180
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 24,
+  "offset": 10000,
+  "processed": 1000,
+  "updated": 86,
+  "update_rate": 8.6,
+  "unsigned_users": 216,
+  "outstanding_requests": 0,
+  "none": 784,
+  "duration_seconds": 25.6,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 38,
+    "wrongQueueType": 48,
+    "markedInactive": 35,
+    "inCooldown": 134,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 745
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 25,
+  "offset": 11000,
+  "processed": 600,
+  "updated": 143,
+  "update_rate": 23.8,
+  "unsigned_users": 120,
+  "outstanding_requests": 0,
+  "none": 480,
+  "duration_seconds": 36.9,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 23,
+    "wrongQueueType": 120,
+    "markedInactive": 19,
+    "inCooldown": 11,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 427
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 26,
+  "offset": 11600,
+  "processed": 600,
+  "updated": 131,
+  "update_rate": 21.8,
+  "unsigned_users": 129,
+  "outstanding_requests": 0,
+  "none": 471,
+  "duration_seconds": 35.5,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 14,
+    "wrongQueueType": 117,
+    "markedInactive": 46,
+    "inCooldown": 10,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 413
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 27,
+  "offset": 12200,
+  "processed": 400,
+  "updated": 214,
+  "update_rate": 53.5,
+  "unsigned_users": 78,
+  "outstanding_requests": 0,
+  "none": 322,
+  "duration_seconds": 52.1,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 214,
+    "markedInactive": 34,
+    "inCooldown": 10,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 142
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 28,
+  "offset": 12600,
+  "processed": 200,
+  "updated": 122,
+  "update_rate": 61.0,
+  "unsigned_users": 31,
+  "outstanding_requests": 0,
+  "none": 169,
+  "duration_seconds": 29.6,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 122,
+    "markedInactive": 21,
+    "inCooldown": 0,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 57
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 29,
+  "offset": 12800,
+  "processed": 200,
+  "updated": 128,
+  "update_rate": 64.0,
+  "unsigned_users": 30,
+  "outstanding_requests": 0,
+  "none": 170,
+  "duration_seconds": 32.4,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 128,
+    "markedInactive": 17,
+    "inCooldown": 7,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 48
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 30,
+  "offset": 13000,
+  "processed": 200,
+  "updated": 122,
+  "update_rate": 61.0,
+  "unsigned_users": 43,
+  "outstanding_requests": 0,
+  "none": 157,
+  "duration_seconds": 30.4,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 122,
+    "markedInactive": 9,
+    "inCooldown": 5,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 64
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 31,
+  "offset": 13200,
+  "processed": 200,
+  "updated": 118,
+  "update_rate": 59.0,
+  "unsigned_users": 49,
+  "outstanding_requests": 0,
+  "none": 151,
+  "duration_seconds": 29.5,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 118,
+    "markedInactive": 7,
+    "inCooldown": 10,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 65
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 32,
+  "offset": 13400,
+  "processed": 200,
+  "updated": 109,
+  "update_rate": 54.5,
+  "unsigned_users": 45,
+  "outstanding_requests": 0,
+  "none": 155,
+  "duration_seconds": 27.8,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 109,
+    "markedInactive": 10,
+    "inCooldown": 6,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 75
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 33,
+  "offset": 13600,
+  "processed": 200,
+  "updated": 126,
+  "update_rate": 63.0,
+  "unsigned_users": 41,
+  "outstanding_requests": 0,
+  "none": 159,
+  "duration_seconds": 32.0,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 126,
+    "markedInactive": 10,
+    "inCooldown": 6,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 58
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 34,
+  "offset": 13800,
+  "processed": 200,
+  "updated": 127,
+  "update_rate": 63.5,
+  "unsigned_users": 33,
+  "outstanding_requests": 0,
+  "none": 167,
+  "duration_seconds": 32.3,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 127,
+    "markedInactive": 14,
+    "inCooldown": 4,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 55
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 35,
+  "offset": 14000,
+  "processed": 800,
+  "updated": 128,
+  "update_rate": 16.0,
+  "unsigned_users": 176,
+  "outstanding_requests": 0,
+  "none": 624,
+  "duration_seconds": 33.9,
+  "issues": {
+    "notInUserCallScores": 27,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 118,
+    "markedInactive": 56,
+    "inCooldown": 15,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 584
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 36,
+  "offset": 14800,
+  "processed": 600,
+  "updated": 132,
+  "update_rate": 22.0,
+  "unsigned_users": 123,
+  "outstanding_requests": 0,
+  "none": 477,
+  "duration_seconds": 34.7,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 132,
+    "markedInactive": 18,
+    "inCooldown": 1,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 449
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 37,
+  "offset": 15400,
+  "processed": 600,
+  "updated": 111,
+  "update_rate": 18.5,
+  "unsigned_users": 132,
+  "outstanding_requests": 0,
+  "none": 468,
+  "duration_seconds": 30.0,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 111,
+    "markedInactive": 40,
+    "inCooldown": 0,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 449
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 38,
+  "offset": 16000,
+  "processed": 600,
+  "updated": 94,
+  "update_rate": 15.7,
+  "unsigned_users": 156,
+  "outstanding_requests": 0,
+  "none": 444,
+  "duration_seconds": 26.0,
+  "issues": {
+    "notInUserCallScores": 0,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 94,
+    "markedInactive": 33,
+    "inCooldown": 9,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 464
+  },
+  "timeout_hit": true
+}
+,
+{
+  "batch_number": 39,
+  "offset": 16600,
+  "processed": 2221,
+  "updated": 50,
+  "update_rate": 2.3,
+  "unsigned_users": 576,
+  "outstanding_requests": 0,
+  "none": 1645,
+  "duration_seconds": 25.1,
+  "issues": {
+    "notInUserCallScores": 2,
+    "noQueueTypeAssigned": 0,
+    "wrongQueueType": 49,
+    "markedInactive": 81,
+    "inCooldown": 99,
+    "shouldBeInQueue": 0,
+    "alreadyInQueue": 1990
+  },
+  "timeout_hit": true
+}
+], "execution_end": "2025-08-18T14:55:49+02:00", "final_totals": {
+  "total_processed": 18821,
+  "total_updated": 5015,
+  "total_unsigned": 4132,
+  "overall_update_rate": 26.6
+}}

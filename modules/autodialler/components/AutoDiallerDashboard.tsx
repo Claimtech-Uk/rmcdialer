@@ -158,6 +158,32 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
     }
   };
 
+  // ✅ CALLBACK TIME FORMATTING
+  const formatCallbackTime = (scheduledFor: string): { timeAgo: string, urgency: 'overdue' | 'urgent' | 'due_soon' } => {
+    const scheduled = new Date(scheduledFor);
+    const now = new Date();
+    const diffMinutes = Math.floor((now.getTime() - scheduled.getTime()) / (1000 * 60));
+    
+    if (diffMinutes > 0) {
+      // Overdue
+      const hours = Math.floor(diffMinutes / 60);
+      const minutes = diffMinutes % 60;
+      return {
+        timeAgo: hours > 0 ? `${hours}h ${minutes}m overdue` : `${minutes}m overdue`,
+        urgency: 'overdue'
+      };
+    } else {
+      // Future or current
+      const absMinutes = Math.abs(diffMinutes);
+      const hours = Math.floor(absMinutes / 60);
+      return {
+        timeAgo: hours > 0 ? `scheduled for ${hours}h ${absMinutes % 60}m from now` : 
+                absMinutes < 5 ? 'due now' : `due in ${absMinutes}m`,
+        urgency: absMinutes < 15 ? 'urgent' : 'due_soon'
+      };
+    }
+  };
+
   return (
     <div className={`autodialler-dashboard min-h-screen ${teamConfig.color.background}`}>
       {/* Header */}
@@ -345,6 +371,66 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* 📅 SCHEDULED CALLBACK ALERT */}
+            {(currentUser as any)?.isCallbackCall && (
+              (() => {
+                const callbackInfo = formatCallbackTime((currentUser as any)?.callbackData?.scheduledFor);
+                const isOverdue = callbackInfo.urgency === 'overdue';
+                const isUrgent = callbackInfo.urgency === 'urgent';
+                
+                return (
+                  <div className={`text-white p-4 rounded-xl shadow-xl border-2 ${
+                    isOverdue 
+                      ? 'bg-gradient-to-r from-red-600 to-red-700 border-red-400' 
+                      : isUrgent 
+                        ? 'bg-gradient-to-r from-blue-500 to-purple-600 border-blue-300'
+                        : 'bg-gradient-to-r from-green-500 to-blue-500 border-green-300'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-full ${
+                          isOverdue 
+                            ? 'bg-red-100/30' 
+                            : isUrgent 
+                              ? 'bg-blue-100/30'
+                              : 'bg-green-100/30'
+                        }`}>
+                          <Clock className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <div className="text-xl font-bold uppercase tracking-wide">
+                            {isOverdue ? '🔴 OVERDUE: SCHEDULED CALLBACK' : '📅 SCHEDULED CALLBACK'}
+                          </div>
+                          <div className="text-sm font-medium mt-1 opacity-90">
+                            {callbackInfo.timeAgo}
+                            {(currentUser as any)?.callbackData?.reason && 
+                              ` • Reason: ${(currentUser as any).callbackData.reason}`
+                            }
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`px-4 py-2 rounded-lg border ${
+                          isOverdue 
+                            ? 'bg-red-100/30 border-red-200/50' 
+                            : isUrgent 
+                              ? 'bg-blue-100/30 border-blue-200/50'
+                              : 'bg-green-100/30 border-green-200/50'
+                        }`}>
+                          <div className="text-sm font-bold uppercase tracking-wider">
+                            {isOverdue ? 'OVERDUE' : isUrgent ? 'URGENT' : 'SCHEDULED'}
+                          </div>
+                          <div className="text-xs font-medium opacity-90">
+                            {isOverdue ? 'Call Now' : 'Callback Due'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
             )}
 
             {/* User Header Card */}

@@ -459,6 +459,14 @@ export class CallService {
 
         // 3. Create callback if any outcome has callback data
         if (outcome.callbackDateTime || outcomeResult.callbackDateTime) {
+          // Determine queue type based on user's current queue type
+          const userScore = await tx.userCallScore.findUnique({
+            where: { userId: callSession.userId },
+            select: { currentQueueType: true }
+          });
+          
+          const queueType = userScore?.currentQueueType || 'outstanding_requests';
+          
           await tx.callback.create({
             data: {
               userId: callSession.userId,
@@ -467,9 +475,10 @@ export class CallService {
               preferredAgentId: agentId, // Assign to current agent who processed the outcome
               originalCallSessionId: sessionId,
               status: 'pending',
+              queueType: queueType, // 🎯 NEW: Route to appropriate auto-dialler
             },
           });
-          console.log(`📞 Created callback for ${outcomeResult.callbackDateTime || outcome.callbackDateTime} (outcome: ${outcome.outcomeType}) assigned to agent ${agentId}`);
+          console.log(`📞 Created callback for ${outcomeResult.callbackDateTime || outcome.callbackDateTime} (outcome: ${outcome.outcomeType}) assigned to agent ${agentId} in ${queueType} queue`);
         }
 
         // 4. Handle conversions using outcome result
@@ -1257,8 +1266,8 @@ export class CallService {
   }
 
   /**
-   * Complete the specific callback that originated this call session (if any)
-   * Only completes callbacks that are directly related to the current call session
+   * Complete any pending callback for this user after call completion
+   * In the simplified system, callbacks are identified by userContext markers
    */
   private async completeCallbacksForUser(
     tx: Prisma.TransactionClient,
@@ -1266,46 +1275,54 @@ export class CallService {
     completedCallSessionId: string
   ): Promise<void> {
     try {
-      // Get the call session to find the originating queue entry
+      // Get the call session to check if it was initiated from a callback
       const callSession = await tx.callSession.findUnique({
         where: { id: completedCallSessionId },
-        include: {
-          callQueue: {
-            include: {
-              callback: true
-            }
-          }
+        select: { 
+          userClaimsContext: true,
+          callQueueId: true 
         }
       });
 
-      if (!callSession?.callQueue?.callback) {
-        // No callback associated with this call session - nothing to complete
-        console.log(`📞 No callback associated with call session ${completedCallSessionId}`);
+      if (!callSession) {
+        console.log(`📞 Call session ${completedCallSessionId} not found`);
         return;
       }
 
-      const callback = callSession.callQueue.callback;
-      
-      // Only complete if the callback is in a valid state to be completed
+      // Check if this call was from a callback by looking for callback markers
+      // The PreCallValidationService sets isCallbackCall and callbackData in userContext
+      const userContext = callSession.userClaimsContext as any;
+      const isCallbackCall = userContext?.isCallbackCall;
+      const callbackId = userContext?.callbackData?.id;
+
+      if (!isCallbackCall || !callbackId) {
+        // Not a callback call - nothing to complete
+        console.log(`📞 Call session ${completedCallSessionId} was not initiated from a callback`);
+        return;
+      }
+
+      // Find and complete the callback
+      const callback = await tx.callback.findUnique({
+        where: { id: callbackId }
+      });
+
+      if (!callback) {
+        console.log(`⚠️ Callback ${callbackId} not found in database`);
+        return;
+      }
+
+      // Only complete if the callback is in a valid state
       if (!['pending', 'accepted'].includes(callback.status)) {
         console.log(`📞 Callback ${callback.id} is already in status '${callback.status}', skipping completion`);
         return;
       }
 
-      // Complete only this specific callback
+      // Complete the callback
       await tx.callback.update({
         where: { id: callback.id },
         data: {
           status: 'completed',
           completedCallSessionId: completedCallSessionId
-        }
-      });
-
-      // Remove any remaining queue entries for this specific callback
-      await tx.callQueue.deleteMany({
-        where: {
-          callbackId: callback.id,
-          status: { in: ['pending', 'assigned'] }
         }
       });
 

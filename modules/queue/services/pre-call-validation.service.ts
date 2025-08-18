@@ -266,17 +266,24 @@ export class PreCallValidationService {
     try {
       console.log(`🔍 Finding next valid user for ${queueType} queue...`);
       
-      // 🎯 PRIORITY 1: Check for missed calls first (if agent ID provided)
+      // 🥇 PRIORITY 1: Check for due callbacks first 
+      const callbackResult = await this.getNextDueCallbackForQueue(queueType);
+      if (callbackResult) {
+        console.log(`🎯 HIGHEST PRIORITY: Found due callback for ${queueType} queue`);
+        return callbackResult;
+      }
+      
+      // 🥈 PRIORITY 2: Check for missed calls (if agent ID provided)
       if (agentId) {
         const missedCallResult = await this.getNextMissedCallForAgent(agentId);
         if (missedCallResult) {
-          console.log(`🚀 PRIORITY: Found missed call for agent ${agentId}`);
+          console.log(`🚀 MEDIUM PRIORITY: Found missed call for agent ${agentId}`);
           return missedCallResult;
         }
       }
       
-      // 🎯 PRIORITY 2: Use regular queue system
-      console.log(`📋 No missed calls available, checking ${queueType} queue...`);
+      // 🥉 PRIORITY 3: Use regular queue system
+      console.log(`📋 No callbacks or missed calls available, checking regular ${queueType} queue...`);
       
       // Use new queue adapter if available
       if (this.queueAdapter) {
@@ -875,6 +882,76 @@ export class PreCallValidationService {
 
     } catch (error) {
       console.error(`❌ Error getting missed call for agent ${agentId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get next due callback for the specified queue type
+   * Returns callback formatted as NextUserForCallResult for consistent interface
+   */
+  private async getNextDueCallbackForQueue(queueType: QueueType): Promise<NextUserForCallResult | null> {
+    try {
+      const dueCallback = await this.deps.prisma.callback.findFirst({
+        where: {
+          queueType: queueType, // Only callbacks for this specific queue
+          status: 'pending',
+          scheduledFor: { lte: new Date() } // Due now or overdue
+        },
+        orderBy: { scheduledFor: 'asc' }, // Oldest due first
+        include: {
+          preferredAgent: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true
+            }
+          }
+        }
+      });
+
+      if (!dueCallback) {
+        return null;
+      }
+
+      // Get user context for the callback
+      const userContext = await this.userService.getUserCallContext(Number(dueCallback.userId));
+      if (!userContext) {
+        console.log(`⚠️ Skipping callback ${dueCallback.id} - user ${dueCallback.userId} not found`);
+        return null;
+      }
+
+      // Return in NextUserForCallResult format with special markers for callbacks
+      return {
+        userId: userContext.userId,
+        userContext: {
+          ...userContext,
+          // 🎯 SPECIAL MARKERS for callback
+          isCallbackCall: true,
+          callbackData: {
+            id: dueCallback.id,
+            reason: dueCallback.callbackReason,
+            scheduledFor: dueCallback.scheduledFor,
+            originalCallSessionId: dueCallback.originalCallSessionId
+          }
+        },
+        queuePosition: 0, // Callbacks always have highest priority
+        queueEntryId: `callback-${dueCallback.id}`,
+        validationResult: {
+          isValid: true,
+          reason: 'Scheduled callback - skipping validation',
+          userStatus: {
+            hasSignature: true, // Skip signature checks for callbacks
+            pendingRequirements: 0,
+            hasScheduledCallback: true,
+            isEnabled: true,
+            userExists: true
+          }
+        }
+      };
+
+    } catch (error) {
+      console.error(`❌ Error getting due callback for queue ${queueType}:`, error);
       return null;
     }
   }

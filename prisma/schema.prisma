@@ -242,6 +242,7 @@ model Callback {
   originalCallSessionId  String                 @map("original_call_session_id") @db.Uuid
   status                 String                 @default("pending")
   completedCallSessionId String?                @map("completed_call_session_id") @db.Uuid
+  queueType              String                 @default("outstanding_requests") @map("queue_type")
   createdAt              DateTime               @default(now()) @map("created_at")
   callQueue              CallQueue[]
   notifications          CallbackNotification[]
@@ -249,6 +250,7 @@ model Callback {
 
   @@index([scheduledFor])
   @@index([status])
+  @@index([queueType, scheduledFor, status])
   @@map("callbacks")
 }
 

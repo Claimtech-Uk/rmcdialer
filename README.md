@@ -449,7 +449,7 @@ Production cron jobs via Vercel Cron:
       "schedule": "0 2 * * *"
     },
     {
-      "path": "/api/cron/callback-notifications",
+
       "schedule": "* * * * *"
     }
   ]

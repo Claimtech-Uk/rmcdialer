@@ -248,21 +248,19 @@ export class QueueHealthCheckService {
         const queueKey = correctQueue || 'none';
         result.queueDistribution[queueKey]++;
         
-        // Categorize the user's situation
+        // Categorize the user's situation (focused on user_call_scores only)
         if (!currentQueueData) {
           result.issues.notInUserCallScores++;
         } else if (!currentQueueData.currentQueueType && correctQueue) {
           result.issues.noQueueTypeAssigned++;
-        } else if (currentQueueData.currentQueueType && currentQueueData.currentQueueType !== correctQueue) {
+        } else if (currentQueueData.currentQueueType !== correctQueue) {
           result.issues.wrongQueueType++;
-        } else if (currentQueueData.currentQueueType === correctQueue && !currentQueueData.isActive) {
+        } else if (!currentQueueData.isActive) {
           result.issues.markedInactive++;
         } else if (currentQueueData.nextCallAfter && currentQueueData.nextCallAfter > new Date()) {
           result.issues.inCooldown++;
         } else if (currentQueueData.createdAt > new Date(Date.now() - 2 * 60 * 60 * 1000)) {
           result.issues.inCooldown++; // 2-hour cooling period
-        } else if (correctQueue && !currentQueue) {
-          result.issues.shouldBeInQueue++;
         } else {
           result.issues.alreadyInQueue++;
         }
@@ -271,16 +269,32 @@ export class QueueHealthCheckService {
         if (correctQueue !== currentQueue) {
           result.wrongQueue++;
           
-          // Only update if not dry run
-          if (!dryRun && currentQueueData) {
-            await prisma.userCallScore.updateMany({
-              where: { userId: user.id },
-              data: { 
-                currentQueueType: correctQueue,
-                lastQueueCheck: new Date(),
-                updatedAt: new Date()
-              }
-            });
+          // Only update currentQueueType if not dry run (let other automations handle actual queues)
+          if (!dryRun) {
+            if (currentQueueData) {
+              // User exists in user_call_scores - update their queue type
+              await prisma.userCallScore.updateMany({
+                where: { userId: user.id },
+                data: { 
+                  currentQueueType: correctQueue,
+                  lastQueueCheck: new Date(),
+                  updatedAt: new Date()
+                }
+              });
+            } else if (correctQueue) {
+              // User missing from user_call_scores - create record with correct queue type
+              await prisma.userCallScore.create({
+                data: {
+                  userId: user.id,
+                  currentScore: 0, // New leads start at score 0
+                  currentQueueType: correctQueue,
+                  isActive: true,
+                  lastQueueCheck: new Date(),
+                  createdAt: new Date(),
+                  updatedAt: new Date()
+                }
+              });
+            }
           }
           result.updated++;
         } else {
@@ -301,7 +315,7 @@ export class QueueHealthCheckService {
    */
   private determineCorrectQueue(user: UserWithClaims): 'unsigned_users' | 'outstanding_requests' | null {
     // 1. User cancelled → no queue
-    if (user.status === 'cancelled') return null;
+    if (user.status === 'cancelled' || user.status === null) return null;
     
     // 2. All claims cancelled → no queue
     if (user.claims.length > 0 && user.claims.every(claim => claim.status === 'cancelled')) {
@@ -309,7 +323,10 @@ export class QueueHealthCheckService {
     }
     
     // 3. Missing signature → unsigned queue (HIGHEST PRIORITY)
-    if (!user.current_signature_file_id) {
+    // ⚠️  FIXED: Align with UserService logic (userData.current_signature_file_id !== null)
+    // This treats empty string as "has signature" like the authoritative UserService
+    const hasSignature = user.current_signature_file_id !== null;
+    if (!hasSignature) {
       return 'unsigned_users';
     }
     
@@ -366,15 +383,17 @@ export class QueueHealthCheckService {
     mainResult.stats.correctQueue += batchResult.correctQueue;
     mainResult.stats.wrongQueue += batchResult.wrongQueue;
     
-    // Queue distribution
-    Object.keys(batchResult.queueDistribution).forEach(queue => {
-      mainResult.stats.queueDistribution[queue] += batchResult.queueDistribution[queue];
-    });
-    
-    // Issues breakdown
-    Object.keys(batchResult.issues).forEach(issue => {
-      mainResult.stats.issues[issue] += batchResult.issues[issue];
-    });
+            // Queue distribution
+        Object.keys(batchResult.queueDistribution).forEach(queue => {
+          const queueKey = queue as keyof typeof batchResult.queueDistribution;
+          mainResult.stats.queueDistribution[queueKey] += batchResult.queueDistribution[queueKey];
+        });
+        
+        // Issues breakdown
+        Object.keys(batchResult.issues).forEach(issue => {
+          const issueKey = issue as keyof typeof batchResult.issues;
+          mainResult.stats.issues[issueKey] += batchResult.issues[issueKey];
+        });
   }
 
   /**
@@ -401,11 +420,11 @@ export class QueueHealthCheckService {
       });
     }
     
-    if (stats.issues.shouldBeInQueue > 0) {
+    if (stats.issues.notInUserCallScores > 0) {
       recommendations.push({
-        issue: 'Users missing from actual queues',
-        count: stats.issues.shouldBeInQueue,
-        action: 'Run queue generation: scripts/reset-unsigned-queue.ts',
+        issue: 'Users missing from user_call_scores completely',
+        count: stats.issues.notInUserCallScores,
+        action: 'Will be auto-created with correct queue type during fix',
         priority: 'medium'
       });
     }

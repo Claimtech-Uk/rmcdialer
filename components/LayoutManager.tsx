@@ -2,10 +2,8 @@
 
 import { useContext, useEffect, useState } from 'react';
 import { CallSidebar } from './CallSidebar';
-import { CallbackNotificationHandler } from './CallbackNotificationHandler';
-import { ManualCallbackHandler } from './ManualCallbackHandler';
-import { CallbackDashboard } from './CallbackDashboard';
-import { CallbackIcon } from './CallbackIcon';
+
+
 import { GlobalTwilioContext } from '@/lib/providers/GlobalTwilioProvider';
 
 interface LayoutManagerProps {
@@ -209,10 +207,7 @@ export function LayoutManager({ children }: LayoutManagerProps) {
     <>
       {children}
       
-      {/* Fixed Callback Icon - always visible */}
-      <div className="fixed top-4 right-16 z-[150]">
-        <CallbackIcon />
-      </div>
+
       
       {/* Call Sidebar - overlays everything */}
       <CallSidebar
@@ -229,14 +224,7 @@ export function LayoutManager({ children }: LayoutManagerProps) {
         isOnHold={false}
       />
       
-      {/* Callback Notification Handler - persistent popups for due callbacks */}
-      <CallbackNotificationHandler />
-      
-      {/* Manual Callback Handler - for overdue callbacks */}
-      <ManualCallbackHandler />
-      
-      {/* Callback Dashboard - persistent view of all upcoming callbacks */}
-      <CallbackDashboard />
+
     </>
   );
 } 

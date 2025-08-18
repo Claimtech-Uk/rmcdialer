@@ -33,16 +33,42 @@ export default function SMSPage() {
     endDate: new Date()
   }), [])
 
-  // Fetch conversations with reduced polling (much more reasonable)
-  const { data: conversationsData, refetch: refetchConversations } = api.communications.sms.getConversations.useQuery(
+  // ✅ OPTIMIZED: Fetch conversations with performance improvements and loading states
+  const { 
+    data: conversationsData, 
+    refetch: refetchConversations, 
+    isLoading: conversationsLoading,
+    error: conversationsError,
+    isRefetching: conversationsRefetching
+  } = api.communications.sms.getConversations.useQuery(
     {
       status: statusFilter === 'all' ? undefined : statusFilter,
       page: 1,
-      limit: 50
+      limit: 25 // Reduced from 50 for better initial load performance
     },
     {
-      refetchInterval: false, // TEMPORARILY DISABLED - was 15000
-      refetchOnWindowFocus: true, // Refresh when user returns to tab
+      refetchInterval: false, // Keep disabled for performance
+      refetchOnWindowFocus: false, // Prevent unnecessary refreshes on tab focus
+      staleTime: 30 * 1000, // Cache for 30 seconds
+      cacheTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+      // Add retry logic for better reliability
+      retry: (failureCount, error) => {
+        if (failureCount < 2) {
+          console.log(`SMS conversations fetch retry ${failureCount + 1}/2`);
+          return true;
+        }
+        console.error('SMS conversations fetch failed after retries:', error);
+        return false;
+      },
+      // Add error boundaries
+      onError: (error) => {
+        console.error('SMS conversations fetch error:', error);
+        toast({
+          title: "Loading Error",
+          description: "Failed to load SMS conversations. Please refresh the page.",
+          variant: "destructive",
+        });
+      }
     }
   )
 
@@ -60,13 +86,17 @@ export default function SMSPage() {
     }
   )
 
-  // Fetch SMS stats with memoized parameters (FIXED: was causing constant requests)
-  const { data: statsData } = api.communications.sms.getStats.useQuery(
+  // ✅ OPTIMIZED: Fetch SMS stats with loading states and smart caching
+  const { data: statsData, isLoading: statsLoading } = api.communications.sms.getStats.useQuery(
     statsParams,
     {
-      refetchInterval: false, // DISABLED - was causing 300ms request loops
+      refetchInterval: false, // Keep disabled for performance
       refetchOnWindowFocus: false, // Don't refresh stats on window focus
       staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+      cacheTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+      // Only load stats after conversations are loaded to prevent race conditions
+      enabled: !conversationsLoading,
+      retry: 1 // Fewer retries for stats since they're less critical
     }
   )
 
@@ -313,14 +343,42 @@ export default function SMSPage() {
             <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               SMS Conversations
             </h1>
-            <p className="text-slate-600 mt-2 text-lg">
-              Manage two-way SMS conversations with users
-            </p>
+            <div className="flex items-center gap-3 mt-2">
+              <p className="text-slate-600 text-lg">
+                Manage two-way SMS conversations with users
+              </p>
+              {conversationsLoading && (
+                <div className="flex items-center gap-2 text-blue-600">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                  <span className="text-sm font-medium">Loading conversations...</span>
+                </div>
+              )}
+              {conversationsRefetching && !conversationsLoading && (
+                <div className="flex items-center gap-2 text-green-600">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-green-600 border-t-transparent"></div>
+                  <span className="text-sm font-medium">Refreshing...</span>
+                </div>
+              )}
+              {conversationsError && (
+                <div className="flex items-center gap-2 text-red-600">
+                  <span className="text-sm font-medium">⚠️ Failed to load conversations</span>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => refetchConversations()}
+                    className="text-xs"
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
           <Button 
             size="default"
             responsive="nowrap"
             className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg"
+            disabled={conversationsLoading}
           >
             <Plus className="h-4 w-4 mr-2" />
             New Conversation
@@ -336,7 +394,11 @@ export default function SMSPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {activeConversationsCount}
+                {conversationsLoading ? (
+                  <div className="animate-pulse bg-emerald-400/30 rounded h-8 w-12"></div>
+                ) : (
+                  activeConversationsCount
+                )}
               </div>
               <p className="text-xs text-emerald-100">
                 Currently active
@@ -351,7 +413,11 @@ export default function SMSPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {statsData?.messages?.sent || 0}
+                {statsLoading ? (
+                  <div className="animate-pulse bg-blue-400/30 rounded h-8 w-12"></div>
+                ) : (
+                  statsData?.messages?.sent || 0
+                )}
               </div>
               <p className="text-xs text-blue-100">
                 Total sent messages
@@ -366,7 +432,11 @@ export default function SMSPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {statsData?.messages?.received || 0}
+                {statsLoading ? (
+                  <div className="animate-pulse bg-purple-400/30 rounded h-8 w-12"></div>
+                ) : (
+                  statsData?.messages?.received || 0
+                )}
               </div>
               <p className="text-xs text-purple-100">
                 Total received
@@ -381,7 +451,11 @@ export default function SMSPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {statsData?.messages?.autoResponses || 0}
+                {statsLoading ? (
+                  <div className="animate-pulse bg-orange-400/30 rounded h-8 w-12"></div>
+                ) : (
+                  statsData?.messages?.autoResponses || 0
+                )}
               </div>
               <p className="text-xs text-orange-100">
                 Automated replies
@@ -398,7 +472,11 @@ export default function SMSPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-slate-700">Conversations</CardTitle>
                 <Badge variant="secondary" className="bg-slate-200 text-slate-700 px-3 py-1">
-                  {filteredConversations.length}
+                  {conversationsLoading ? (
+                    <div className="animate-pulse bg-slate-300 rounded h-4 w-6"></div>
+                  ) : (
+                    filteredConversations.length
+                  )}
                 </Badge>
               </div>
               
@@ -473,54 +551,107 @@ export default function SMSPage() {
             
             <CardContent className="p-0">
               <div className="overflow-y-auto h-[500px]">
-                {filteredConversations.map((conversation) => (
-                  <div
-                    key={conversation.id}
-                    className={getConversationItemStyling(conversation)}
-                    onClick={() => setSelectedConversation(conversation.id)}
-                  >
-                    <div className="flex items-start gap-3">
-                      {/* User Avatar */}
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
-                        conversation.user ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white' : 'bg-slate-300 text-slate-600'
-                      }`}>
-                        {getUserInitials(conversation)}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-semibold text-sm truncate text-slate-800">
-                            {getUserDisplayName(conversation)}
-                          </p>
-                          <Badge 
-                            className={`text-xs border ${getStatusColor(conversation.status)}`}
-                          >
-                            {conversation.status}
-                          </Badge>
+                {conversationsLoading ? (
+                  // ✅ LOADING STATE: Show skeleton loaders while fetching
+                  <div className="space-y-1">
+                    {Array.from({ length: 6 }).map((_, index) => (
+                      <div key={index} className="p-4 border-b border-slate-100 animate-pulse">
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-full bg-slate-200"></div>
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                            <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                            <div className="h-3 bg-slate-200 rounded w-full"></div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="h-3 bg-slate-200 rounded w-12"></div>
+                          </div>
                         </div>
-                        <p className="text-xs text-slate-500 mb-2">
-                          {conversation.phoneNumber}
-                        </p>
-                        <p className="text-xs text-slate-600 truncate">
-                          {conversation.latestMessage?.body || 'No messages yet'}
-                        </p>
                       </div>
-                      
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="text-xs text-slate-400">
-                          {formatMessageTime(conversation.lastMessageAt)}
-                        </span>
-                        {conversation.messageCount && conversation.messageCount > 0 && (
-                          <Badge className="bg-red-500 text-white text-xs h-5 w-5 rounded-full p-0 flex items-center justify-center">
-                            {conversation.messageCount}
-                          </Badge>
-                        )}
+                    ))}
+                  </div>
+                ) : conversationsError ? (
+                  // ✅ ERROR STATE: Show error with retry option
+                  <div className="p-8 text-center">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                      <div className="text-red-500 mb-4">
+                        <svg className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-semibold text-red-800 mb-2">Failed to load conversations</h3>
+                      <p className="text-red-600 text-sm mb-4">
+                        {conversationsError instanceof Error ? conversationsError.message : 'An unexpected error occurred'}
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                        <Button 
+                          variant="outline" 
+                          onClick={() => refetchConversations()}
+                          className="border-red-300 text-red-700 hover:bg-red-50"
+                        >
+                          <span className="mr-2">🔄</span>
+                          Try Again
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          onClick={() => window.location.reload()}
+                          className="text-red-600 hover:bg-red-50"
+                        >
+                          Refresh Page
+                        </Button>
                       </div>
                     </div>
                   </div>
-                ))}
-                
-                {filteredConversations.length === 0 && (
+                ) : filteredConversations.length > 0 ? (
+                  // ✅ SUCCESS STATE: Show conversations
+                  filteredConversations.map((conversation) => (
+                    <div
+                      key={conversation.id}
+                      className={getConversationItemStyling(conversation)}
+                      onClick={() => setSelectedConversation(conversation.id)}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* User Avatar */}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
+                          conversation.user ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white' : 'bg-slate-300 text-slate-600'
+                        }`}>
+                          {getUserInitials(conversation)}
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-semibold text-sm truncate text-slate-800">
+                              {getUserDisplayName(conversation)}
+                            </p>
+                            <Badge 
+                              className={`text-xs border ${getStatusColor(conversation.status)}`}
+                            >
+                              {conversation.status}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-slate-500 mb-2">
+                            {conversation.phoneNumber}
+                          </p>
+                          <p className="text-xs text-slate-600 truncate">
+                            {conversation.latestMessage?.body || 'No messages yet'}
+                          </p>
+                        </div>
+                        
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-xs text-slate-400">
+                            {formatMessageTime(conversation.lastMessageAt)}
+                          </span>
+                          {conversation.messageCount && conversation.messageCount > 0 && (
+                            <Badge className="bg-red-500 text-white text-xs h-5 w-5 rounded-full p-0 flex items-center justify-center">
+                              {conversation.messageCount}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  // ✅ EMPTY STATE: No conversations found
                   <div className="p-8 text-center text-slate-500">
                     <MessageSquare className="h-12 w-12 mx-auto mb-4 text-slate-300" />
                     <p className="font-medium">No conversations found</p>
@@ -529,6 +660,17 @@ export default function SMSPage() {
                        statusFilter === 'closed' ? 'No closed conversations found' : 
                        'Start a new conversation to get started'}
                     </p>
+                    {!conversationsLoading && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => refetchConversations()}
+                        className="mt-4 border-slate-300 text-slate-600 hover:bg-slate-50"
+                      >
+                        <span className="mr-2">🔄</span>
+                        Refresh
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>

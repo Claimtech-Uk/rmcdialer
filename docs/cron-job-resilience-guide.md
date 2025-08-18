@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
 
 ## Files Already Updated
 
-✅ `/api/cron/callback-notifications/route.ts`
+❌ `/api/cron/callback-notifications/route.ts` (REMOVED - callbacks now automatic)
 ✅ `/api/cron/session-cleanup/route.ts`
 
 ## Files That Need Updates

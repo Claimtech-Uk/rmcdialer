@@ -419,14 +419,13 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
    */
   async getNextUser(): Promise<OutstandingRequestsQueueEntry | null> {
     try {
-      // 1. Priority: Check for ready callbacks first
-      // DISABLED: Manual callback system handles callbacks through UI
-      // const callback = await this.getNextReadyCallback();
-      // if (callback) {
-      //   return this.formatCallbackAsQueueEntry(callback);
-      // }
+      // 🥇 PRIORITY 1: Check for due callbacks first
+      const callback = await this.getNextDueCallback();
+      if (callback) {
+        return this.formatCallbackAsQueueEntry(callback);
+      }
 
-      // 2. Get from user_call_scores where currentQueueType = 'outstanding_requests'
+      // 🥉 PRIORITY 2: Get from user_call_scores where currentQueueType = 'outstanding_requests'
       const userScore = await this.prisma.userCallScore.findFirst({
         where: {
           currentQueueType: this.queueType,
@@ -452,6 +451,49 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
     } catch (error) {
       this.logger.error('❌ Failed to get next user from outstanding requests queue:', error);
       throw new QueueServiceError('Failed to get next user', 'outstanding_requests', undefined, error as Error);
+    }
+  }
+
+  /**
+   * Get next due callback for this queue type
+   */
+  private async getNextDueCallback(): Promise<CallbackUser | null> {
+    try {
+      const dueCallback = await this.prisma.callback.findFirst({
+        where: {
+          queueType: this.queueType, // Only callbacks for outstanding_requests queue
+          status: 'pending',
+          scheduledFor: { lte: new Date() } // Due now or overdue
+        },
+        orderBy: { scheduledFor: 'asc' }, // Oldest due first
+        include: {
+          preferredAgent: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true
+            }
+          }
+        }
+      });
+
+      if (!dueCallback) {
+        return null;
+      }
+
+      // Convert to CallbackUser interface
+      return {
+        id: dueCallback.id,
+        userId: dueCallback.userId,
+        scheduledFor: dueCallback.scheduledFor,
+        callbackReason: dueCallback.callbackReason,
+        preferredAgentId: dueCallback.preferredAgentId,
+        originalCallSessionId: dueCallback.originalCallSessionId
+      };
+
+    } catch (error) {
+      this.logger.error('❌ Failed to get next due callback for outstanding requests queue:', error);
+      return null;
     }
   }
 

@@ -386,14 +386,13 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
    */
   async getNextUser(): Promise<UnsignedUsersQueueEntry | null> {
     try {
-      // 1. Priority: Check for ready callbacks first
-      // DISABLED: Manual callback system handles callbacks through UI
-      // const callback = await this.getNextReadyCallback();
-      // if (callback) {
-      //   return this.formatCallbackAsQueueEntry(callback);
-      // }
+      // 🥇 PRIORITY 1: Check for due callbacks first
+      const callback = await this.getNextDueCallback();
+      if (callback) {
+        return this.formatCallbackAsQueueEntry(callback);
+      }
 
-      // 2. Get from UnsignedUsersQueue table (the CORRECT new queue table)
+      // 🥉 PRIORITY 2: Get from UnsignedUsersQueue table (regular queue)
       const queueEntry = await this.prisma.unsignedUsersQueue.findFirst({
         where: {
           status: 'pending',
@@ -598,6 +597,49 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
 
     } catch (error) {
       this.logger.error('❌ Failed to get ready callbacks:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get next due callback for this queue type
+   */
+  private async getNextDueCallback(): Promise<CallbackUser | null> {
+    try {
+      const dueCallback = await this.prisma.callback.findFirst({
+        where: {
+          queueType: this.queueType, // Only callbacks for unsigned_users queue
+          status: 'pending',
+          scheduledFor: { lte: new Date() } // Due now or overdue
+        },
+        orderBy: { scheduledFor: 'asc' }, // Oldest due first
+        include: {
+          preferredAgent: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true
+            }
+          }
+        }
+      });
+
+      if (!dueCallback) {
+        return null;
+      }
+
+      // Convert to CallbackUser interface
+      return {
+        id: dueCallback.id,
+        userId: dueCallback.userId,
+        scheduledFor: dueCallback.scheduledFor,
+        callbackReason: dueCallback.callbackReason,
+        preferredAgentId: dueCallback.preferredAgentId,
+        originalCallSessionId: dueCallback.originalCallSessionId
+      };
+
+    } catch (error) {
+      this.logger.error('❌ Failed to get next due callback for unsigned queue:', error);
       return null;
     }
   }
