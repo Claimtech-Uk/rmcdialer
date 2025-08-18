@@ -92,7 +92,7 @@ export async function buildSimplifiedResponse(
     
     // Enhanced logging for Phase 2 
     const estimatedTokens = (systemPrompt.length + userPrompt.length) / 4 // rough estimate
-    console.log('AI SMS | 🧠 Starting Sonnet 4.0 response generation', {
+    console.log(`AI SMS | 🧠 Starting ${modelConfig.model} response generation`, {
       requestedModel: modelConfig.model,
       estimatedInputTokens: Math.round(estimatedTokens),
       phase2Features: {
@@ -142,7 +142,7 @@ export async function buildSimplifiedResponse(
     // Knowledge base is now integrated directly into prompt structure
     // Legacy context.knowledgeContext is rarely used in simplified mode
     
-    console.log('AI SMS | ✅ Sonnet 4.0 response generated', successLog)
+    console.log(`AI SMS | ✅ ${chatResult.modelUsed} response generated`, successLog)
 
     return validatedResponse
 
@@ -223,6 +223,7 @@ function preparePromptStructure(existingPrompt: string, context: SimplifiedRespo
   // Build logically structured prompt that follows the 6-step progression
   const structuredPrompt = `
 CRITICAL: Return valid JSON that matches the Output Schema in STEP 6.
+Only discuss motor finance claims.
 Do not include explanations, system messages, or extra fields outside the schema.
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -263,7 +264,7 @@ Analyze current_user_message in the context of conversation_history.
 • info_request – seeking information/education (intent: questions starting with why/how/when/who/what about claims, process, fees, eligibility, etc.)
 • status_request – wants claim progress updates
 • satisfaction – expresses thanks/praise/positive milestone
-• objection – declines service or shows preference to self-service 
+• objection – declines service or negative response 
 • consent_needed – set by Step 3 when we need to offer before sending
 • needs_routing – mixed/complex intent that isn't clearly any above
 • needs_clarification – unclear/gibberish input requiring clarification
@@ -331,8 +332,8 @@ If mode === "objection" → lane = "none" → NO ACTIONS ALLOWED
    supportOffer: "If you have any questions about the process, I'm here to help"
 
 4. SATISFACTION STAGE: if positive milestone/thanks → lane = "review"
-   why: "You've achieved a great result - help others by sharing your experience"
-   completionPromise: "Your review helps other people understand what to expect from the process"
+   why: "You've enjoyed the process - help others by sharing your experience"
+   completionPromise: "Your review helps other people understand what to expect from the us"
    supportOffer: "If you're not sure what to write, I can suggest some key points to cover"
 
 5. Support priority: if complexity or explicit human help requested → lane = "support"
@@ -395,7 +396,7 @@ You've made all decisions. Now write Sophie's response using what you determined
 
 📝 Structured Block Message Format by Mode:
 
-🎭 Sophie's voice: Professional pcp claims advisor, warm, friendly, likeable. Use natural language within each block.
+🎭 Sophie's voice: Helpful pcp claims advisor, warm, friendly, likeable.
 
 info_request/consent_needed:
 (Greeting if first) + (FIRST: Answer their specific questions completely using KB facts) + \\n\\n + (THEN: Stage.why + Stage.completionPromise from stage intelligence) + \\n\\n + (FINALLY: Link offer based on consent rules)
@@ -414,10 +415,9 @@ satisfaction:
 (Thank them for positive feedback) + \\n\\n + (Stage.completionPromise for reviews) + \\n\\n + (Include review link if appropriate)
 
 📱 Format: 
-• Use double line breaks (\\n\\n) between paragraphs and sentences for mobile readability. 
+• MUST Use double line breaks (\\n\\n) After name, before closing statement or question. And where appropriate for mobile readability. 
 • Max 900 chars total. 
-• use emojis where appropriate. 
-• add a line break (\\n\\n) before the closing statement or question.
+• use at least 1 emoji per message. 
 
 🚨 CRITICAL PRIORITY: 
 For info_request modes, you MUST answer their specific questions FIRST before discussing what you need from them. Questions come before requirements, always.

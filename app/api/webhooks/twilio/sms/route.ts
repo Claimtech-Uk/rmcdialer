@@ -70,14 +70,29 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Only allow AI SMS agent auto-replies on the designated test number
-    const aiSmsTestNumberE164 = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
-    const isTestNumber = (validatedData.To === aiSmsTestNumberE164) || (toPhone === aiSmsTestNumberE164.replace(/^\+/, ''));
-    console.log('AI SMS | 🧪 Agent gating', {
+    // 🎯 UPDATED: Allow AI SMS agent on BOTH configured numbers for smart routing
+    function isAiEnabledNumber(destinationNumber: string): boolean {
+      const aiTestNumber = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
+      const mainNumber = process.env.TWILIO_PHONE_NUMBER || '+447488879172';
+      
+      // Clean numbers for comparison  
+      const cleanDest = destinationNumber.replace(/^\+/, '');
+      const cleanTest = aiTestNumber.replace(/^\+/, '');
+      const cleanMain = mainNumber.replace(/^\+/, '');
+      
+      return cleanDest === cleanTest || cleanDest === cleanMain || 
+             destinationNumber === aiTestNumber || destinationNumber === mainNumber;
+    }
+    
+    const isAiEnabled = isAiEnabledNumber(validatedData.To);
+    console.log('AI SMS | 🎯 Multi-number AI gating', {
       featureEnabled: FEATURE_FLAGS.ENABLE_AI_SMS_AGENT,
-      isTestNumber,
+      isAiEnabled,
       to: validatedData.To,
-      aiSmsTestNumberE164
+      supportedNumbers: {
+        test: process.env.AI_SMS_TEST_NUMBER || '+447723495560',
+        main: process.env.TWILIO_PHONE_NUMBER || '+447488879172'
+      }
     })
     
     // For inbound messages, the conversation is with the sender's phone number
@@ -201,7 +216,7 @@ export async function POST(request: NextRequest) {
             message: "You've been unsubscribed from SMS. You can still receive updates by phone or email.",
             messageType: 'auto_response',
             userId: matchedUserId,
-            fromNumberOverride: aiSmsTestNumberE164
+            fromNumberOverride: process.env.AI_SMS_TEST_NUMBER || '+447723495560'
           })
           await setAutomationHalt(conversationPhoneNumber)
           console.log('AI SMS | ✅ STOP acknowledged, automation halted 24h', { conversationId: conversation.id, to: validatedData.From })
@@ -212,7 +227,7 @@ export async function POST(request: NextRequest) {
       }
 
       // NEW: Batch-based AI SMS processing (prevents duplicate responses)
-      if (FEATURE_FLAGS.ENABLE_AI_SMS_AGENT && isTestNumber) {
+      if (FEATURE_FLAGS.ENABLE_AI_SMS_AGENT && isAiEnabled) {
         try {
           // Create batch ID using 15-second windows
           // This groups rapid-fire messages together for single AI response
@@ -265,9 +280,13 @@ export async function POST(request: NextRequest) {
           });
         }
       } else {
-        console.log('AI SMS | ℹ️ Agent not triggered', {
-          reason: FEATURE_FLAGS.ENABLE_AI_SMS_AGENT ? (isTestNumber ? 'unknown' : 'not test number') : 'feature disabled',
-          to: validatedData.To
+        console.log('AI SMS | ℹ️ AI not triggered', {
+          reason: FEATURE_FLAGS.ENABLE_AI_SMS_AGENT ? (isAiEnabled ? 'unknown' : 'number not AI-enabled') : 'feature disabled',
+          to: validatedData.To,
+          aiEnabledNumbers: {
+            test: process.env.AI_SMS_TEST_NUMBER || '+447723495560',
+            main: process.env.TWILIO_PHONE_NUMBER || '+447488879172'
+          }
         })
       }
 

@@ -41,12 +41,7 @@ const MODEL_REGISTRY: Record<string, ModelConfig> = {
     maxTokens: 325,
     costPer1kTokens: 0.015
   },
-  'claude-3-5-sonnet-20241022': {
-    provider: 'anthropic',
-    model: 'claude-3-5-sonnet-20241022',
-    maxTokens: 325,
-    costPer1kTokens: 0.015
-  },
+  // Removed claude-3-5-sonnet-20241022 - deprecated and no longer available
   'claude-3-sonnet-20240229': {
     provider: 'anthropic', 
     model: 'claude-3-sonnet-20240229',
@@ -196,9 +191,10 @@ function buildFallbackChain(requestedModel: string): string[] {
   
   // Add intelligent fallbacks based on requested model
   if (requestedModel.includes('claude')) {
-    // Claude fallback chain
-    if (!chain.includes('claude-sonnet-4-20250514')) chain.push('claude-sonnet-4-20250514')
-    if (!chain.includes('claude-3-5-sonnet-20241022')) chain.push('claude-3-5-sonnet-20241022')
+    // Claude fallback chain with Sonnet 4 retry
+    if (!chain.includes('claude-sonnet-4-20250514')) {
+      chain.push('claude-sonnet-4-20250514') // Retry Sonnet 4
+    }
     if (!chain.includes('gpt-4o')) chain.push('gpt-4o')
     if (!chain.includes('gpt-4o-mini')) chain.push('gpt-4o-mini')
   } else if (requestedModel.includes('gpt')) {
@@ -207,8 +203,8 @@ function buildFallbackChain(requestedModel: string): string[] {
     if (!chain.includes('claude-sonnet-4-20250514')) chain.push('claude-sonnet-4-20250514')
     if (!chain.includes('gpt-4o-mini')) chain.push('gpt-4o-mini')
   } else {
-    // Default fallback chain (prefer Claude Sonnet 4)
-    chain.push('claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'gpt-4o', 'gpt-4o-mini')
+    // Default fallback chain: Sonnet 4 → Sonnet 4 (retry) → GPT-4o
+    chain.push('claude-sonnet-4-20250514', 'gpt-4o', 'gpt-4o-mini')
   }
   
   // Remove duplicates while preserving order
