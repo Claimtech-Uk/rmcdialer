@@ -31,9 +31,7 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
       errors.push('Callback date/time must be in the future');
     }
     
-    if (!data?.callbackDateTime) {
-      warnings.push('Consider scheduling a callback to follow up on interest');
-    }
+
     
     return {
       isValid: errors.length === 0,

@@ -119,7 +119,7 @@ export function CallOutcomeModal({
   const [callbackReason, setCallbackReason] = useState('');
   
   // Outcomes that require scheduling a follow-up call
-  const callbackRequiredOutcomes = ['call_back', 'might_complete', 'going_to_complete'];
+  const callbackRequiredOutcomes = ['call_back']; // Only genuine callbacks need scheduling
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -261,9 +261,9 @@ export function CallOutcomeModal({
                 </p>
                 <p className="text-xs text-purple-600">
                   {selectedOutcome === 'might_complete' 
-                    ? 'The customer showed interest but needs more time. They will be called back to help them complete their claim.'
+                    ? 'Customer showed interest. They will automatically re-enter the queue in 1 day with a small priority adjustment (+2).'
                     : selectedOutcome === 'going_to_complete'
-                    ? 'The customer committed to completing their claim. A follow-up call will ensure they complete the process.'
+                    ? 'Customer committed to completing. They will automatically re-enter the queue in 3 days with no priority penalty.'
                     : 'The customer will appear in the callback queue at the scheduled time for the preferred agent to call back.'}
                 </p>
               </div>
