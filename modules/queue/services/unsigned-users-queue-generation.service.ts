@@ -92,32 +92,91 @@ export class UnsignedUsersQueueGenerationService {
       // Calculate 2-hour delay threshold
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
       
-      const results = await prisma.userCallScore.findMany({
+      // DEBUG: Check user 16185 specifically before main query
+      const user16185 = await prisma.userCallScore.findFirst({
+        where: { userId: BigInt(16185) },
+        select: {
+          userId: true,
+          currentScore: true,
+          currentQueueType: true,
+          isActive: true,
+          nextCallAfter: true,
+          createdAt: true
+        }
+      });
+      
+      if (user16185) {
+        const passesTimeFilter = user16185.createdAt <= twoHoursAgo;
+        const passesCallAfterFilter = !user16185.nextCallAfter || user16185.nextCallAfter <= new Date();
+        
+        logger.info(`🕵️ [DEBUG] User 16185 status:`, {
+          score: user16185.currentScore,
+          queueType: user16185.currentQueueType,
+          isActive: user16185.isActive,
+          nextCallAfter: user16185.nextCallAfter,
+          createdAt: user16185.createdAt,
+          passesTimeFilter,
+          passesCallAfterFilter,
+          twoHoursAgo
+        });
+      } else {
+        logger.info(`🕵️ [DEBUG] User 16185 not found in user_call_scores`);
+      }
+      
+      // PRIORITY FIX: Get score 0 users first, then fill remaining slots with other users
+      const score0Users = await prisma.userCallScore.findMany({
         where: {
           currentQueueType: 'unsigned_users',
           isActive: true,
-          // Include users ready to be called (NULL means immediately available)
+          currentScore: 0,  // HIGHEST PRIORITY - always include these
+          OR: [
+            { nextCallAfter: null },
+            { nextCallAfter: { lte: new Date() } }
+          ]
+          // NOTE: No 2-hour cooling for score 0 users - they get immediate priority
+        },
+        orderBy: [
+          { createdAt: 'desc' }  // Most recent score 0 users first
+        ]
+      });
+
+      // Get remaining users (non-zero scores) to fill remaining queue slots
+      const remainingSlots = Math.max(0, this.QUEUE_SIZE_LIMIT - score0Users.length);
+      const otherUsers = remainingSlots > 0 ? await prisma.userCallScore.findMany({
+        where: {
+          currentQueueType: 'unsigned_users',
+          isActive: true,
+          currentScore: { gt: 0 },  // Exclude score 0 (already got them above)
           OR: [
             { nextCallAfter: null },
             { nextCallAfter: { lte: new Date() } }
           ],
-          // NEW: 2-hour cooling period for new user_call_scores
+          // Apply 2-hour cooling period to non-priority users
           createdAt: {
             lte: twoHoursAgo
           }
         },
         orderBy: [
-          { currentScore: 'asc' },    // Lower score = higher priority (0 is best)
-          { createdAt: 'desc' }       // NEW: Most recent first for tied scores (fresher leads prioritized)
+          { currentScore: 'asc' },    // Lower score = higher priority
+          { createdAt: 'desc' }
         ],
-        take: this.QUEUE_SIZE_LIMIT   // Limit queue size for performance
-      });
+        take: remainingSlots
+      }) : [];
+
+      // Combine with score 0 users first (highest priority)
+      const results = [...score0Users, ...otherUsers];
 
       // DEBUG: Log the score distribution of retrieved users  
       const scoreCount = results.length;
       const scoreRange = scoreCount > 0 ? `${results[0].currentScore}-${results[results.length-1].currentScore}` : 'none';
       
-      logger.info(`🔍 [UNSIGNED] Retrieved ${scoreCount} users, score range: ${scoreRange}`);
+      // ENHANCED DEBUG: Check priority user inclusion
+      const hasUser16185 = results.some(u => u.userId === BigInt(16185));
+      
+      logger.info(`🔍 [UNSIGNED] Retrieved ${scoreCount} users (${score0Users.length} score 0 + ${otherUsers.length} others)`);
+      logger.info(`📊 [UNSIGNED] Score range: ${scoreRange}`);  
+      logger.info(`🎯 [UNSIGNED] Score 0 users guaranteed first priority: ${score0Users.length} users`);
+      logger.info(`🕵️ [UNSIGNED] User 16185 included: ${hasUser16185}`);
 
       return results;
     } catch (error) {

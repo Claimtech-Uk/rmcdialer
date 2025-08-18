@@ -91,27 +91,48 @@ export class OutstandingRequestsQueueGenerationService {
       // Calculate 2-hour delay threshold (keep this safety check)
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
       
-      // Simply get the top 200 users with lowest scores - trust the scoring system
-      const qualifiedUsers = await prisma.userCallScore.findMany({
+      // PRIORITY FIX: Get score 0 users first, then fill remaining slots
+      const score0Users = await prisma.userCallScore.findMany({
         where: {
           currentQueueType: 'outstanding_requests',
           isActive: true,
-          // Include users ready to be called (NULL means immediately available)
+          currentScore: 0,  // HIGHEST PRIORITY - always include these
+          OR: [
+            { nextCallAfter: null },
+            { nextCallAfter: { lte: new Date() } }
+          ]
+          // NOTE: No 2-hour cooling for score 0 users - they get immediate priority
+        },
+        orderBy: [
+          { createdAt: 'desc' }  // Most recent score 0 users first
+        ]
+      });
+
+      // Get remaining users (non-zero scores) to fill remaining queue slots
+      const remainingSlots = Math.max(0, this.QUEUE_SIZE_LIMIT - score0Users.length);
+      const otherUsers = remainingSlots > 0 ? await prisma.userCallScore.findMany({
+        where: {
+          currentQueueType: 'outstanding_requests',
+          isActive: true,
+          currentScore: { gt: 0 },  // Exclude score 0 (already got them above)
           OR: [
             { nextCallAfter: null },
             { nextCallAfter: { lte: new Date() } }
           ],
-          // 2-hour cooling period for new user_call_scores
+          // Apply 2-hour cooling period to non-priority users
           createdAt: {
             lte: twoHoursAgo
           }
         },
         orderBy: [
-          { currentScore: 'asc' },    // Lower score = higher priority (0 is best)
-          { createdAt: 'desc' }       // Most recent first for tied scores
+          { currentScore: 'asc' },    // Lower score = higher priority
+          { createdAt: 'desc' }
         ],
-        take: this.QUEUE_SIZE_LIMIT   // Just take exactly what we need (200)
-      });
+        take: remainingSlots
+      }) : [];
+
+      // Combine with score 0 users first (highest priority)
+      const qualifiedUsers = [...score0Users, ...otherUsers];
 
       logger.info(`✅ [OUTSTANDING] Selected ${qualifiedUsers.length} pre-validated users (no additional validation needed)`);
       
