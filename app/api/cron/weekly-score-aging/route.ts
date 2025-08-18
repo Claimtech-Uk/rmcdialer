@@ -2,20 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
 /**
- * Continuous Weekly Score Aging Cron Job
+ * Continuous Weekly Score Aging Cron Job - Unsigned Users Only
  * 
- * Runs every night to age users who haven't been aged in 7+ days.
- * Uses lastQueueCheck to track aging intervals efficiently.
+ * Runs every night to age unsigned users who haven't been aged in 7+ days.
+ * OPTIMIZATION: Only processes currentQueueType = 'unsigned_users' for efficiency.
+ * 
+ * WHY ONLY UNSIGNED USERS:
+ * - outstanding_requests users are already engaged (signed documents)
+ * - null queue users are likely inactive/converted
+ * - unsigned_users are most likely to go stale without aging
  * 
  * LOGIC:
- * - Find users where lastQueueCheck is 7+ days old (or NULL)
- * - Calculate weeks since creation and apply appropriate aging
+ * - Find unsigned users where lastQueueCheck is 7+ days old (or NULL)
+ * - Apply +5 aging to prevent stale signature leads
  * - Update lastQueueCheck to prevent duplicate aging
  * 
  * VOLUME OPTIMIZED:
- * - Processes in batches of 500 users
- * - Uses efficient database queries
- * - Prevents duplicate aging via lastQueueCheck tracking
+ * - Processes max 500 unsigned users per night
+ * - Efficient single-queue filtering
+ * - Uses existing database indexes
  */
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
@@ -27,14 +32,15 @@ export async function GET(request: NextRequest) {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     
-    console.log(`🔍 [WEEKLY-AGING] Finding users who need aging (lastQueueCheck older than ${sevenDaysAgo.toISOString()})`);
+    console.log(`🔍 [WEEKLY-AGING] Finding UNSIGNED users who need aging (lastQueueCheck older than ${sevenDaysAgo.toISOString()})`);
     
-    // SMART AGING: Find users who haven't been aged in 7+ days
-    // Use lastQueueCheck as aging tracker (efficient and already indexed)
+    // SMART AGING: Find unsigned users who haven't been aged in 7+ days
+    // OPTIMIZATION: Only age unsigned_users (still need signatures, most likely to go stale)
     const candidateUsers = await prisma.userCallScore.findMany({
       where: {
         isActive: true,
         currentScore: { lt: 200 },  // Don't age frozen/converted users
+        currentQueueType: 'unsigned_users',  // ONLY unsigned users need aging
         createdAt: { lt: oneWeekAgo }, // Must be at least 1 week old
         OR: [
           { lastQueueCheck: null },  // Never been aged
@@ -51,14 +57,14 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: 'asc'  // Process oldest users first
       },
-      take: 500  // Process max 500 users per night (volume control)
+      take: 500  // Process max 500 unsigned users per night (volume control)
     });
     
     if (candidateUsers.length === 0) {
-      console.log('✅ [WEEKLY-AGING] No users need aging tonight');
+      console.log('✅ [WEEKLY-AGING] No unsigned users need aging tonight');
       return NextResponse.json({
         success: true,
-        message: 'No users found for weekly aging',
+        message: 'No unsigned users found for weekly aging',
         usersAged: 0,
         duration: Date.now() - startTime
       });
@@ -78,7 +84,7 @@ export async function GET(request: NextRequest) {
       };
     });
     
-    console.log(`🔄 [WEEKLY-AGING] Processing ${usersToAge.length} users (ages: ${Math.min(...usersToAge.map(u => u.weeksOld))}-${Math.max(...usersToAge.map(u => u.weeksOld))} weeks)`);
+    console.log(`🔄 [WEEKLY-AGING] Processing ${usersToAge.length} unsigned users (ages: ${Math.min(...usersToAge.map(u => u.weeksOld))}-${Math.max(...usersToAge.map(u => u.weeksOld))} weeks)`);
     
     // Apply +5 aging and track via lastQueueCheck
     const result = await prisma.$transaction(async (tx) => {
@@ -96,10 +102,11 @@ export async function GET(request: NextRequest) {
         }
       });
       
-      // Sync the queue tables to match new scores
+      // Sync only relevant queue tables (unsigned users only)
       const callQueueSync = await tx.callQueue.updateMany({
         where: {
-          userId: { in: candidateUsers.map(u => u.userId) },
+          userId: { in: usersToAge.map(u => u.userId) },
+          queueType: 'unsigned_users',  // Only sync unsigned queue entries
           status: 'pending'
         },
         data: {
@@ -108,10 +115,10 @@ export async function GET(request: NextRequest) {
         }
       });
       
-      // Sync unsigned users queue if exists
+      // Sync unsigned users queue (primary target)
       const unsignedQueueSync = await tx.unsignedUsersQueue.updateMany({
         where: {
-          userId: { in: candidateUsers.map(u => u.userId) },
+          userId: { in: usersToAge.map(u => u.userId) },
           status: 'pending'
         },
         data: {
@@ -120,30 +127,19 @@ export async function GET(request: NextRequest) {
         }
       });
       
-      // Sync outstanding requests queue if exists  
-      const outstandingQueueSync = await tx.outstandingRequestsQueue.updateMany({
-        where: {
-          userId: { in: candidateUsers.map(u => u.userId) },
-          status: 'pending'
-        },
-        data: {
-          priorityScore: { increment: 5 },
-          updatedAt: new Date()
-        }
-      });
+      // Skip outstanding queue sync (we don't process those users anymore)
       
       return {
         scoreUpdates: scoreUpdate.count,
         callQueueSync: callQueueSync.count,
-        unsignedQueueSync: unsignedQueueSync.count,
-        outstandingQueueSync: outstandingQueueSync.count
+        unsignedQueueSync: unsignedQueueSync.count
       };
     });
     
     const duration = Date.now() - startTime;
     
     console.log(`✅ [WEEKLY-AGING] Successfully aged ${result.scoreUpdates} users (+5 each)`);
-    console.log(`🔄 [WEEKLY-AGING] Synced queues: call_queue=${result.callQueueSync}, unsigned=${result.unsignedQueueSync}, outstanding=${result.outstandingQueueSync}`);
+    console.log(`🔄 [WEEKLY-AGING] Synced queues: call_queue=${result.callQueueSync}, unsigned=${result.unsignedQueueSync} (outstanding skipped)`);
     console.log(`⏱️ [WEEKLY-AGING] Completed in ${duration}ms`);
     
     // Log detailed breakdown by age groups
@@ -172,7 +168,7 @@ export async function GET(request: NextRequest) {
       queueSyncResults: {
         callQueue: result.callQueueSync,
         unsignedQueue: result.unsignedQueueSync,
-        outstandingQueue: result.outstandingQueueSync
+        outstandingQueue: 0  // Skipped - not processed
       },
       scoreDistribution,
       agingDetails: {
