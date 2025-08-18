@@ -80,6 +80,10 @@
     {
       "path": "/api/cron/process-sms-batches",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/weekly-score-aging",
+      "schedule": "0 0 * * *"
     }
   ],
   "git": {
