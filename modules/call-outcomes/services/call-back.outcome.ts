@@ -86,7 +86,7 @@ export class CallBackOutcome implements CallOutcomeHandler {
   }
   
   getDelayHours(context: CallOutcomeContext, data?: any): number {
-    // Use callback time set by the agent if provided
+    // CRITICAL: Set delay to callback time to prevent calls before requested time
     if (data?.callbackDateTime) {
       const callbackTime = new Date(data.callbackDateTime);
       const now = new Date();
@@ -94,7 +94,8 @@ export class CallBackOutcome implements CallOutcomeHandler {
       return Math.round(hoursUntilCallback);
     }
     
-    // No delay if no callback time specified
-    return 0;
+    // If no specific callback time provided, default to 24 hours
+    // This prevents immediate re-queuing while agent schedules the callback
+    return 24;
   }
 } 

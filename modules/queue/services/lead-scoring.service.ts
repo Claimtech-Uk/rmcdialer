@@ -106,28 +106,10 @@ export class LeadScoringService {
    * Daily aging - simplified version
    */
   private async performDailyAging(): Promise<void> {
-    const today = new Date();
-    const isSunday = today.getDay() === 0;
-    
-    if (isSunday) {
-      logger.info('📅 Skipping daily aging (Sunday)');
-      return;
-    }
-    
-    logger.info('📅 Applying daily aging to all active users...');
-    
-    try {
-      const aged = await prisma.userCallScore.updateMany({
-        data: { 
-          currentScore: { increment: 1 },
-          updatedAt: new Date()
-        }
-      });
-      
-      logger.info(`📅 Daily aging complete: ${aged.count} users aged`);
-    } catch (error) {
-      logger.warn('⚠️ Daily aging skipped due to schema issues');
-    }
+    // DISABLED: Conflicts with new weekly aging system (+5 per week)
+    // The new weekly aging system provides better control and prevents over-aging
+    logger.info('📅 Daily aging disabled - using weekly aging system (+5 per week)');
+    return;
   }
 
   /**
