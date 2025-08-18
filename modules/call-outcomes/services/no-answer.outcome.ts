@@ -12,10 +12,10 @@ export class NoAnswerOutcome implements CallOutcomeHandler {
   readonly description = 'Phone rang but customer did not answer';
   readonly category = 'neutral' as const;
   
-  // Scoring: Neutral outcome, small priority decrease
+  // NEW PRIORITY SYSTEM: Minimal penalty, 4-hour smart delay
   readonly scoringRules = {
-    scoreAdjustment: 10,
-    description: 'No answer - slightly harder to reach',
+    scoreAdjustment: 1,
+    description: 'No answer - minimal penalty, try again in 4 hours',
     shouldTriggerConversion: false
   };
   

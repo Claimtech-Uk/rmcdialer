@@ -170,12 +170,15 @@ export class UnsignedUsersQueueGenerationService {
       const scoreCount = results.length;
       const scoreRange = scoreCount > 0 ? `${results[0].currentScore}-${results[results.length-1].currentScore}` : 'none';
       
-      // ENHANCED DEBUG: Check priority user inclusion
+      // ENHANCED DEBUG: Check priority user inclusion and nextCallAfter status
       const hasUser16185 = results.some(u => u.userId === BigInt(16185));
+      const usersWithDelays = results.filter(u => u.nextCallAfter && u.nextCallAfter > new Date()).length;
+      const immediatelyAvailable = results.filter(u => !u.nextCallAfter || u.nextCallAfter <= new Date()).length;
       
       logger.info(`🔍 [UNSIGNED] Retrieved ${scoreCount} users (${score0Users.length} score 0 + ${otherUsers.length} others)`);
       logger.info(`📊 [UNSIGNED] Score range: ${scoreRange}`);  
       logger.info(`🎯 [UNSIGNED] Score 0 users guaranteed first priority: ${score0Users.length} users`);
+      logger.info(`⏰ [UNSIGNED] Timing status: ${immediatelyAvailable} immediately available, ${usersWithDelays} delayed`);
       logger.info(`🕵️ [UNSIGNED] User 16185 included: ${hasUser16185}`);
 
       return results;

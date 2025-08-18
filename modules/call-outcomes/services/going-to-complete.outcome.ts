@@ -12,10 +12,10 @@ export class GoingToCompleteOutcome implements CallOutcomeHandler {
   readonly description = 'Customer committed to completing their form soon';
   readonly category = 'positive' as const;
   
-  // Scoring: Add 3 to current score - customer committed to completing
+  // NEW PRIORITY SYSTEM: No penalty, 3-day follow-up delay
   readonly scoringRules = {
-    scoreAdjustment: 3,
-    description: 'Customer committed to completing form - add 3 to current score',
+    scoreAdjustment: 0,
+    description: 'Customer committed to completing - no penalty, 3-day follow-up',
     shouldTriggerConversion: false
   };
   
@@ -123,7 +123,7 @@ export class GoingToCompleteOutcome implements CallOutcomeHandler {
       return Math.round(hoursUntilCallback);
     }
     
-    // No default delay - requires agent to set callback time
-    return 0;
+    // NEW: Default 3-day follow-up for going to complete
+    return 72; // 3 days
   }
 } 

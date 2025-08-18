@@ -1028,11 +1028,11 @@ export class CallService {
    */
   private getDefaultDelayHours(outcomeType: string): number {
     const delayMap: Record<string, number> = {
-      'call_back': 0, // Immediate callback handling
-      'going_to_complete': 72, // 3 days
-      'might_complete': 168, // 1 week
-      'no_answer': 4, // 4 hours
-      'hung_up': 24, // 1 day
+      'call_back': 0, // Immediate callback handling ✅
+      'going_to_complete': 72, // 3 days ✅
+      'might_complete': 24, // 1 day (lighter penalty with +2 score)
+      'no_answer': 4, // 4 hours ✅
+      'hung_up': 4, // 4 hours (lighter penalty with +2 score)
       'missed_call': 2, // 2 hours
       'not_interested': 0, // No follow-up
       'do_not_contact': 0, // No follow-up
@@ -1043,7 +1043,7 @@ export class CallService {
       'documents_received': 0 // No follow-up
     };
     
-    return delayMap[outcomeType] || 24; // Default 24 hours
+    return delayMap[outcomeType] || 4; // Default 4 hours (lighter than old 24h)
   }
 
   // REMOVED: Conversion creation methods - conversions are now only created 
@@ -1125,6 +1125,16 @@ export class CallService {
       const nextCallAfter = effectiveDelayHours > 0 
         ? new Date(Date.now() + (effectiveDelayHours * 60 * 60 * 1000))
         : null; // null = immediately available
+
+      // DEBUG: Log delay calculation for troubleshooting
+      this.deps.logger.info(`⏰ Next call timing for user ${userId}:`, {
+        outcomeType,
+        delayHoursFromOutcome: delayHours,
+        defaultDelayHours: this.getDefaultDelayHours(outcomeType),
+        effectiveDelayHours,
+        nextCallAfter: nextCallAfter?.toISOString() || 'immediate',
+        isImmediatelyAvailable: !nextCallAfter
+      });
 
       // Check if outcome indicates conversion (score 200+)
       // REMOVED: Conversions are only created by cleanup cron services

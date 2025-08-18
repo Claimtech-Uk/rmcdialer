@@ -12,10 +12,10 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
   readonly description = 'Customer showed interest but made no firm commitment';
   readonly category = 'positive' as const;  // Changed to positive - this is engagement
   
-  // Scoring: Add 3 to current score - customer showed interest
+  // NEW PRIORITY SYSTEM: Small penalty for lukewarm interest
   readonly scoringRules = {
-    scoreAdjustment: 3,
-    description: 'Customer showed interest - add 3 to current score',
+    scoreAdjustment: 2,
+    description: 'Customer showed interest - small penalty, follow up soon',
     shouldTriggerConversion: false
   };
   
@@ -111,7 +111,7 @@ export class MightCompleteOutcome implements CallOutcomeHandler {
       return Math.round(hoursUntilCallback);
     }
     
-    // No default delay - requires agent to set callback time
-    return 0;
+    // NEW: Default 1 day delay for mild interest (+2 score)
+    return 24; // 1 day - give them time to think
   }
 } 

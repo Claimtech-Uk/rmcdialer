@@ -12,10 +12,10 @@ export class HungUpOutcome implements CallOutcomeHandler {
   readonly description = 'Customer answered but hung up during conversation';
   readonly category = 'negative' as const;
   
-  // Scoring: Negative outcome, priority decrease
+  // NEW PRIORITY SYSTEM: Small penalty, don't over-penalize
   readonly scoringRules = {
-    scoreAdjustment: 25,
-    description: 'Customer hung up - 24 hour delay',
+    scoreAdjustment: 2,
+    description: 'Customer hung up - small penalty, try again later',
     shouldTriggerConversion: false
   };
   
@@ -66,7 +66,7 @@ export class HungUpOutcome implements CallOutcomeHandler {
   }
   
   getDelayHours(context: CallOutcomeContext): number {
-    // Fixed 1 day delay after hang-ups
-    return 24;
+    // NEW PRIORITY SYSTEM: Shorter delay with lighter penalty (+2 score)
+    return 4; // 4 hours (same as no-answer, don't over-penalize)
   }
 } 
