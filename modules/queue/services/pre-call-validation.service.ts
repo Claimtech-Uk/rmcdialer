@@ -49,6 +49,51 @@ export class PreCallValidationService {
   }
 
   /**
+   * 🎯 UNIFIED: Get basic user data for both missed calls and callbacks
+   * Fast, reliable, consistent approach using simple MySQL replica lookup
+   */
+  private async getBasicUserForCallback(userId: number): Promise<{
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    email: string;
+    isEnabled: boolean;
+  } | null> {
+    try {
+      console.log(`🔍 Getting basic user data for ${userId} from MySQL replica...`);
+      
+      const userData = await replicaDb.user.findUnique({
+        where: { id: BigInt(userId) },
+        select: {
+          first_name: true,
+          last_name: true,
+          phone_number: true,
+          email_address: true,
+          is_enabled: true
+        }
+      });
+
+      if (!userData || !userData.is_enabled) {
+        console.log(`❌ User ${userId} not found or disabled in MySQL replica`);
+        return null;
+      }
+
+      console.log(`✅ Found user data: ${userData.first_name} ${userData.last_name} - ${userData.phone_number}`);
+
+      return {
+        firstName: userData.first_name || 'Unknown',
+        lastName: userData.last_name || 'User', 
+        phoneNumber: userData.phone_number || '+44000000000',
+        email: userData.email_address || `user${userId}@unknown.com`,
+        isEnabled: userData.is_enabled
+      };
+    } catch (error) {
+      console.error(`❌ Failed to get basic user data for ${userId}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Add penalty score for users with all cancelled claims
    */
   private async penalizeUserForCancelledClaims(userId: number): Promise<void> {
@@ -738,12 +783,13 @@ export class PreCallValidationService {
   }
 
   // ============================================================================
-  // MISSED CALLS PRIORITY SYSTEM
+  // MISSED CALLS PRIORITY SYSTEM (UPDATED TO USE UNIFIED APPROACH)
   // ============================================================================
 
   /**
    * 🎯 Get next missed call for agent (PRIORITY over regular queue)
    * Returns formatted result compatible with NextUserForCallResult
+   * UPDATED: Uses simple unified user lookup approach
    */
   private async getNextMissedCallForAgent(agentId: number): Promise<NextUserForCallResult | null> {
     try {
@@ -759,104 +805,65 @@ export class PreCallValidationService {
 
       console.log(`🚀 PRIORITY: Found missed call for ${missedCall.phoneNumber}, reason: ${missedCall.reason}`);
       
-      // Get user context from services if userId is available (FULL context with claims)
-      let userContext = null;
+      let userContext;
       let validatedUserId = null;
 
+      // 🎯 UNIFIED APPROACH: Use simple user lookup for missed calls
       if (missedCall.userId) {
-        try {
-          // Validate user exists quickly
-          const userData = await replicaDb.user.findUnique({
-            where: { id: BigInt(missedCall.userId) },
-            select: { id: true }
-          });
-
-          if (userData) {
-            validatedUserId = Number(userData.id);
-            // Fetch full call context (includes claims, address, callScore)
-            const fullContext = await this.userService.getUserCallContext(validatedUserId);
-            if (fullContext) {
-              userContext = {
-                userId: fullContext.user.id,
-                firstName: fullContext.user.firstName || 'Unknown',
-                lastName: fullContext.user.lastName || 'User',
-                email: fullContext.user.email || `user${validatedUserId}@unknown.com`,
-                // Prefer missed call number if present
-                phoneNumber: missedCall.phoneNumber || fullContext.user.phoneNumber || '+44000000000',
-                // Keep compatibility fields some components might read
-                phone: missedCall.phoneNumber || fullContext.user.phoneNumber || '+44000000000',
-                createdAt: fullContext.user.createdAt,
-                address: fullContext.user.address ? {
-                  fullAddress: fullContext.user.address.fullAddress || '',
-                  postCode: fullContext.user.address.postCode || '',
-                  county: fullContext.user.address.county || ''
-                } : undefined,
-                claims: fullContext.claims.map(claim => ({
-                  id: claim.id,
-                  type: claim.type || 'unknown',
-                  status: claim.status || 'unknown',
-                  lender: claim.lender || 'unknown',
-                  value: 0,
-                  requirements: claim.requirements.map(req => ({
-                    id: req.id,
-                    type: req.type || 'unknown',
-                    status: req.status || 'unknown',
-                    reason: req.reason || 'No reason provided'
-                  }))
-                })),
-                callScore: fullContext.callScore ? {
-                  currentScore: fullContext.callScore.currentScore,
-                  totalAttempts: fullContext.callScore.totalAttempts,
-                  lastOutcome: fullContext.callScore.lastOutcome || 'no_attempt'
-                } : {
-                  currentScore: 50,
-                  totalAttempts: 0,
-                  lastOutcome: 'no_attempt'
-                }
-              };
-              console.log(`✅ Built full user context for missed call user ${fullContext.user.firstName} ${fullContext.user.lastName}`);
+        validatedUserId = Number(missedCall.userId);
+        const basicUser = await this.getBasicUserForCallback(validatedUserId);
+        
+        if (basicUser) {
+          console.log(`✅ Found user data for missed call: ${basicUser.firstName} ${basicUser.lastName}`);
+          
+          userContext = {
+            userId: validatedUserId,
+            firstName: basicUser.firstName,
+            lastName: basicUser.lastName,
+            email: basicUser.email,
+            // Prefer missed call phone number (more reliable for callbacks)
+            phoneNumber: missedCall.phoneNumber || basicUser.phoneNumber,
+            phone: missedCall.phoneNumber || basicUser.phoneNumber,
+            claims: [], // Minimal for missed calls
+            addresses: [],
+            callScore: {
+              currentScore: 50,
+              totalAttempts: 0,
+              lastOutcome: 'missed_call'
             }
-          }
-        } catch (error) {
-          console.warn(`⚠️ Failed to get full user context for missed call userId ${missedCall.userId}:`, error);
+          };
         }
       }
 
-      // If no user context from DB, create minimal context from missed call data
+      // If no user data available, create minimal context from missed call data
       if (!userContext) {
-        // Try to extract name parts if available
         const nameParts = missedCall.callerName ? missedCall.callerName.split(' ') : [];
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.slice(1).join(' ') || '';
+        const firstName = nameParts[0] || 'Unknown';
+        const lastName = nameParts.slice(1).join(' ') || 'Caller';
         
         userContext = {
           userId: validatedUserId || 999999, // Special ID for unknown callers
           firstName,
           lastName,
           email: '',
-          // Ensure both for backward-compat, UI expects phoneNumber
-          phone: missedCall.phoneNumber,
           phoneNumber: missedCall.phoneNumber,
-          claimCount: 0,
+          phone: missedCall.phoneNumber,
           claims: [],
           addresses: [],
-          // Provide safe defaults so UI does not crash
           callScore: {
             currentScore: 50,
             totalAttempts: 0,
-            lastOutcome: 'no_attempt'
+            lastOutcome: 'missed_call'
           }
         };
         
-        console.log(`📝 Created minimal user context for missed call: ${firstName} ${lastName}`);
+        console.log(`📝 Created minimal context for missed call: ${firstName} ${lastName} - ${missedCall.phoneNumber}`);
       }
 
-      // Return in NextUserForCallResult format with special markers for missed calls
       return {
         userId: userContext.userId,
         userContext: {
           ...userContext,
-          // 🎯 SPECIAL MARKERS for missed call callbacks
           isMissedCallCallback: true,
           missedCallData: {
             id: missedCall.id,
@@ -865,17 +872,17 @@ export class PreCallValidationService {
             originalCallSid: missedCall.twilioCallSid
           }
         },
-        queuePosition: 0, // Missed calls always have highest priority
+        queuePosition: 0,
         queueEntryId: `missed-call-${missedCall.id}`,
         validationResult: {
           isValid: true,
           reason: 'Missed call callback - skipping validation',
           userStatus: {
-            hasSignature: true, // Skip signature checks for missed calls
+            hasSignature: true,
             pendingRequirements: 0,
             hasScheduledCallback: false,
             isEnabled: true,
-            userExists: true // Missed calls always come from real users
+            userExists: true
           }
         }
       };
@@ -889,6 +896,7 @@ export class PreCallValidationService {
   /**
    * Get next due callback for the specified queue type
    * Returns callback formatted as NextUserForCallResult for consistent interface
+   * UPDATED: Uses simple unified user lookup approach
    */
   private async getNextDueCallbackForQueue(queueType: QueueType): Promise<NextUserForCallResult | null> {
     try {
@@ -914,58 +922,56 @@ export class PreCallValidationService {
         return null;
       }
 
-      // Get user context for the callback with robust fallback
+      // 🎯 UNIFIED APPROACH: Use simple user lookup for callbacks 
       const callbackUserId = Number(dueCallback.userId);
-      console.log(`🔍 Loading user context for callback ${dueCallback.id}, user ${callbackUserId}...`);
+      console.log(`🔍 Getting basic user data for callback ${dueCallback.id}, user ${callbackUserId}...`);
       
-      let userContext = await this.userService.getUserCallContext(callbackUserId);
+      const basicUser = await this.getBasicUserForCallback(callbackUserId);
       
-      if (!userContext) {
-        console.log(`⚠️ User context not available for callback ${dueCallback.id}, user ${callbackUserId} - creating fallback`);
+      let userContext;
+      
+      if (basicUser) {
+        console.log(`✅ Found user data for callback: ${basicUser.firstName} ${basicUser.lastName} - ${basicUser.phoneNumber}`);
         
-        // 🛡️ CRITICAL: Callbacks must NEVER fail due to user context issues
-        // Create minimal fallback context from callback data
         userContext = {
-          user: {
-            id: Number(dueCallback.userId),
-            firstName: 'Callback',
-            lastName: 'User',
-            phoneNumber: '+44000000000', // Will be populated from call session if available
-            email: `callback-user-${dueCallback.userId}@unknown.com`,
-            status: 'active',
-            isEnabled: true,
-            introducer: 'callback',
-            solicitor: null,
-            lastLogin: null,
-            dateOfBirth: null,
-            createdAt: new Date(),
-            address: null
-          },
-          claims: [], // Will be populated if user context becomes available later
+          userId: callbackUserId,
+          firstName: basicUser.firstName,
+          lastName: basicUser.lastName,
+          email: basicUser.email,
+          phoneNumber: basicUser.phoneNumber, // ✅ REAL phone number from MySQL!
+          claims: [], // Minimal for callbacks - call session will load full context later
+          addresses: [],
           callScore: {
-            currentScore: 0, // Callbacks have highest priority regardless
+            currentScore: 0, // Callbacks have highest priority
             totalAttempts: 0,
-            successfulCalls: 0,
-            lastOutcome: 'callback_scheduled',
-            nextCallAfter: null,
-            lastCallAt: null,
-            baseScore: 0,
-            outcomePenaltyScore: 0,
-            timePenaltyScore: 0
+            lastOutcome: 'callback_scheduled'
+          }
+        };
+      } else {
+        console.log(`⚠️ User ${callbackUserId} not found in MySQL - creating minimal fallback`);
+        
+        userContext = {
+          userId: callbackUserId,
+          firstName: 'Callback',
+          lastName: 'User',
+          email: `callback-user-${callbackUserId}@unknown.com`,
+          phoneNumber: '+44000000000', // Final fallback only
+          claims: [],
+          addresses: [],
+          callScore: {
+            currentScore: 0,
+            totalAttempts: 0,
+            lastOutcome: 'callback_scheduled'
           }
         };
         
-        console.log(`🛡️ Created fallback context for callback ${dueCallback.id} - PROCEEDING WITH CALL`);
-      } else {
-        console.log(`✅ Successfully loaded user context for callback ${dueCallback.id}, user ${callbackUserId} - ${userContext.user.firstName} ${userContext.user.lastName}`);
+        console.log(`🛡️ Created minimal fallback context for callback ${dueCallback.id}`);
       }
 
-      // Return in NextUserForCallResult format with special markers for callbacks
       return {
         userId: userContext.userId,
         userContext: {
           ...userContext,
-          // 🎯 SPECIAL MARKERS for callback
           isCallbackCall: true,
           callbackData: {
             id: dueCallback.id,
@@ -974,13 +980,13 @@ export class PreCallValidationService {
             originalCallSessionId: dueCallback.originalCallSessionId
           }
         },
-        queuePosition: 0, // Callbacks always have highest priority
+        queuePosition: 0,
         queueEntryId: `callback-${dueCallback.id}`,
         validationResult: {
           isValid: true,
           reason: 'Scheduled callback - skipping validation',
           userStatus: {
-            hasSignature: true, // Skip signature checks for callbacks
+            hasSignature: true,
             pendingRequirements: 0,
             hasScheduledCallback: true,
             isEnabled: true,
@@ -994,4 +1000,4 @@ export class PreCallValidationService {
       return null;
     }
   }
-} 
+}
