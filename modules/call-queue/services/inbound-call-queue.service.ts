@@ -420,6 +420,18 @@ export class InboundCallQueueService {
       const userId = queueEntry.userId || 999999; // Use special ID for unknown callers
 
       // Create a call queue entry for the missed call
+      // Ensure a corresponding user_call_scores row exists to satisfy FK constraint
+      await this.deps.prisma.userCallScore.upsert({
+        where: { userId: BigInt(userId) },
+        update: {},
+        create: {
+          userId: BigInt(userId),
+          currentScore: 0,
+          totalAttempts: 0,
+          successfulCalls: 0
+        }
+      });
+
       const callQueue = await this.deps.prisma.callQueue.create({
         data: {
           userId: BigInt(userId),

@@ -462,6 +462,18 @@ async function createCallSession(
     console.log(`👤 Unknown caller ${from} - creating basic missed call record`);
     
     // Create a basic queue entry for unknown caller
+    // Ensure user_call_scores row exists for sentinel unknown ID to satisfy FK
+    await prisma.userCallScore.upsert({
+      where: { userId: BigInt(999999) },
+      update: {},
+      create: {
+        userId: BigInt(999999),
+        currentScore: 0,
+        totalAttempts: 0,
+        successfulCalls: 0
+      }
+    });
+
     const unknownCallerQueue = await prisma.callQueue.create({
       data: {
         userId: BigInt(999999), // Special ID for unknown callers

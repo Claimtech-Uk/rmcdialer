@@ -24,6 +24,18 @@ export async function createMissedCallSession(
       console.log(`📱 Using special unknown caller ID: ${userId} for ${from}`);
     }
     
+    // Ensure a corresponding user_call_scores row exists to satisfy FK constraint
+    await prisma.userCallScore.upsert({
+      where: { userId: BigInt(userId) },
+      update: {},
+      create: {
+        userId: BigInt(userId),
+        currentScore: 0,
+        totalAttempts: 0,
+        successfulCalls: 0
+      }
+    });
+    
     // Create call queue entry for missed call
     const missedCallQueue = await prisma.callQueue.create({
       data: {
