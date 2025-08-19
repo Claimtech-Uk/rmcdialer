@@ -914,11 +914,50 @@ export class PreCallValidationService {
         return null;
       }
 
-      // Get user context for the callback
-      const userContext = await this.userService.getUserCallContext(Number(dueCallback.userId));
+      // Get user context for the callback with robust fallback
+      const callbackUserId = Number(dueCallback.userId);
+      console.log(`🔍 Loading user context for callback ${dueCallback.id}, user ${callbackUserId}...`);
+      
+      let userContext = await this.userService.getUserCallContext(callbackUserId);
+      
       if (!userContext) {
-        console.log(`⚠️ Skipping callback ${dueCallback.id} - user ${dueCallback.userId} not found`);
-        return null;
+        console.log(`⚠️ User context not available for callback ${dueCallback.id}, user ${callbackUserId} - creating fallback`);
+        
+        // 🛡️ CRITICAL: Callbacks must NEVER fail due to user context issues
+        // Create minimal fallback context from callback data
+        userContext = {
+          user: {
+            id: Number(dueCallback.userId),
+            firstName: 'Callback',
+            lastName: 'User',
+            phoneNumber: '+44000000000', // Will be populated from call session if available
+            email: `callback-user-${dueCallback.userId}@unknown.com`,
+            status: 'active',
+            isEnabled: true,
+            introducer: 'callback',
+            solicitor: null,
+            lastLogin: null,
+            dateOfBirth: null,
+            createdAt: new Date(),
+            address: null
+          },
+          claims: [], // Will be populated if user context becomes available later
+          callScore: {
+            currentScore: 0, // Callbacks have highest priority regardless
+            totalAttempts: 0,
+            successfulCalls: 0,
+            lastOutcome: 'callback_scheduled',
+            nextCallAfter: null,
+            lastCallAt: null,
+            baseScore: 0,
+            outcomePenaltyScore: 0,
+            timePenaltyScore: 0
+          }
+        };
+        
+        console.log(`🛡️ Created fallback context for callback ${dueCallback.id} - PROCEEDING WITH CALL`);
+      } else {
+        console.log(`✅ Successfully loaded user context for callback ${dueCallback.id}, user ${callbackUserId} - ${userContext.user.firstName} ${userContext.user.lastName}`);
       }
 
       // Return in NextUserForCallResult format with special markers for callbacks
