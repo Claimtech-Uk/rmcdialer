@@ -373,17 +373,25 @@ export class PreCallValidationService {
    * Get the next valid user from queue for calling
    * 🎯 PRIORITY: Check missed calls FIRST, then regular queues
    * Uses QueueAdapterService when available, falls back to legacy CallQueue
+   * 
+   * 🚨 TEMPORARY: Callback check DISABLED due to infinite loop issue
+   * TODO: Implement proper callback state management before re-enabling
    */
   async getNextValidUserForCall(queueType: QueueType, agentId?: number): Promise<NextUserForCallResult | null> {
     try {
       console.log(`🔍 Finding next valid user for ${queueType} queue...`);
       
+      // 🚨 DISABLED: Callback check temporarily disabled due to infinite loop
+      // TODO: Fix callback state management then re-enable
+      /*
       // 🥇 PRIORITY 1: Check for due callbacks first 
       const callbackResult = await this.getNextDueCallbackForQueue(queueType);
       if (callbackResult) {
         console.log(`🎯 HIGHEST PRIORITY: Found due callback for ${queueType} queue`);
         return callbackResult;
       }
+      */
+      console.log(`🚨 CALLBACK CHECK DISABLED - implementing proper state management`);
       
       // 🥈 PRIORITY 2: Check for missed calls (if agent ID provided)
       if (agentId) {
@@ -964,11 +972,25 @@ export class PreCallValidationService {
   }
 
   /**
-   * Get next due callback for the specified queue type
+   * 🚨 TEMPORARILY DISABLED: Get next due callback for the specified queue type
    * Returns callback formatted as NextUserForCallResult for consistent interface
-   * UPDATED: Uses hybrid approach - simple lookup + enrichment
+   * 
+   * DISABLED DUE TO: Infinite loop - callback not being marked as assigned/processed
+   * 
+   * TODO: Implement proper callback lifecycle management:
+   * 1. Mark callback as 'assigned' when retrieved
+   * 2. Mark callback as 'completed' when call session ends
+   * 3. Handle race conditions for multiple agents
+   * 4. Add callback timeout/expiry logic
+   * 5. Implement callback retry logic for failed calls
    */
   private async getNextDueCallbackForQueue(queueType: QueueType): Promise<NextUserForCallResult | null> {
+    console.log(`🚨 CALLBACK SYSTEM TEMPORARILY DISABLED - avoiding infinite loop`);
+    console.log(`📋 TODO: Implement proper callback state management before re-enabling`);
+    return null;
+    
+    /* DISABLED CODE - DO NOT REMOVE, NEED FOR REDESIGN:
+    
     try {
       const dueCallback = await prisma.callback.findFirst({
         where: {
@@ -1073,5 +1095,6 @@ export class PreCallValidationService {
       console.error(`❌ Error getting due callback for queue ${queueType}:`, error);
       return null;
     }
+    */
   }
 }
