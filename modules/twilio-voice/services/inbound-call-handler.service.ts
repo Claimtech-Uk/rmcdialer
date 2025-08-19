@@ -710,6 +710,8 @@ async function routeCallToAgent(
     <Play>${audioBase64}</Play>
     <Dial timeout="600" 
           record="record-from-answer" 
+          recordingChannels="dual"
+          recordingTrack="both"
           recordingStatusCallback="${recordingCallbackUrl}"
           statusCallback="${statusCallbackUrl}"
           statusCallbackEvent="initiated ringing answered completed busy no-answer failed"
@@ -744,6 +746,8 @@ async function routeCallToAgent(
     <Say>Hello${firstName ? ' ' + firstName : ' there'}! Welcome to Resolve My Claim. Please hold while we connect you to an available agent.</Say>
     <Dial timeout="600" 
           record="record-from-answer" 
+          recordingChannels="dual"
+          recordingTrack="both"
           recordingStatusCallback="${recordingCallbackUrl}"
           statusCallback="${statusCallbackUrl}"
           statusCallbackEvent="initiated ringing answered completed busy no-answer failed"

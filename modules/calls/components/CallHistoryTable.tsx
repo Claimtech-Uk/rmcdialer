@@ -755,6 +755,8 @@ export function CallHistoryTable({
                             callId={call.id}
                             disabled={!call.recordingUrl || call.recordingStatus !== 'completed'}
                             size="sm"
+                            initialStatus={call.transcriptStatus as any}
+                            initialDownloadUrl={call.transcriptUrl}
                           />
                           
                           {/* Portal Link Button */}

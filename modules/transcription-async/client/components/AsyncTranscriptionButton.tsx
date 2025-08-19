@@ -29,16 +29,20 @@ export function AsyncTranscriptionButton({
   disabled = false,
   size = 'sm',
   showText = false,
-  onStatusChange
+  onStatusChange,
+  initialStatus,
+  initialDownloadUrl
 }: TranscriptionButtonProps) {
   const [state, setState] = useState<TranscriptionState>({
-    status: 'idle'
+    status: initialStatus ?? 'idle',
+    downloadUrl: initialDownloadUrl
   })
   const [pollCount, setPollCount] = useState(0)
 
   // tRPC mutations for transcription operations
   const queueMutation = api.transcriptionAsync.queue.useMutation()
   const downloadMutation = api.transcriptionAsync.download.useMutation()
+  const utils = api.useUtils()
 
   // Validate callId early to prevent any URL construction issues
   const isValidCallId = callId && 
@@ -61,6 +65,10 @@ export function AsyncTranscriptionButton({
       </Button>
     )
   }
+
+  // If we were given initial completed state, prefer download mode immediately
+  // Avoid polling unless user triggers a new transcription
+  // This ensures tiles render correctly based on server data
 
   // Trigger transcription using tRPC (handles auth automatically)
   const triggerTranscription = useCallback(async () => {
@@ -127,8 +135,8 @@ export function AsyncTranscriptionButton({
       try {
         console.log(`🔄 [CLIENT] Polling status for call ${callId} (attempt ${pollCount + 1})`)
         
-        // Use tRPC query for status check
-        const result = await api.transcriptionAsync.getStatus.query({ callId })
+        // Use tRPC utils.fetch for status check (client-safe)
+        const result = await utils.transcriptionAsync.getStatus.fetch({ callId })
         console.log(`🔄 [CLIENT] tRPC status result:`, result)
         
         setState(prev => ({ 

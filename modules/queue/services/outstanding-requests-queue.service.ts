@@ -233,51 +233,46 @@ export class OutstandingRequestsQueueService implements BaseQueueService<Outstan
    */
   private async markUserInactive(userId: bigint, reason: string, userStatus?: { hasSignature: boolean; pendingRequirements: number } | null): Promise<void> {
     try {
-      // Update user_call_scores
-      await this.prisma.userCallScore.updateMany({
-        where: { userId: userId },
-        data: {
-          isActive: false,
-          currentQueueType: null,
-          lastOutcome: reason
-        }
-      });
-
-      // CRITICAL FIX: Also update the queue entry status to remove from future queries
-      await this.prisma.outstandingRequestsQueue.updateMany({
-        where: { 
-          userId: userId,
-          status: 'pending' // Only update pending entries
-        },
-        data: {
-          status: 'inactive',
-          assignedToAgent: null,
-          assignedAt: null,
-          updatedAt: new Date()
-        }
-      });
-      
-      this.logger.info(`🚫 Marked user ${userId} as inactive: ${reason}`);
-      
-      // ENHANCEMENT: Log conversion if user completed all requirements
-      if (userStatus) {
-        const { ConversionLoggingService } = await import('../../discovery/services/conversion-logging.service');
-        const conversionCheck = ConversionLoggingService.shouldLogConversion(
-          'outstanding_requests',
-          null, // User is being removed from queue (moving to null)
-          userStatus
-        );
-
-        if (conversionCheck.shouldLog) {
-          await ConversionLoggingService.logConversion({
-            userId,
-            previousQueueType: 'outstanding_requests',
-            conversionType: conversionCheck.conversionType!,
-            conversionReason: conversionCheck.reason!,
-            source: 'pre_call_validation'
-          });
-        }
+      // Determine if removal is allowed without conversion (negative scenarios)
+      let isNegative = false;
+      try {
+        const userData = await replicaDb.user.findUnique({
+          where: { id: userId },
+          select: { is_enabled: true, claims: { select: { status: true } } }
+        });
+        const allClaimsCancelled = !!userData && (userData.claims?.length || 0) > 0 && userData.claims.every(c => c.status === 'cancelled');
+        const isDisabled = !!userData && userData.is_enabled === false;
+        const matchesDncOrNoClaim = /do\s*not\s*contact|do_not_contact|no\s*claim|no_claim/i.test(reason);
+        isNegative = allClaimsCancelled || isDisabled || matchesDncOrNoClaim;
+      } catch (e) {
+        isNegative = false;
       }
+
+      const completedRequirements = (userStatus?.pendingRequirements ?? 0) === 0 && (userStatus?.hasSignature ?? false);
+
+      // If not completed and not negative, keep user in queue
+      if (!completedRequirements && !isNegative) {
+        this.logger.info(`⏸️ Keeping user ${userId} in outstanding_requests (no conversion and not negative): ${reason}`);
+        return;
+      }
+
+      // Perform queue transition through universal service
+      const { universalQueueTransitionService } = await import('@/modules/queue/services/universal-queue-transition.service');
+      await universalQueueTransitionService.transitionUserQueue({
+        userId: Number(userId),
+        fromQueue: 'outstanding_requests',
+        toQueue: null,
+        reason,
+        source: 'pre_call_validation'
+      });
+
+      // Also update queue entry to inactive
+      await this.prisma.outstandingRequestsQueue.updateMany({
+        where: { userId: userId, status: 'pending' },
+        data: { status: 'inactive', assignedToAgent: null, assignedAt: null, updatedAt: new Date() }
+      });
+
+      this.logger.info(`🚫 Marked user ${userId} as inactive: ${reason}`);
       
     } catch (error) {
       this.logger.error(`❌ Failed to mark user ${userId} as inactive:`, error);

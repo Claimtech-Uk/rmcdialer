@@ -26,7 +26,7 @@ export class ConversionLoggingService {
   /**
    * Create a conversion record if one doesn't already exist
    */
-  static async logConversion(data: ConversionData): Promise<boolean> {
+  static async logConversion(data: ConversionData): Promise<{ id: string } | null> {
     try {
       const { userId, previousQueueType, conversionType, conversionReason, convertedAt, source } = data
 
@@ -43,7 +43,7 @@ export class ConversionLoggingService {
 
       if (recentConversion) {
         logger.info(`⏭️ [SKIP] User ${userId} already has recent conversion ${recentConversion.id}, skipping duplicate from ${source}`);
-        return false;
+        return { id: recentConversion.id };
       }
 
       // Get user call score data for additional context
@@ -111,11 +111,11 @@ export class ConversionLoggingService {
         logger.info(`🔄 [ATTRIBUTION] No qualifying calls found for user ${userId} within ${LOOKBACK_DAYS} days (>${MIN_TALK_TIME_SECONDS}s). Leaving unattributed for cron backfill.`)
       }
 
-      return true;
+      return { id: conversion.id };
 
     } catch (error: any) {
       logger.error(`❌ Failed to log conversion for user ${data.userId}:`, error);
-      return false;
+      return null;
     }
   }
 
@@ -137,6 +137,15 @@ export class ConversionLoggingService {
         shouldLog: true,
         conversionType: 'signature_obtained',
         reason: 'User provided signature - moved from unsigned queue'
+      };
+    }
+
+    // Case 1b: User moving from unsigned_users to outstanding_requests (signed, now has requirements)
+    if (fromQueueType === 'unsigned_users' && toQueueType === 'outstanding_requests' && userStatus.hasSignature) {
+      return {
+        shouldLog: true,
+        conversionType: 'signature_obtained',
+        reason: 'User signed and moved to outstanding requests'
       };
     }
 

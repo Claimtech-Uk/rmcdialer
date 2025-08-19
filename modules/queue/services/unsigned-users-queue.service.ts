@@ -200,21 +200,48 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
    */
   private async markUserInactive(userId: bigint, reason: string, userStatus?: { hasSignature: boolean; pendingRequirements: number } | null): Promise<void> {
     try {
-      // Update user_call_scores
-      await this.prisma.userCallScore.updateMany({
-        where: { userId: userId },
-        data: {
-          isActive: false,
-          currentQueueType: null,
-          lastOutcome: reason
-        }
+      // Determine if removal is allowed without conversion (negative scenarios)
+      let isNegative = false;
+      try {
+        const userData = await replicaDb.user.findUnique({
+          where: { id: userId },
+          select: {
+            is_enabled: true,
+            claims: { select: { status: true } }
+          }
+        });
+        const allClaimsCancelled = !!userData && (userData.claims?.length || 0) > 0 && userData.claims.every(c => c.status === 'cancelled');
+        const isDisabled = !!userData && userData.is_enabled === false;
+        const matchesDncOrNoClaim = /do\s*not\s*contact|do_not_contact|no\s*claim|no_claim/i.test(reason);
+        isNegative = allClaimsCancelled || isDisabled || matchesDncOrNoClaim;
+      } catch (e) {
+        // If replica check fails, err on the safe side: do not remove unless we can convert
+        isNegative = false;
+      }
+
+      const hasSignature = !!userStatus?.hasSignature;
+
+      // If we cannot log a conversion and it's not a negative scenario, keep user in queue
+      if (!hasSignature && !isNegative) {
+        this.logger.info(`⏸️ Keeping user ${userId} in unsigned_users (no conversion and not negative): ${reason}`);
+        return;
+      }
+
+      // Perform queue transition through the universal service (ensures audit + conversion logging)
+      const { universalQueueTransitionService } = await import('@/modules/queue/services/universal-queue-transition.service');
+      await universalQueueTransitionService.transitionUserQueue({
+        userId: Number(userId),
+        fromQueue: 'unsigned_users',
+        toQueue: null,
+        reason,
+        source: 'pre_call_validation'
       });
 
-      // CRITICAL FIX: Also update the queue entry status to remove from future queries
+      // Also update the unsigned queue entry status to remove from future queries
       await this.prisma.unsignedUsersQueue.updateMany({
         where: { 
           userId: userId,
-          status: 'pending' // Only update pending entries
+          status: 'pending'
         },
         data: {
           status: 'inactive',
@@ -223,28 +250,8 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
           updatedAt: new Date()
         }
       });
-      
-      this.logger.info(`🚫 Marked user ${userId} as inactive: ${reason}`);
-      
-      // ENHANCEMENT: Log conversion if user obtained signature
-      if (userStatus) {
-        const { ConversionLoggingService } = await import('../../discovery/services/conversion-logging.service');
-        const conversionCheck = ConversionLoggingService.shouldLogConversion(
-          'unsigned_users',
-          null, // User is being removed from queue (moving to null)
-          userStatus
-        );
 
-        if (conversionCheck.shouldLog) {
-          await ConversionLoggingService.logConversion({
-            userId,
-            previousQueueType: 'unsigned_users',
-            conversionType: conversionCheck.conversionType!,
-            conversionReason: conversionCheck.reason!,
-            source: 'pre_call_validation'
-          });
-        }
-      }
+      this.logger.info(`🚫 Marked user ${userId} as inactive: ${reason}`);
       
     } catch (error) {
       this.logger.error(`❌ Failed to mark user ${userId} as inactive:`, error);
@@ -597,8 +604,9 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
    */
   private async getNextReadyCallback(): Promise<CallbackUser | null> {
     try {
-      const callback = await this.prisma.callback.findFirst({
+      const callback = await (this.prisma as any).callback.findFirst({
         where: {
+          queueType: 'unsigned_users',
           status: 'pending',
           scheduledFor: { lte: new Date() }
         },
@@ -611,7 +619,7 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
         scheduledFor: callback.scheduledFor,
         callbackReason: callback.callbackReason ?? undefined,
         preferredAgentId: callback.preferredAgentId ?? undefined,
-        originalCallSessionId: callback.originalCallSessionId
+        originalCallSessionId: callback.originalCallSessionId || ''
       } : null;
 
     } catch (error) {
@@ -625,9 +633,9 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
    */
   private async getNextDueCallback(): Promise<CallbackUser | null> {
     try {
-      const dueCallback = await this.prisma.callback.findFirst({
+      const dueCallback = await (this.prisma as any).callback.findFirst({
         where: {
-          queueType: this.queueType, // Only callbacks for unsigned_users queue
+          queueType: 'unsigned_users', // Only callbacks for unsigned_users queue
           status: 'pending',
           scheduledFor: { lte: new Date() } // Due now or overdue
         },
@@ -652,9 +660,9 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
         id: dueCallback.id,
         userId: dueCallback.userId,
         scheduledFor: dueCallback.scheduledFor,
-        callbackReason: dueCallback.callbackReason,
-        preferredAgentId: dueCallback.preferredAgentId,
-        originalCallSessionId: dueCallback.originalCallSessionId
+        callbackReason: dueCallback.callbackReason || undefined,
+        preferredAgentId: dueCallback.preferredAgentId || undefined,
+        originalCallSessionId: dueCallback.originalCallSessionId || ''
       };
 
     } catch (error) {

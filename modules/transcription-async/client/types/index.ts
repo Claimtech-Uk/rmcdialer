@@ -9,6 +9,9 @@ export interface TranscriptionButtonProps {
   size?: 'sm' | 'md'
   showText?: boolean
   onStatusChange?: (status: TranscriptStatus) => void
+  // Initial state from server data (call tile)
+  initialStatus?: TranscriptStatus
+  initialDownloadUrl?: string
 }
 
 export interface TranscriptionState {

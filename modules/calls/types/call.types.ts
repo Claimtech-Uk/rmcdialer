@@ -233,6 +233,9 @@ export interface CallHistoryEntry {
   recordingStatus?: 'in-progress' | 'completed' | 'absent' | 'failed';
   recordingDurationSeconds?: number;
   status?: string;
+  // Transcription fields for tile-level rendering
+  transcriptStatus?: 'idle' | 'pending' | 'processing' | 'completed' | 'failed';
+  transcriptUrl?: string;
 }
 
 export interface GetCallbacksOptions {

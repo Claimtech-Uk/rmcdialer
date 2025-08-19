@@ -900,6 +900,10 @@ export const callsRouter = createTRPCRouter({
             lastOutcomeNotes: true,
             lastOutcomeAgentId: true,
             lastOutcomeAt: true,
+
+            // Transcription fields
+            transcriptStatus: true,
+            transcriptUrl: true,
             
             // Action flags
             magicLinkSent: true,
@@ -920,7 +924,9 @@ export const callsRouter = createTRPCRouter({
                 nextCallDelayHours: true,
                 scoreAdjustment: true,
                 documentsRequested: true,
-                createdAt: true
+                createdAt: true,
+                outcomeNotes: true,
+                outcomeType: true
               },
               orderBy: { createdAt: 'desc' },
               take: 1
@@ -984,8 +990,8 @@ export const callsRouter = createTRPCRouter({
           const latestOutcome = session.callOutcomes[0]; // Fallback outcome data
           
           // Use consolidated CallSession outcome data with CallOutcome fallback
-          const outcomeType = session.lastOutcomeType;
-          const outcomeNotes = session.lastOutcomeNotes;
+          const outcomeType = session.lastOutcomeType || latestOutcome?.outcomeType;
+          const outcomeNotes = session.lastOutcomeNotes || latestOutcome?.outcomeNotes || undefined;
           
           // Smart outcome determination - if call has duration but no outcome, infer it was connected
           let smartOutcome = outcomeType;
@@ -1060,6 +1066,8 @@ export const callsRouter = createTRPCRouter({
             recordingStatus: session.recordingStatus,
             recordingDurationSeconds: session.recordingDurationSeconds,
             status: session.status,
+            transcriptStatus: (session.transcriptStatus as any) ?? 'idle',
+            transcriptUrl: session.transcriptUrl ?? undefined,
           };
         });
 

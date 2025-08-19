@@ -94,7 +94,7 @@ export class UniversalQueueTransitionService {
               primaryAgentId: agentId,
               convertedAt: new Date()
             });
-            conversionId = conversion.id;
+            conversionId = conversion?.id;
             console.log(`🎉 Conversion logged: ${conversionId} for user ${userId}`);
           } catch (conversionError) {
             console.error(`❌ Failed to log conversion for user ${userId}:`, conversionError);

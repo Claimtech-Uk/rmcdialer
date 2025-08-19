@@ -201,13 +201,13 @@ export class ConversionLeakMonitorService {
         await prisma.$executeRaw`
           UPDATE queue_transition_audit 
           SET conversion_logged = true, 
-              conversion_id = ${conversion.id}::uuid,
+              conversion_id = ${conversion?.id ?? null}::uuid,
               metadata = metadata || '{"recovered_by": "leak_monitor"}'::jsonb
           WHERE user_id = ${BigInt(transition.user_id)}
             AND timestamp = ${transition.timestamp}
         `;
         
-        console.log(`🎉 Successfully recovered conversion ${conversion.id} for user ${transition.user_id}`);
+        console.log(`🎉 Successfully recovered conversion ${conversion?.id || 'unknown'} for user ${transition.user_id}`);
         return conversion;
       }
       

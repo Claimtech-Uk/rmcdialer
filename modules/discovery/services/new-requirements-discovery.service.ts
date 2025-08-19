@@ -305,18 +305,22 @@ export class NewRequirementsDiscoveryService {
           })
           
           if (existingScore) {
-            // Update existing user to outstanding_requests queue
-            await prisma.userCallScore.update({
-              where: { userId },
-              data: {
-                // @ts-ignore - currentQueueType exists in schema
-                currentQueueType: 'outstanding_requests',
-                currentScore: 0,
-                isActive: true,
-                // @ts-ignore - lastQueueCheck exists in schema  
-                lastQueueCheck: new Date()
-              }
-            })
+            // Use Universal Queue Transition Service to ensure conversion checks + audit
+            const { universalQueueTransitionService } = await import('@/modules/queue/services/universal-queue-transition.service')
+
+            const fromQueue = (existingScore as any).currentQueueType || null
+            const toQueue: 'outstanding_requests' = 'outstanding_requests'
+
+            // Skip if already correct
+            if (fromQueue !== toQueue) {
+              await universalQueueTransitionService.transitionUserQueue({
+                userId: Number(userId),
+                fromQueue,
+                toQueue,
+                reason: 'New requirement discovered',
+                source: 'discovery_new_requirements'
+              })
+            }
             updated++
           } else {
             // Skip users not yet in system - they'll be picked up by new users discovery

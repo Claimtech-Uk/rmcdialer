@@ -291,7 +291,6 @@ export class SignatureConversionCleanupService {
             // @ts-ignore - currentQueueType exists in database
             currentQueueType: null,     // Remove from queue (user is complete)
             currentScore: 0,            // Reset score to highest priority
-            isActive: false,            // Deactivate (no longer needs calling)
             // @ts-ignore - lastQueueCheck exists in database
             lastQueueCheck: new Date()  // Update check timestamp
           }

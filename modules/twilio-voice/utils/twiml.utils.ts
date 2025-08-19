@@ -37,6 +37,8 @@ export function generateTwiMLResponse(
     <Dial callerId="+447488879172" 
           timeout="30" 
           record="record-from-answer" 
+          recordingChannels="dual"
+          recordingTrack="both"
           recordingStatusCallback="${baseUrl}/api/webhooks/twilio/recording"
           statusCallback="${baseUrl}/api/webhooks/twilio/call-status"
           statusCallbackEvent="initiated ringing answered completed"

@@ -178,6 +178,7 @@ export class QueueHealthCheckService {
       updated: 0,
       correctQueue: 0,
       wrongQueue: 0,
+      userChanges: [],
       issues: {
         notInUserCallScores: 0,
         noQueueTypeAssigned: 0,
@@ -240,7 +241,7 @@ export class QueueHealthCheckService {
       for (const user of users) {
         result.checked++;
         
-        const correctQueue = this.determineCorrectQueue(user);
+        const correctQueue = this.determineCorrectQueue(user as any);
         const currentQueueData = queueMap.get(user.id);
         const currentQueue = currentQueueData?.currentQueueType || null;
         
@@ -269,24 +270,23 @@ export class QueueHealthCheckService {
         if (correctQueue !== currentQueue) {
           result.wrongQueue++;
           
-          // Only update currentQueueType if not dry run (let other automations handle actual queues)
+          // Only update via universal transition if not dry run
           if (!dryRun) {
             if (currentQueueData) {
-              // User exists in user_call_scores - update their queue type
-              await prisma.userCallScore.updateMany({
-                where: { userId: user.id },
-                data: { 
-                  currentQueueType: correctQueue,
-                  lastQueueCheck: new Date(),
-                  updatedAt: new Date()
-                }
+              const { universalQueueTransitionService } = await import('@/modules/queue/services/universal-queue-transition.service');
+              await universalQueueTransitionService.transitionUserQueue({
+                userId: Number(user.id),
+                fromQueue: currentQueue,
+                toQueue: correctQueue,
+                reason: 'Queue health correction',
+                source: 'queue_health_check'
               });
             } else if (correctQueue) {
-              // User missing from user_call_scores - create record with correct queue type
+              // User missing from user_call_scores - create record with correct queue type (no transition available)
               await prisma.userCallScore.create({
                 data: {
                   userId: user.id,
-                  currentScore: 0, // New leads start at score 0
+                  currentScore: 0,
                   currentQueueType: correctQueue,
                   isActive: true,
                   lastQueueCheck: new Date(),
