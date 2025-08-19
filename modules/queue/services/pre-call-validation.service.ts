@@ -49,8 +49,9 @@ export class PreCallValidationService {
   }
 
   /**
-   * 🎯 UNIFIED: Get basic user data for both missed calls and callbacks
+   * 🎯 PHASE 1: Get basic user data for both missed calls and callbacks
    * Fast, reliable, consistent approach using simple MySQL replica lookup
+   * This ensures callbacks/missed calls NEVER fail due to data issues
    */
   private async getBasicUserForCallback(userId: number): Promise<{
     firstName: string;
@@ -90,6 +91,72 @@ export class PreCallValidationService {
     } catch (error) {
       console.error(`❌ Failed to get basic user data for ${userId}:`, error);
       return null;
+    }
+  }
+
+  /**
+   * 🎯 PHASE 2: Try to enrich basic context with full data for call interface
+   * This attempts to get claims, addresses, etc. but gracefully falls back if it fails
+   * The call interface needs this rich context but it shouldn't break callbacks/missed calls
+   */
+  private async enrichUserContext(basicContext: any, userId: number): Promise<any> {
+    try {
+      console.log(`🔧 Attempting to enrich user context for ${userId}...`);
+      
+      // Try to get full context with shorter timeout to avoid hanging
+      const fullContext = await Promise.race([
+        this.userService.getUserCallContext(userId, { 
+          includeAddress: true, 
+          includeRequirementDetails: true 
+        }),
+        new Promise<null>((_, reject) => 
+          setTimeout(() => reject(new Error('Context enrichment timeout')), 3000) // 3 second timeout
+        )
+      ]);
+
+      if (fullContext) {
+        console.log(`✅ Successfully enriched context for ${userId} with ${fullContext.claims.length} claims`);
+        
+        // Merge basic context (reliable) with full context (rich)
+        return {
+          userId: basicContext.userId,
+          firstName: basicContext.firstName,
+          lastName: basicContext.lastName,
+          email: basicContext.email,
+          phoneNumber: basicContext.phoneNumber, // Keep reliable phone number
+          phone: basicContext.phoneNumber,
+          dateOfBirth: fullContext.user.dateOfBirth,
+          createdAt: fullContext.user.createdAt,
+          isEnabled: fullContext.user.isEnabled,
+          // Rich data from full context
+          address: fullContext.user.address,
+          claims: fullContext.claims.map(claim => ({
+            id: claim.id,
+            type: claim.type || 'unknown',
+            status: claim.status || 'unknown',
+            lender: claim.lender || 'unknown',
+            value: 0,
+            requirements: claim.requirements.map(req => ({
+              id: req.id,
+              type: req.type || 'unknown',
+              status: req.status || 'unknown',
+              reason: req.reason || 'No reason provided'
+            }))
+          })),
+          callScore: fullContext.callScore || {
+            currentScore: basicContext.callScore?.currentScore || 50,
+            totalAttempts: 0,
+            lastOutcome: basicContext.callScore?.lastOutcome || 'no_attempt'
+          }
+        };
+      } else {
+        console.log(`⚠️ Context enrichment failed for ${userId}, using basic context`);
+        return basicContext;
+      }
+    } catch (error) {
+      console.warn(`⚠️ Context enrichment failed for ${userId}:`, error);
+      console.log(`🛡️ Falling back to basic context - call will still proceed`);
+      return basicContext;
     }
   }
 
@@ -783,13 +850,13 @@ export class PreCallValidationService {
   }
 
   // ============================================================================
-  // MISSED CALLS PRIORITY SYSTEM (UPDATED TO USE UNIFIED APPROACH)
+  // MISSED CALLS PRIORITY SYSTEM (UPDATED TO USE HYBRID APPROACH)
   // ============================================================================
 
   /**
    * 🎯 Get next missed call for agent (PRIORITY over regular queue)
    * Returns formatted result compatible with NextUserForCallResult
-   * UPDATED: Uses simple unified user lookup approach
+   * UPDATED: Uses hybrid approach - simple lookup + enrichment
    */
   private async getNextMissedCallForAgent(agentId: number): Promise<NextUserForCallResult | null> {
     try {
@@ -808,23 +875,23 @@ export class PreCallValidationService {
       let userContext;
       let validatedUserId = null;
 
-      // 🎯 UNIFIED APPROACH: Use simple user lookup for missed calls
+      // 🎯 PHASE 1: Simple user lookup for reliability
       if (missedCall.userId) {
         validatedUserId = Number(missedCall.userId);
         const basicUser = await this.getBasicUserForCallback(validatedUserId);
         
         if (basicUser) {
-          console.log(`✅ Found user data for missed call: ${basicUser.firstName} ${basicUser.lastName}`);
+          console.log(`✅ Found basic user data for missed call: ${basicUser.firstName} ${basicUser.lastName}`);
           
+          // Create basic context with reliable data
           userContext = {
             userId: validatedUserId,
             firstName: basicUser.firstName,
             lastName: basicUser.lastName,
             email: basicUser.email,
-            // Prefer missed call phone number (more reliable for callbacks)
-            phoneNumber: missedCall.phoneNumber || basicUser.phoneNumber,
+            phoneNumber: missedCall.phoneNumber || basicUser.phoneNumber, // Prefer missed call phone
             phone: missedCall.phoneNumber || basicUser.phoneNumber,
-            claims: [], // Minimal for missed calls
+            claims: [], // Will be enriched in Phase 2
             addresses: [],
             callScore: {
               currentScore: 50,
@@ -832,6 +899,9 @@ export class PreCallValidationService {
               lastOutcome: 'missed_call'
             }
           };
+          
+          // 🎯 PHASE 2: Try to enrich with full context (claims, addresses, etc.)
+          userContext = await this.enrichUserContext(userContext, validatedUserId);
         }
       }
 
@@ -896,7 +966,7 @@ export class PreCallValidationService {
   /**
    * Get next due callback for the specified queue type
    * Returns callback formatted as NextUserForCallResult for consistent interface
-   * UPDATED: Uses simple unified user lookup approach
+   * UPDATED: Uses hybrid approach - simple lookup + enrichment
    */
   private async getNextDueCallbackForQueue(queueType: QueueType): Promise<NextUserForCallResult | null> {
     try {
@@ -922,7 +992,7 @@ export class PreCallValidationService {
         return null;
       }
 
-      // 🎯 UNIFIED APPROACH: Use simple user lookup for callbacks 
+      // 🎯 PHASE 1: Simple user lookup for reliability
       const callbackUserId = Number(dueCallback.userId);
       console.log(`🔍 Getting basic user data for callback ${dueCallback.id}, user ${callbackUserId}...`);
       
@@ -931,15 +1001,16 @@ export class PreCallValidationService {
       let userContext;
       
       if (basicUser) {
-        console.log(`✅ Found user data for callback: ${basicUser.firstName} ${basicUser.lastName} - ${basicUser.phoneNumber}`);
+        console.log(`✅ Found basic user data for callback: ${basicUser.firstName} ${basicUser.lastName} - ${basicUser.phoneNumber}`);
         
+        // Create basic context with reliable data
         userContext = {
           userId: callbackUserId,
           firstName: basicUser.firstName,
           lastName: basicUser.lastName,
           email: basicUser.email,
           phoneNumber: basicUser.phoneNumber, // ✅ REAL phone number from MySQL!
-          claims: [], // Minimal for callbacks - call session will load full context later
+          claims: [], // Will be enriched in Phase 2
           addresses: [],
           callScore: {
             currentScore: 0, // Callbacks have highest priority
@@ -947,6 +1018,9 @@ export class PreCallValidationService {
             lastOutcome: 'callback_scheduled'
           }
         };
+        
+        // 🎯 PHASE 2: Try to enrich with full context (claims, addresses, etc.)
+        userContext = await this.enrichUserContext(userContext, callbackUserId);
       } else {
         console.log(`⚠️ User ${callbackUserId} not found in MySQL - creating minimal fallback`);
         
