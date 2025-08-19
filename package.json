@@ -45,7 +45,8 @@
     "scores:boost": "tsx scripts/boost-call-scores.ts",
     "queue:unsigned:reset": "tsx scripts/reset-unsigned-queue.ts",
     "vercel:deploy:prod": "node scripts/ci-assert-main.js && npx vercel@latest deploy --prebuilt --prod --yes",
-    "vercel:deploy:dev": "npx vercel@latest deploy --prebuilt --yes --target=preview"
+    "vercel:deploy:dev": "npx vercel@latest deploy --prebuilt --yes --target=preview",
+    "migrate:callbacks": "tsx scripts/run-callback-migration.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.60.0",
