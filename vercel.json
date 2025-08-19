@@ -16,6 +16,18 @@
     "app/api/webhooks/**": {
       "maxDuration": 180,
       "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
+    },
+    "app/api/transcription-async/queue/**": {
+      "maxDuration": 5,
+      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
+    },
+    "app/api/transcription-async/status/**": {
+      "maxDuration": 5,
+      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
+    },
+    "app/api/transcription-async/download/**": {
+      "maxDuration": 10,
+      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
     }
   },
   "crons": [
@@ -84,6 +96,10 @@
     {
       "path": "/api/cron/weekly-score-aging",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/process-transcriptions",
+      "schedule": "*/1 * * * *"
     }
   ],
   "git": {
