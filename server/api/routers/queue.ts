@@ -3,6 +3,7 @@ import { createTRPCRouter, protectedProcedure } from '@/lib/trpc/server';
 import { QueueService, PreCallValidationService, type QueueFilters } from '@/modules/queue';
 import { PriorityScoringService } from '@/modules/scoring';
 import { prisma } from '@/lib/db';
+import { CallbackService } from '@/modules/callbacks/services/callback.service';
 
 // Create logger instance (in production this would come from a shared logger service)
 const logger = {
@@ -17,6 +18,8 @@ const scoringService = new PriorityScoringService({ logger });
 // Initialize queue services
 // QueueService is now QueueAdapterService (aliased in index.ts)
 const queueService = new QueueService({ prisma, logger });
+// Initialize callback service
+const callbackService = new CallbackService();
 
 // Initialize PreCallValidationService for user data with proper transformation
 const preCallValidationService = new PreCallValidationService();
@@ -91,6 +94,12 @@ export const queueRouter = createTRPCRouter({
     }))
     .mutation(async ({ input, ctx }) => {
       logger.info(`Agent ${ctx.agent.id} skipping user in ${input.queueType} queue`);
+      // Callback entries handled by callback service
+      if (input.queueEntryId.startsWith('callback-')) {
+        const id = input.queueEntryId.replace('callback-', '');
+        await callbackService.skip(id);
+        return { success: true, message: 'Callback rescheduled in 15 minutes' };
+      }
       return await queueService.skipUser(input.queueEntryId, input.queueType);
     }),
 
@@ -102,6 +111,11 @@ export const queueRouter = createTRPCRouter({
     }))
     .mutation(async ({ input, ctx }) => {
       logger.info(`Agent ${ctx.agent.id} marking user as completed in ${input.queueType} queue`);
+      if (input.queueEntryId.startsWith('callback-')) {
+        const id = input.queueEntryId.replace('callback-', '');
+        await callbackService.complete(id, 'answered');
+        return { success: true, message: 'Callback completed' };
+      }
       return await queueService.markUserCompleted(input.queueEntryId, input.queueType);
     }),
 

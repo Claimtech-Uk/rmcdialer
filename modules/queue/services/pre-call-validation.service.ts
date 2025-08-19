@@ -4,6 +4,7 @@ import { UserService } from '@/modules/users/services/user.service';
 import type { QueueType } from '../types/queue.types';
 import type { QueueAdapterService } from './queue-adapter.service';
 import { createMissedCallService } from '@/modules/missed-calls/services/missed-call.service';
+import { CallbackService } from '@/modules/callbacks/services/callback.service';
 
 export interface PreCallValidationResult {
   isValid: boolean;
@@ -36,6 +37,7 @@ export interface NextUserForCallResult {
 export class PreCallValidationService {
   private userService: UserService;
   private queueAdapter: QueueAdapterService | null = null;
+  private callbackService = new CallbackService();
 
   constructor() {
     this.userService = new UserService();
@@ -381,17 +383,45 @@ export class PreCallValidationService {
     try {
       console.log(`🔍 Finding next valid user for ${queueType} queue...`);
       
-      // 🚨 DISABLED: Callback check temporarily disabled due to infinite loop
-      // TODO: Fix callback state management then re-enable
-      /*
-      // 🥇 PRIORITY 1: Check for due callbacks first 
-      const callbackResult = await this.getNextDueCallbackForQueue(queueType);
-      if (callbackResult) {
-        console.log(`🎯 HIGHEST PRIORITY: Found due callback for ${queueType} queue`);
-        return callbackResult;
+      // 🥇 PRIORITY 1: Check for due callbacks first (re-enabled with proper lifecycle)
+      if (agentId) {
+        const claimed = await this.callbackService.findAndAssignNextDue(agentId, queueType);
+        if (claimed) {
+          const basicUser = await this.getBasicUserForCallback(Number(claimed.userId));
+          let userContext = basicUser ? {
+            userId: Number(claimed.userId),
+            firstName: basicUser.firstName,
+            lastName: basicUser.lastName,
+            email: basicUser.email,
+            phoneNumber: basicUser.phoneNumber,
+            phone: basicUser.phoneNumber,
+            claims: [],
+            addresses: [],
+            callScore: { currentScore: 0, totalAttempts: 0, lastOutcome: 'callback_scheduled' }
+          } : {
+            userId: Number(claimed.userId),
+            firstName: 'Callback',
+            lastName: 'User',
+            email: `callback-user-${claimed.userId}@unknown.com`,
+            phoneNumber: '+44000000000',
+            claims: [],
+            addresses: [],
+            callScore: { currentScore: 0, totalAttempts: 0, lastOutcome: 'callback_scheduled' }
+          };
+          userContext = await this.enrichUserContext(userContext, Number(claimed.userId));
+          return {
+            userId: Number(claimed.userId),
+            userContext,
+            queuePosition: 0,
+            queueEntryId: `callback-${claimed.id}`,
+            validationResult: {
+              isValid: true,
+              currentQueueType: queueType,
+              userStatus: { hasSignature: true, pendingRequirements: 0, hasScheduledCallback: true, isEnabled: true, userExists: true }
+            }
+          };
+        }
       }
-      */
-      console.log(`🚨 CALLBACK CHECK DISABLED - implementing proper state management`);
       
       // 🥈 PRIORITY 2: Check for missed calls (if agent ID provided)
       if (agentId) {

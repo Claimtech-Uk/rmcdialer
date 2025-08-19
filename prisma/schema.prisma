@@ -244,12 +244,26 @@ model Callback {
   completedCallSessionId String?                @map("completed_call_session_id") @db.Uuid
   queueType              String                 @default("outstanding_requests") @map("queue_type")
   createdAt              DateTime               @default(now()) @map("created_at")
+  // Lifecycle & assignment tracking
+  assignedToAgentId      Int?                   @map("assigned_to_agent_id")
+  assignedAt             DateTime?              @map("assigned_at")
+  leaseExpiresAt         DateTime?              @map("lease_expires_at")
+  completedAt            DateTime?              @map("completed_at")
+  retryCount             Int                    @default(0) @map("retry_count")
+  maxRetries             Int                    @default(1) @map("max_retries")
+  lastAttemptAt          DateTime?              @map("last_attempt_at")
+  // Creator tracking
+  createdByAgentId       Int?                   @map("created_by_agent_id")
+  createdBySource        String                 @default("agent") @map("created_by_source") // 'agent' | 'ai_sms_agent'
   callQueue              CallQueue[]
   notifications          CallbackNotification[]
   preferredAgent         Agent?                 @relation(fields: [preferredAgentId], references: [id])
 
   @@index([scheduledFor])
   @@index([status])
+  @@index([preferredAgentId, status, scheduledFor])
+  @@index([assignedToAgentId, status])
+  @@index([userId, status])
   @@index([queueType, scheduledFor, status])
   @@map("callbacks")
 }
