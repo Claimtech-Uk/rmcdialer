@@ -49,9 +49,9 @@ export class PreCallValidationService {
   }
 
   /**
-   * 🎯 PHASE 1: Get basic user data for both missed calls and callbacks
+   * 🎯 UNIFIED: Get basic user data for all user types (callbacks, missed calls, regular queue users)
    * Fast, reliable, consistent approach using simple MySQL replica lookup
-   * This ensures callbacks/missed calls NEVER fail due to data issues
+   * This ensures ALL user operations NEVER fail due to data issues
    */
   private async getBasicUserForCallback(userId: number): Promise<{
     firstName: string;
@@ -421,6 +421,7 @@ export class PreCallValidationService {
 
   /**
    * Get next valid user using QueueAdapterService (preferred method)
+   * UPDATED: Now uses simple reliable approach for ALL users
    */
   private async getNextValidUserFromAdapter(queueType: QueueType, agentId?: number): Promise<NextUserForCallResult | null> {
     console.log(`🔄 Using QueueAdapterService for ${queueType} queue`);
@@ -443,49 +444,33 @@ export class PreCallValidationService {
       const validation = await this.validateUserForCall(user.userId, queueType);
       
       if (validation.isValid) {
-        // Get complete user context for the call
-        const userServiceContext = await this.userService.getUserCallContext(user.userId);
+        // 🎯 FIXED: Use simple reliable approach instead of complex getUserCallContext
+        console.log(`✅ Building user context for ${user.userId} using simple reliable approach...`);
         
-        if (userServiceContext) {
-          console.log(`✅ Found valid user ${user.userId} for ${queueType} queue`);
-          
-          // Transform from users module format (nested) to calls module format (flat)
-          // This ensures compatibility with auto dialler and other components expecting flat structure
-          const userContext = {
-            userId: userServiceContext.user.id,
-            firstName: userServiceContext.user.firstName || 'Unknown',
-            lastName: userServiceContext.user.lastName || 'User',
-            email: userServiceContext.user.email || `user${user.userId}@unknown.com`,
-            phoneNumber: userServiceContext.user.phoneNumber || '+44000000000',
-            createdAt: userServiceContext.user.createdAt,
-            address: userServiceContext.user.address ? {
-              fullAddress: userServiceContext.user.address.fullAddress || '',
-              postCode: userServiceContext.user.address.postCode || '',
-              county: userServiceContext.user.address.county || ''
-            } : undefined,
-            claims: userServiceContext.claims.map(claim => ({
-              id: claim.id,
-              type: claim.type || 'unknown',
-              status: claim.status || 'unknown',
-              lender: claim.lender || 'unknown',
-              value: 0, // Not available in users module data
-              requirements: claim.requirements.map(req => ({
-                id: req.id,
-                type: req.type || 'unknown',
-                status: req.status || 'unknown',
-                reason: req.reason || 'No reason provided'
-              }))
-            })),
-            callScore: userServiceContext.callScore ? {
-              currentScore: userServiceContext.callScore.currentScore,
-              totalAttempts: userServiceContext.callScore.totalAttempts,
-              lastOutcome: userServiceContext.callScore.lastOutcome || 'no_attempt'
-            } : {
+        const basicUser = await this.getBasicUserForCallback(user.userId);
+        
+        if (basicUser) {
+          // Create basic context with reliable data
+          let userContext = {
+            userId: user.userId,
+            firstName: basicUser.firstName,
+            lastName: basicUser.lastName,
+            email: basicUser.email,
+            phoneNumber: basicUser.phoneNumber,
+            phone: basicUser.phoneNumber, // For backward compatibility
+            claims: [], // Will be enriched in Phase 2
+            addresses: [],
+            callScore: {
               currentScore: 50,
               totalAttempts: 0,
               lastOutcome: 'no_attempt'
             }
           };
+          
+          // 🎯 PHASE 2: Try to enrich with full context (claims, addresses, etc.)
+          userContext = await this.enrichUserContext(userContext, user.userId);
+          
+          console.log(`✅ Successfully built context for regular queue user ${user.userId}`);
           
           return {
             userId: user.userId,
@@ -495,7 +480,7 @@ export class PreCallValidationService {
             validationResult: validation
           };
         } else {
-          console.log(`⚠️ User ${user.userId} context not available, skipping...`);
+          console.log(`⚠️ Could not get basic user data for ${user.userId}, skipping...`);
         }
       } else {
         console.log(`❌ User ${user.userId} no longer valid for ${queueType}: ${validation.reason}`);
@@ -510,6 +495,7 @@ export class PreCallValidationService {
 
   /**
    * Legacy method: Get next valid user from CallQueue table directly
+   * UPDATED: Now uses simple reliable approach for ALL users
    */
   private async getNextValidUserFromLegacy(queueType: QueueType): Promise<NextUserForCallResult | null> {
     console.log(`🔄 Using legacy CallQueue for ${queueType} queue`);
@@ -535,10 +521,32 @@ export class PreCallValidationService {
       const validation = await this.validateUserForCall(userId, queueType);
       
       if (validation.isValid) {
-        // Get complete user context for the call
-        const userContext = await this.userService.getUserCallContext(userId);
+        // 🎯 FIXED: Use simple reliable approach instead of complex getUserCallContext
+        console.log(`✅ Building user context for legacy queue user ${userId}...`);
         
-        if (userContext) {
+        const basicUser = await this.getBasicUserForCallback(userId);
+        
+        if (basicUser) {
+          // Create basic context with reliable data
+          let userContext = {
+            userId: userId,
+            firstName: basicUser.firstName,
+            lastName: basicUser.lastName,
+            email: basicUser.email,
+            phoneNumber: basicUser.phoneNumber,
+            phone: basicUser.phoneNumber,
+            claims: [], // Will be enriched in Phase 2
+            addresses: [],
+            callScore: {
+              currentScore: 50,
+              totalAttempts: 0,
+              lastOutcome: 'no_attempt'
+            }
+          };
+          
+          // 🎯 PHASE 2: Try to enrich with full context
+          userContext = await this.enrichUserContext(userContext, userId);
+          
           console.log(`✅ Found valid user ${userId} for ${queueType} queue`);
           return {
             userId,
@@ -548,7 +556,7 @@ export class PreCallValidationService {
             validationResult: validation
           };
         } else {
-          console.log(`⚠️ User ${userId} context not available, skipping...`);
+          console.log(`⚠️ Could not get basic user data for ${userId}, skipping...`);
         }
       } else {
         console.log(`❌ User ${userId} no longer valid for ${queueType}: ${validation.reason}`);
