@@ -269,7 +269,10 @@ export class SMSService {
       });
 
       return {
-        message: smsMessage as SMSMessage,
+        message: {
+          ...smsMessage,
+          updatedAt: smsMessage.createdAt
+        } as SMSMessage,
         conversation,
         autoResponse: responseMessage || undefined
       };
@@ -334,9 +337,15 @@ export class SMSService {
       user: conversation.userId ? await this.getUserData(Number(conversation.userId)) : undefined
     };
 
+    // Transform messages to include updatedAt field
+    const transformedMessages = messages.reverse().map(msg => ({
+      ...msg,
+      updatedAt: msg.createdAt
+    })) as SMSMessage[];
+
     return {
       conversation: enhancedConversation,
-      messages: messages.reverse() as SMSMessage[], // Show oldest first in UI
+      messages: transformedMessages, // Show oldest first in UI
       pagination: {
         page,
         limit,
@@ -347,94 +356,20 @@ export class SMSService {
     };
   }
 
-  /**
-   * Get all conversations with filtering - LEGACY VERSION
-   * ⚠️  WARNING: This method has N+1 query performance issues
-   * Use getConversationsOptimized() for production
-   */
-  async getConversationsLegacy(options: SMSConversationOptions = {}): Promise<PaginatedSMSConversations> {
-    const { phoneNumber, userId, agentId, status, page = 1, limit = 20 } = options;
 
-    const where: any = {};
-    if (phoneNumber) where.phoneNumber = phoneNumber;
-    if (userId) where.userId = userId;
-    if (agentId) where.assignedAgentId = agentId;
-    if (status) where.status = status;
 
-    const [conversations, total] = await Promise.all([
-      prisma.smsConversation.findMany({
-        where,
-        include: {
-          assignedAgent: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true
-            }
-          },
-          _count: {
-            select: {
-              messages: true
-            }
-          }
-        },
-        orderBy: { lastMessageAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit
-      }),
-      prisma.smsConversation.count({ where })
-    ]);
 
-    // Enhance with user data and latest message
-    const enhancedConversations = await Promise.all(
-      conversations.map(async (conv: any) => {
-        const latestMessage = await prisma.smsMessage.findFirst({
-          where: { conversationId: conv.id },
-          orderBy: { createdAt: 'desc' },
-          select: {
-            body: true,
-            direction: true,
-            createdAt: true,
-            isAutoResponse: true
-          }
-        });
-
-        const enhancedConv: SMSConversation = {
-          ...this.transformConversation(conv),
-          user: conv.userId ? await this.getUserData(Number(conv.userId)) : undefined,
-          latestMessage: latestMessage ? {
-            ...latestMessage,
-            direction: latestMessage.direction as 'inbound' | 'outbound'
-          } : undefined,
-          messageCount: conv._count.messages
-        };
-
-        return enhancedConv;
-      })
-    );
-
-    return {
-      data: enhancedConversations,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: total > page * limit
-      }
-    };
-  }
 
   /**
-   * 🚀 OPTIMIZED: Get conversations with ZERO N+1 queries
-   * Performance: 150+ queries → 3 efficient batched queries
-   * Reduces page load time from timeout to ~200ms
+   * ⚡ Get lightweight conversation list - DEFAULT METHOD
+   * Returns minimal data: basic info + latest message only
+   * Optimized for fast page loads - typically ~50ms
    */
-  async getConversationsOptimized(options: SMSConversationOptions = {}): Promise<PaginatedSMSConversations> {
+  async getConversationsList(options: SMSConversationOptions = {}): Promise<PaginatedSMSConversations> {
     const startTime = Date.now();
-    const { phoneNumber, userId, agentId, status, page = 1, limit = 20 } = options;
+    const { phoneNumber, userId, agentId, status, page = 1, limit = 10 } = options;
 
-    logger.info('SMS conversations optimized query started', { 
+    logger.info('SMS conversations list query started', { 
       filters: { phoneNumber: !!phoneNumber, userId, agentId, status }, 
       pagination: { page, limit } 
     });
@@ -447,7 +382,158 @@ export class SMSService {
     if (status) where.status = status;
 
     try {
-      // 🚀 QUERY 1: Get conversations with agents and message counts (1 query)
+      // 🚀 SINGLE OPTIMIZED QUERY: Get conversations with latest message in one go
+      const [conversations, total] = await Promise.all([
+        prisma.smsConversation.findMany({
+          where,
+          select: {
+            id: true,
+            phoneNumber: true,
+            userId: true,
+            status: true,
+            lastMessageAt: true,
+            createdAt: true,
+            // Get latest message via sub-query (much faster than separate queries)
+            messages: {
+              take: 1,
+              orderBy: { createdAt: 'desc' },
+              select: {
+                body: true,
+                direction: true,
+                createdAt: true,
+                isAutoResponse: true
+              }
+            },
+            _count: {
+              select: {
+                messages: true
+              }
+            }
+          },
+          orderBy: { lastMessageAt: 'desc' },
+          skip: (page - 1) * limit,
+          take: limit
+        }),
+        prisma.smsConversation.count({ where })
+      ]);
+
+      // Extract unique user IDs for batch user lookup
+      const userIds = Array.from(new Set(
+        conversations
+          .filter(c => c.userId)
+          .map(c => Number(c.userId))
+      ));
+
+      // 🚀 BATCH USER LOOKUP: Only if we have users to look up
+      let userDataMap = new Map();
+      if (userIds.length > 0) {
+        try {
+          const userResults = await Promise.allSettled(
+            userIds.map(async userId => {
+              try {
+                const userData = await this.getUserData(userId);
+                return { userId, userData };
+              } catch (error) {
+                return { 
+                  userId, 
+                  userData: {
+                    id: userId,
+                    firstName: 'Unknown',
+                    lastName: 'User',
+                    email: '',
+                    phoneNumber: ''
+                  }
+                };
+              }
+            })
+          );
+
+          userResults.forEach(result => {
+            if (result.status === 'fulfilled') {
+              userDataMap.set(result.value.userId, result.value.userData);
+            }
+          });
+        } catch (error) {
+          logger.warn('Batch user lookup failed in summary method', { error });
+        }
+      }
+
+      // 🚀 TRANSFORM: Super lightweight transformation
+      const summaryConversations = conversations.map((conv: any) => {
+        const latestMessage = conv.messages[0]; // First (most recent) message
+        const userData = conv.userId ? userDataMap.get(Number(conv.userId)) : undefined;
+
+        return {
+          id: conv.id,
+          phoneNumber: conv.phoneNumber,
+          userId: conv.userId ? Number(conv.userId) : undefined,
+          status: conv.status,
+          lastMessageAt: conv.lastMessageAt,
+          createdAt: conv.createdAt,
+          updatedAt: conv.createdAt, // Use createdAt as fallback
+          user: userData,
+          latestMessage: latestMessage ? {
+            body: latestMessage.body,
+            direction: latestMessage.direction as 'inbound' | 'outbound',
+            createdAt: latestMessage.createdAt,
+            isAutoResponse: latestMessage.isAutoResponse
+          } : undefined,
+          messageCount: conv._count.messages
+        };
+      });
+
+      const queryTime = Date.now() - startTime;
+      logger.info('SMS conversations list completed', {
+        conversationCount: summaryConversations.length,
+        userCount: userIds.length,
+        queryTime: `${queryTime}ms`,
+        performanceNote: 'Lightweight list method'
+      });
+
+      return {
+        data: summaryConversations,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasMore: total > page * limit
+        }
+      };
+
+    } catch (error) {
+      const queryTime = Date.now() - startTime;
+      logger.error('SMS conversations list query failed', {
+        error: error instanceof Error ? error.message : String(error),
+        queryTime: `${queryTime}ms`,
+        filters: where
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get conversations with full data - OPTIMIZED IMPLEMENTATION
+   * Uses efficient batched queries to eliminate N+1 problems
+   */
+  async getConversations(options: SMSConversationOptions = {}): Promise<PaginatedSMSConversations> {
+    const startTime = Date.now();
+    const { phoneNumber, userId, agentId, status, page = 1, limit = 20 } = options;
+
+    logger.info('SMS conversations query started', { 
+      filters: { phoneNumber: !!phoneNumber, userId, agentId, status }, 
+      pagination: { page, limit } 
+    });
+
+    // Build where clause
+    const where: any = {};
+    if (phoneNumber) where.phoneNumber = phoneNumber;
+    if (userId) where.userId = userId;
+    if (agentId) where.assignedAgentId = agentId;
+    if (status) where.status = status;
+
+    try {
+      // 🚀 QUERY 1: Get conversations with agents and message counts
       const [conversations, total] = await Promise.all([
         prisma.smsConversation.findMany({
           where,
@@ -498,13 +584,7 @@ export class SMSService {
           .map(c => Number(c.userId))
       ));
 
-      logger.info('SMS batch fetch started', {
-        conversationCount: conversations.length,
-        userCount: userIds.length,
-        queryTime: `${Date.now() - startTime}ms`
-      });
-
-      // 🚀 QUERY 2: Batch fetch latest messages (1 query for ALL conversations)
+      // 🚀 QUERY 2: Batch fetch latest messages
       const latestMessagesPromise = prisma.smsMessage.findMany({
         where: {
           conversationId: { in: conversationIds }
@@ -521,13 +601,13 @@ export class SMSService {
         }
       });
 
-      // 🚀 QUERY 3: Batch fetch user data with fallback handling
+      // 🚀 QUERY 3: Batch fetch user data
       const userDataPromise = userIds.length > 0 
         ? Promise.allSettled(
             userIds.map(async userId => {
               try {
                 const userData = await this.getUserData(userId);
-                return { userId, userData, success: true };
+                return { userId, userData };
               } catch (error) {
                 logger.warn('Failed to get user data', { userId, error: error instanceof Error ? error.message : String(error) });
                 return { 
@@ -538,8 +618,7 @@ export class SMSService {
                     lastName: 'User',
                     email: '',
                     phoneNumber: ''
-                  },
-                  success: false
+                  }
                 };
               }
             })
@@ -577,7 +656,7 @@ export class SMSService {
         }
       });
 
-      // 🚀 ASSEMBLY: Combine all data without additional queries
+      // 🚀 ASSEMBLY: Combine all data efficiently
       const enhancedConversations = conversations.map((conv: any) => {
         const latestMessage = latestMessageMap.get(conv.id);
         const userData = conv.userId ? userDataMap.get(Number(conv.userId)) : undefined;
@@ -594,11 +673,10 @@ export class SMSService {
       });
 
       const queryTime = Date.now() - startTime;
-      logger.info('SMS conversations optimized query completed', {
+      logger.info('SMS conversations query completed', {
         conversationCount: enhancedConversations.length,
         queryTime: `${queryTime}ms`,
-        queriesExecuted: 3,
-        performanceNote: 'Eliminated N+1 query problem'
+        queriesExecuted: 3
       });
 
       return {
@@ -614,42 +692,12 @@ export class SMSService {
 
     } catch (error) {
       const queryTime = Date.now() - startTime;
-      logger.error('SMS conversations optimized query failed', {
+      logger.error('SMS conversations query failed', {
         error: error instanceof Error ? error.message : String(error),
         queryTime: `${queryTime}ms`,
-        filters: where,
-        fallbackNote: 'Consider falling back to legacy method'
+        filters: where
       });
-      
-      // Re-throw the error so the caller can handle it (e.g., fallback to legacy method)
       throw error;
-    }
-  }
-
-  /**
-   * Get conversations with automatic fallback - PRODUCTION SAFE
-   * Tries optimized method first, falls back to legacy on errors
-   */
-  async getConversations(options: SMSConversationOptions = {}): Promise<PaginatedSMSConversations> {
-    // Feature flag for enabling optimized method
-    const useOptimizedMethod = process.env.SMS_USE_OPTIMIZED_QUERIES !== 'false';
-
-    if (!useOptimizedMethod) {
-      logger.info('Using legacy SMS conversations method (feature flag disabled)');
-      return this.getConversationsLegacy(options);
-    }
-
-    try {
-      // Try optimized method first
-      return await this.getConversationsOptimized(options);
-    } catch (error) {
-      logger.error('Optimized SMS conversations method failed, falling back to legacy', {
-        error: error instanceof Error ? error.message : String(error),
-        options
-      });
-      
-      // Fallback to legacy method
-      return this.getConversationsLegacy(options);
     }
   }
 

@@ -178,15 +178,23 @@ export const communicationsRouter = createTRPCRouter({
       }),
 
     /**
-     * Get SMS conversations with filtering
+     * ⚡ Get SMS conversations - DEFAULT OPTIMIZED METHOD
+     * Fast loading with lightweight data for better UX
+     */
+    getConversationsList: protectedProcedure
+      .input(ConversationFiltersSchema)
+      .query(async ({ input, ctx }) => {
+        return await smsService.getConversationsList(input);
+      }),
+
+    /**
+     * Get SMS conversations with comprehensive data
+     * Use when you need complete conversation data with full message details
      */
     getConversations: protectedProcedure
       .input(ConversationFiltersSchema)
       .query(async ({ input, ctx }) => {
-        // Allow all agents to see full SMS conversations for better user context
-        const filters = input;
-        
-        return await smsService.getConversations(filters);
+        return await smsService.getConversations(input);
       }),
 
     /**
