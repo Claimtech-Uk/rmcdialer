@@ -300,6 +300,12 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
         return; // Skip assignment for temporary entries from user_call_scores
       }
 
+      // If not a persisted queue row (e.g., callback entry), skip assignment
+      if (!queueEntryId.startsWith('queue-')) {
+        this.logger.info(`⚠️ Skipping assignment for non-queue entry ${queueEntryId} - not a persisted unsignedUsersQueue row`);
+        return;
+      }
+
       // Extract raw ID if it's prefixed with 'queue-'
       const rawId = queueEntryId.startsWith('queue-') ? queueEntryId.replace('queue-', '') : queueEntryId;
       
@@ -329,6 +335,12 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
       if (queueEntryId.startsWith('score-')) {
         this.logger.info(`⚠️ Skipping status update for temporary queue entry ${queueEntryId} - user will be processed without status tracking`);
         return; // Skip status update for temporary entries from user_call_scores
+      }
+
+      // If not a persisted queue row (e.g., callback entry), skip status update
+      if (!queueEntryId.startsWith('queue-')) {
+        this.logger.info(`⚠️ Skipping status update for non-queue entry ${queueEntryId} - not a persisted unsignedUsersQueue row`);
+        return;
       }
 
       // Extract raw ID if it's prefixed with 'queue-'
@@ -362,6 +374,12 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
         return; // Skip status update for temporary entries from user_call_scores
       }
 
+      // If not a persisted queue row (e.g., callback entry), skip status update
+      if (!queueEntryId.startsWith('queue-')) {
+        this.logger.info(`⚠️ Skipping status update for non-queue entry ${queueEntryId} - not a persisted unsignedUsersQueue row`);
+        return;
+      }
+
       // Extract raw ID if it's prefixed with 'queue-'
       const rawId = queueEntryId.startsWith('queue-') ? queueEntryId.replace('queue-', '') : queueEntryId;
       
@@ -387,10 +405,11 @@ export class UnsignedUsersQueueService implements BaseQueueService<UnsignedUsers
   async getNextUser(): Promise<UnsignedUsersQueueEntry | null> {
     try {
       // 🥇 PRIORITY 1: Check for due callbacks first
-      const callback = await this.getNextDueCallback();
-      if (callback) {
-        return this.formatCallbackAsQueueEntry(callback);
-      }
+      // 🚫 Temporarily disabled at service level to avoid assignment errors and infinite loops
+      // const callback = await this.getNextDueCallback();
+      // if (callback) {
+      //   return this.formatCallbackAsQueueEntry(callback);
+      // }
 
       // 🥉 PRIORITY 2: Get from UnsignedUsersQueue table (regular queue)
       const queueEntry = await this.prisma.unsignedUsersQueue.findFirst({
