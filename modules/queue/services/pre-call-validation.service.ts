@@ -892,7 +892,7 @@ export class PreCallValidationService {
    */
   private async getNextDueCallbackForQueue(queueType: QueueType): Promise<NextUserForCallResult | null> {
     try {
-      const dueCallback = await this.deps.prisma.callback.findFirst({
+      const dueCallback = await prisma.callback.findFirst({
         where: {
           queueType: queueType, // Only callbacks for this specific queue
           status: 'pending',
