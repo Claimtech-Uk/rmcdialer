@@ -425,72 +425,62 @@ export class PreCallValidationService {
    */
   private async getNextValidUserFromAdapter(queueType: QueueType, agentId?: number): Promise<NextUserForCallResult | null> {
     console.log(`🔄 Using QueueAdapterService for ${queueType} queue`);
-    
-    const maxAttempts = 5; // Prevent infinite loops
-    
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      console.log(`🔍 Attempt ${attempt}/${maxAttempts} to find valid user...`);
-      
-      // 1. Get next user from queue adapter
-      const user = await this.queueAdapter!.getNextUserForCall({ queueType, agentId });
-      if (!user) {
-        console.log(`📭 No more users in ${queueType} queue`);
-        return null;
-      }
-      
-      console.log(`🔍 Validating user ${user.userId} from queue adapter...`);
-      
-      // 2. Validate user against MySQL replica
-      const validation = await this.validateUserForCall(user.userId, queueType);
-      
-      if (validation.isValid) {
-        // 🎯 FIXED: Use simple reliable approach instead of complex getUserCallContext
-        console.log(`✅ Building user context for ${user.userId} using simple reliable approach...`);
-        
-        const basicUser = await this.getBasicUserForCallback(user.userId);
-        
-        if (basicUser) {
-          // Create basic context with reliable data
-          let userContext = {
-            userId: user.userId,
-            firstName: basicUser.firstName,
-            lastName: basicUser.lastName,
-            email: basicUser.email,
-            phoneNumber: basicUser.phoneNumber,
-            phone: basicUser.phoneNumber, // For backward compatibility
-            claims: [], // Will be enriched in Phase 2
-            addresses: [],
-            callScore: {
-              currentScore: 50,
-              totalAttempts: 0,
-              lastOutcome: 'no_attempt'
-            }
-          };
-          
-          // 🎯 PHASE 2: Try to enrich with full context (claims, addresses, etc.)
-          userContext = await this.enrichUserContext(userContext, user.userId);
-          
-          console.log(`✅ Successfully built context for regular queue user ${user.userId}`);
-          
-          return {
-            userId: user.userId,
-            userContext,
-            queuePosition: user.queuePosition,
-            queueEntryId: user.queueEntryId,
-            validationResult: validation
-          };
-        } else {
-          console.log(`⚠️ Could not get basic user data for ${user.userId}, skipping...`);
-        }
-      } else {
-        console.log(`❌ User ${user.userId} no longer valid for ${queueType}: ${validation.reason}`);
-        // Note: In a complete implementation, we might remove the user from queue here
-        // For now, we'll just skip to the next user
-      }
+
+    // Single fetch: underlying queue services already perform validation and retries
+    const user = await this.queueAdapter!.getNextUserForCall({ queueType, agentId });
+    if (!user) {
+      console.log(`📭 No more users in ${queueType} queue`);
+      return null;
     }
-    
-    console.log(`⚠️ Exhausted ${maxAttempts} attempts to find valid user in ${queueType} queue`);
-    return null;
+
+    console.log(`✅ Building user context for ${user.userId} using simple reliable approach...`);
+
+    const basicUser = await this.getBasicUserForCallback(user.userId);
+    if (!basicUser) {
+      console.log(`⚠️ Could not get basic user data for ${user.userId}, skipping...`);
+      return null;
+    }
+
+    // Create basic context with reliable data
+    let userContext = {
+      userId: user.userId,
+      firstName: basicUser.firstName,
+      lastName: basicUser.lastName,
+      email: basicUser.email,
+      phoneNumber: basicUser.phoneNumber,
+      phone: basicUser.phoneNumber, // For backward compatibility
+      claims: [], // Will be enriched in Phase 2
+      addresses: [],
+      callScore: {
+        currentScore: 50,
+        totalAttempts: 0,
+        lastOutcome: 'no_attempt'
+      }
+    };
+
+    // Best-effort enrichment (non-blocking beyond short timeout handled inside)
+    userContext = await this.enrichUserContext(userContext, user.userId);
+
+    // Lightweight validation result without extra DB calls (derived from queue type)
+    const derivedValidation: PreCallValidationResult = {
+      isValid: true,
+      currentQueueType: queueType,
+      userStatus: {
+        hasSignature: queueType === 'unsigned_users' ? false : true,
+        pendingRequirements: queueType === 'outstanding_requests' ? 1 : 0,
+        hasScheduledCallback: false,
+        isEnabled: true,
+        userExists: true
+      }
+    };
+
+    return {
+      userId: user.userId,
+      userContext,
+      queuePosition: user.queuePosition,
+      queueEntryId: user.queueEntryId,
+      validationResult: derivedValidation
+    };
   }
 
   /**

@@ -59,7 +59,7 @@ export function useAutoDialler(options: UseAutoDiallerOptions): UseAutoDiallerRe
   // API queries and mutations
   const { data: session } = api.auth.me.useQuery();
   const { data: queueStats } = api.queue.getStats.useQuery(undefined, {
-    refetchInterval: 30000,
+    refetchInterval: 60000, // lighter polling
     enabled: isActive
   });
   const { data: settings, refetch: refetchSettings } = api.autoDialer.getSettings.useQuery();
