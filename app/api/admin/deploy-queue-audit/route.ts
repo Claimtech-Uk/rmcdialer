@@ -3,6 +3,9 @@ import { prisma } from '@/lib/db'
 import fs from 'fs'
 import path from 'path'
 
+// Force dynamic rendering to prevent build-time database calls
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   try {
     // Auth check (same pattern as SMS migration)

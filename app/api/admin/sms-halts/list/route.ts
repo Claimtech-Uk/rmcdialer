@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cacheService } from '@/lib/redis'
 
+// Force dynamic rendering to prevent build-time Redis calls
+export const dynamic = 'force-dynamic'
+
 interface SmsHalt {
   phoneNumber: string
   displayPhone: string
