@@ -213,9 +213,6 @@ export function CallInterface({
   
   const { toast } = useToast();
 
-  // Get most recent call for top display (minimal addition)
-  const mostRecentCall = callHistoryResponse?.calls?.[0];
-
   // Get authenticated agent context from tRPC - with optimized settings
   const { data: agentContext, isLoading: agentLoading, error: agentError } = api.auth.me.useQuery(
     undefined,
@@ -306,6 +303,9 @@ export function CallInterface({
       refetchOnMount: false, // ADDED: Don't refetch on mount
     }
   );
+
+  // Get most recent call for top display (moved after callHistoryResponse is defined)
+  const mostRecentCall = callHistoryResponse?.calls?.[0];
 
   // Fetch SMS conversations - CONDITIONAL LOADING
   const { data: smsConversationsResponse, isLoading: smsLoading, refetch: refetchSmsConversations } = api.communications.sms.getConversations.useQuery(
