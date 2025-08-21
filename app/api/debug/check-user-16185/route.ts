@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+// Force dynamic rendering to prevent build-time database calls
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     // Check user_call_scores
@@ -9,7 +12,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Check if in unsigned_users_queue
-    const queueEntry = await (prisma as any).unsignedUsersQueue.findFirst({
+    const queueEntry = await prisma.unsignedUsersQueue.findFirst({
       where: { userId: BigInt(16185) }
     });
 
