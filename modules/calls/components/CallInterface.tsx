@@ -83,7 +83,7 @@ function ConversationDetail({ conversation, expanded = false }: { conversation: 
   };
 
   return (
-    <div className="border border-slate-200 rounded-xl bg-white shadow-sm">
+    <div className="border border-slate-200 rounded-xl bg-slate-50 shadow-sm">
       {/* Conversation Header */}
       <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-xl p-4 border-b border-slate-200">
         <div className="flex items-center justify-between">
@@ -130,7 +130,7 @@ function ConversationDetail({ conversation, expanded = false }: { conversation: 
                 <div
                   className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl shadow-sm ${
                     message.direction === 'outbound'
-                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
+                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-slate-100'
                       : 'bg-slate-100 text-slate-800 border border-slate-200'
                   }`}
                 >
@@ -143,7 +143,7 @@ function ConversationDetail({ conversation, expanded = false }: { conversation: 
                         variant="outline"
                         className={`text-xs ${
                           message.direction === 'outbound' 
-                            ? 'bg-white/20 text-blue-100 border-blue-200' 
+                            ? 'bg-blue-100/30 text-blue-800 border-blue-200' 
                             : 'bg-slate-200 text-slate-600 border-slate-300'
                         }`}
                       >
@@ -228,7 +228,7 @@ export function CallInterface({
   // Wait for agent context to load before proceeding
   if (agentLoading) {
     return (
-      <Card className="w-full max-w-4xl mx-auto border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+      <Card className="w-full max-w-4xl mx-auto border-0 shadow-xl bg-slate-50/90 backdrop-blur-sm">
         <CardContent className="p-8 text-center">
           <Activity className="w-8 h-8 animate-pulse text-blue-600 mx-auto mb-4" />
           <h2 className="text-lg font-semibold mb-2 text-slate-800">Loading Agent Context</h2>
@@ -910,7 +910,7 @@ export function CallInterface({
               onClick={() => setShowOutcomeModal(true)}
               size="default"
               responsive="nowrap"
-              className="bg-yellow-600 hover:bg-yellow-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+              className="bg-yellow-600 hover:bg-yellow-700 text-slate-900 shadow-md hover:shadow-lg transition-all duration-200"
             >
               Complete Disposition
             </Button>
@@ -920,11 +920,11 @@ export function CallInterface({
 
       {/* 🚨 MISSED CALL CALLBACK BANNER - UNIFIED COLOR THEME */}
       {(userContext as any)?.isMissedCallCallback && (
-        <div className="bg-gradient-to-r from-amber-500 to-red-500 text-white p-4 rounded-xl shadow-xl border-2 border-amber-300 mb-6">
+        <div className="bg-gradient-to-r from-amber-500 to-red-500 text-red-900 p-4 rounded-xl shadow-xl border-2 border-amber-300 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="bg-amber-100/30 p-2 rounded-full">
-                <RefreshCw className="h-6 w-6 text-white animate-spin-slow" />
+                <RefreshCw className="h-6 w-6 text-red-800 animate-spin-slow" />
               </div>
               <div>
                 <div className="flex items-center gap-3 text-xl font-bold uppercase tracking-wide mb-1">
@@ -981,12 +981,13 @@ export function CallInterface({
         {/* Main Content Panel */}
         <div className="lg:col-span-2 space-y-6">
           {/* Customer Information */}
-          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <Card className="border-0 shadow-xl bg-slate-50/90 backdrop-blur-sm">
             <CardHeader className={`rounded-t-lg ${
               (userContext as any)?.isMissedCallCallback ? 'bg-slate-900' : 'bg-gradient-to-r from-slate-50 to-slate-100'
             }`}>
               <CardTitle className={`flex items-center gap-2 ${
-                (userContext as any)?.isMissedCallCallback ? 'text-white' : 'text-slate-800'
+                (userContext as any)?.isMissedCallCallback ? 'text-red-900' : 
+                (userContext as any)?.isCallbackCall ? 'text-blue-900' : 'text-slate-800'
               }`}>
                 <User className="w-5 h-5 text-blue-600" />
                 Customer Information
@@ -996,7 +997,8 @@ export function CallInterface({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className={`text-2xl font-bold ${
-                    (userContext as any)?.isMissedCallCallback ? 'text-white' : 'text-slate-900'
+                    (userContext as any)?.isMissedCallCallback ? 'text-red-900' : 
+                    (userContext as any)?.isCallbackCall ? 'text-blue-900' : 'text-slate-900'
                   }`}>
                     {userContext.firstName} {userContext.lastName}
                   </div>
@@ -1014,7 +1016,7 @@ export function CallInterface({
                     <Button
                       variant="outline"
                       size="sm"
-                      className={`${(userContext as any)?.isMissedCallCallback ? 'text-white border-white/40 hover:bg-white/10' : 'text-blue-600 border-blue-200 hover:bg-blue-50'}`}
+                      className={`${(userContext as any)?.isMissedCallCallback ? 'text-red-700 border-red-300 hover:bg-red-50' : (userContext as any)?.isCallbackCall ? 'text-blue-700 border-blue-300 hover:bg-blue-50' : 'text-blue-600 border-blue-200 hover:bg-blue-50'}`}
                       onClick={() => window.open(`https://claim.resolvemyclaim.co.uk/admin/users/${userContext.userId}`, '_blank')}
                     >
                       <ExternalLink className="w-4 h-4 mr-2" />
@@ -1026,7 +1028,7 @@ export function CallInterface({
                       disabled={sendReviewSMSMutation.isPending || !userContext.phoneNumber}
                       variant="outline"
                       size="sm"
-                      className={`${(userContext as any)?.isMissedCallCallback ? 'text-white border-white/40 hover:bg-white/10' : 'text-purple-600 border-purple-200 hover:bg-purple-50'}`}
+                      className={`${(userContext as any)?.isMissedCallCallback ? 'text-red-700 border-red-300 hover:bg-red-50' : (userContext as any)?.isCallbackCall ? 'text-blue-700 border-blue-300 hover:bg-blue-50' : 'text-purple-600 border-purple-200 hover:bg-purple-50'}`}
                       title={userContext.phoneNumber ? 'Send review request to customer' : 'No phone number available'}
                     >
                       <MessageSquare className="w-4 h-4 mr-2" />
@@ -1108,7 +1110,7 @@ export function CallInterface({
           </Card>
 
           {/* Claims Overview */}
-          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <Card className="border-0 shadow-xl bg-slate-50/90 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
               <CardTitle className="text-slate-800">Active Claims</CardTitle>
             </CardHeader>
@@ -1149,7 +1151,7 @@ export function CallInterface({
 
           {/* User Addresses */}
           {userDetailsResponse?.data?.addresses && userDetailsResponse.data.addresses.length > 0 && (
-            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <Card className="border-0 shadow-xl bg-slate-50/90 backdrop-blur-sm">
               <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
                 <CardTitle className="flex items-center gap-2 text-slate-800">
                   <MapPin className="w-5 h-5 text-emerald-600" />
@@ -1192,7 +1194,7 @@ export function CallInterface({
           )}
 
           {/* Call History */}
-          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <Card className="border-0 shadow-xl bg-slate-50/90 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
               <CardTitle className="flex items-center justify-between text-slate-800">
                 <div className="flex items-center gap-2">
@@ -1229,7 +1231,7 @@ export function CallInterface({
           </Card>
 
           {/* SMS Conversations - OPTIMIZED LAZY LOADING */}
-          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <Card className="border-0 shadow-xl bg-slate-50/90 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
               <CardTitle className="flex items-center justify-between text-slate-800">
                 <div className="flex items-center gap-2">
@@ -1311,7 +1313,7 @@ export function CallInterface({
         {/* Right Sidebar - Call Controls and Actions */}
         <div className="space-y-6">
           {/* Call Status */}
-          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <Card className="border-0 shadow-xl bg-slate-50/90 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
               <CardTitle className="flex items-center gap-2 text-slate-800">
                 <Phone className="w-5 h-5 text-blue-600" />
@@ -1358,7 +1360,7 @@ export function CallInterface({
                     disabled={!isReady || isInitiatingCall || callStatus?.state === 'connecting'}
                     size="xl"
                     responsive="nowrap"
-                    className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+                    className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-900 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
                   >
                     {isInitiatingCall ? (
                       <>
@@ -1382,7 +1384,7 @@ export function CallInterface({
                     onClick={handleCallEnd}
                     size="xl"
                     responsive="nowrap"
-                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-slate-900 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
                   >
                     <PhoneOff className="w-6 h-6 mr-2 flex-shrink-0" />
                     End Call & Add Notes
@@ -1397,7 +1399,7 @@ export function CallInterface({
                   disabled={sendMagicLinkMutation.isPending || !userContext.phoneNumber}
                   size="lg"
                   responsive="nowrap"
-                  className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+                  className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-slate-900 shadow-lg hover:shadow-xl transition-all duration-200"
                 >
                   <Send className="w-5 h-5 mr-2 flex-shrink-0" />
                   {sendMagicLinkMutation.isPending ? 'Sending...' : 'Send Portal Link'}
@@ -1446,7 +1448,7 @@ export function CallInterface({
 
           {/* Call Context & Reason */}
           {queueType?.data?.queueType && (
-            <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm border-l-4 border-l-blue-500">
+            <Card className="border-0 shadow-xl bg-slate-50/90 backdrop-blur-sm border-l-4 border-l-blue-500">
               <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg">
                 <CardTitle className="flex items-center gap-2 text-blue-700">
                   <AlertCircle className="w-5 h-5" />
@@ -1471,7 +1473,7 @@ export function CallInterface({
           )}
 
           {/* Quick Actions */}
-          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <Card className="border-0 shadow-xl bg-slate-50/90 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
               <CardTitle className="flex items-center gap-2 text-slate-800">
                 <Send className="w-5 h-5 text-blue-600" />
@@ -1508,7 +1510,7 @@ export function CallInterface({
           </Card>
 
           {/* Magic Link History - OPTIMIZED LAZY LOADING */}
-          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <Card className="border-0 shadow-xl bg-slate-50/90 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-t-lg">
               <CardTitle className="flex items-center justify-between text-slate-800">
                 <div className="flex items-center gap-2">
@@ -1582,7 +1584,7 @@ export function CallInterface({
       {/* Incoming Call Notification Modal */}
       {isIncomingCall && incomingCallInfo && (
         <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <Card className="w-full max-w-md bg-white shadow-2xl border-0 animate-pulse">
+          <Card className="w-full max-w-md bg-slate-50 shadow-2xl border-0 animate-pulse">
             <CardHeader className="text-center pb-4">
               <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                 <Phone className="w-8 h-8 text-green-600 animate-bounce" />
@@ -1613,7 +1615,7 @@ export function CallInterface({
                 <Button
                   onClick={handleAcceptIncomingCall}
                   size="lg"
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-lg"
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-slate-900 shadow-lg"
                 >
                   <Phone className="w-5 h-5 mr-2" />
                   Accept

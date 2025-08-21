@@ -37,8 +37,8 @@ export function CallbackConfirmationDialog({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-50">
-      <Card className="w-[500px] max-w-[90vw] bg-white shadow-2xl border-0">
-        <CardHeader className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
+      <Card className="w-[500px] max-w-[90vw] bg-slate-50 shadow-2xl border-0">
+        <CardHeader className="bg-gradient-to-r from-orange-500 to-red-500 text-slate-900">
           <CardTitle className="flex items-center gap-3">
             <PhoneOff className="w-6 h-6" />
             Customer Hung Up

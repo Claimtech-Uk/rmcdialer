@@ -187,7 +187,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
   return (
     <div className={`autodialler-dashboard min-h-screen ${teamConfig.color.background}`}>
       {/* Header */}
-      <div className="bg-white border-b shadow-sm">
+      <div className="bg-slate-50 border-b shadow-sm">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -295,7 +295,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
         {/* State-based Content */}
         {!isActive && (
           <div className="max-w-md mx-auto">
-            <Card className="border-2 border-slate-300 shadow-2xl bg-white backdrop-blur-sm">
+            <Card className="border-2 border-slate-300 shadow-2xl bg-slate-50/90 backdrop-blur-sm">
               <CardHeader className="bg-gradient-to-r from-slate-100 via-blue-50 to-slate-100 border-b-2 border-slate-300">
                 <CardTitle className="text-center text-2xl font-bold text-slate-900">Auto-Dialler Ready</CardTitle>
               </CardHeader>
@@ -306,7 +306,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                 <Button 
                   onClick={startSession} 
                   disabled={isLoading}
-                  className={`w-full bg-gradient-to-r ${teamConfig.color.gradient} text-white font-bold text-lg py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 border-2 border-slate-400`}
+                  className={`w-full bg-gradient-to-r ${teamConfig.color.gradient} text-slate-900 font-bold text-lg py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 border-2 border-slate-400`}
                 >
                   {isLoading ? 'Starting...' : 'Start Auto-Dialler Session'}
                 </Button>
@@ -317,7 +317,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
 
         {isActive && state === 'loading' && (
           <div className="max-w-md mx-auto">
-            <Card className="border-2 border-slate-300 shadow-2xl bg-white backdrop-blur-sm">
+            <Card className="border-2 border-slate-300 shadow-2xl bg-slate-50/90 backdrop-blur-sm">
               <CardContent className="pt-8 pb-8">
                 <div className="text-center space-y-6">
                   <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -346,11 +346,11 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
           <div className="max-w-5xl mx-auto space-y-6">
             {/* 🚨 MISSED CALL PRIORITY ALERT - UNIFIED COLOR THEME */}
             {(currentUser as any)?.isMissedCallCallback && (
-              <div className="bg-gradient-to-r from-amber-500 to-red-500 text-white p-4 rounded-xl shadow-xl border-2 border-amber-300">
+              <div className="bg-gradient-to-r from-amber-500 to-red-500 text-red-900 p-4 rounded-xl shadow-xl border-2 border-amber-300">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="bg-amber-100/30 p-2 rounded-full">
-                      <RefreshCw className="w-6 h-6 text-white animate-spin-slow" />
+                      <RefreshCw className="w-6 h-6 text-red-800 animate-spin-slow" />
                     </div>
                     <div>
                       <div className="text-xl font-bold uppercase tracking-wide">
@@ -381,7 +381,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                 const isUrgent = callbackInfo.urgency === 'urgent';
                 
                 return (
-                  <div className={`text-white p-4 rounded-xl shadow-xl border-2 ${
+                  <div className={`text-blue-900 p-4 rounded-xl shadow-xl border-2 ${
                     isOverdue 
                       ? 'bg-gradient-to-r from-red-600 to-red-700 border-red-400' 
                       : isUrgent 
@@ -397,7 +397,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                               ? 'bg-blue-100/30'
                               : 'bg-green-100/30'
                         }`}>
-                          <Clock className="w-6 h-6 text-white" />
+                          <Clock className="w-6 h-6 text-blue-800" />
                         </div>
                         <div>
                           <div className="text-xl font-bold uppercase tracking-wide">
@@ -434,11 +434,11 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
             )}
 
             {/* User Header Card */}
-            <Card className="border-2 border-slate-200 shadow-2xl bg-white backdrop-blur-sm">
+            <Card className="border-2 border-slate-200 shadow-2xl bg-slate-100/95 backdrop-blur-sm">
               <CardHeader
                 className={`bg-gradient-to-r ${
                   (currentUser as any)?.isMissedCallCallback ? 'from-red-700 to-red-800' : teamConfig.color.gradient
-                } text-white py-10 border-b-2 border-white/20 relative overflow-hidden`}
+                } text-slate-900 py-10 border-b-2 border-white/20 relative overflow-hidden`}
               >
                 {/* Enhanced background overlay for better contrast */}
                 <div className={`absolute inset-0 ${
@@ -447,27 +447,37 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                 <div className="relative z-10 flex items-center justify-between">
                   <div className="flex items-center space-x-6">
                       <div className={`w-20 h-20 ${
-                        (currentUser as any)?.isMissedCallCallback ? 'bg-amber-100 border-amber-300' : 'bg-white/40'
+                        (currentUser as any)?.isMissedCallCallback ? 'bg-amber-100 border-amber-300' : 'bg-slate-200/80'
                       } rounded-2xl flex items-center justify-center shadow-2xl backdrop-blur-sm border-3 border-white/50`}>
                         <Phone className={`w-10 h-10 ${
-                          (currentUser as any)?.isMissedCallCallback ? 'text-red-600' : 'text-white'
+                          (currentUser as any)?.isMissedCallCallback ? 'text-red-600' : 'text-slate-900'
                         } drop-shadow-lg`} />
                     </div>
                     <div>
-                      <CardTitle className="text-3xl font-black mb-2 text-white drop-shadow-xl tracking-wide">
+                      <CardTitle className={`text-3xl font-black mb-2 drop-shadow-xl tracking-wide ${
+                        (currentUser as any)?.isMissedCallCallback ? 'text-red-900' : 
+                        (currentUser as any)?.isCallbackCall ? 'text-blue-900' : 'text-slate-900'
+                      }`}>
                         {currentUser.firstName} {currentUser.lastName}
                       </CardTitle>
                       <p className={`text-xl font-bold mb-1 drop-shadow-lg tracking-wide ${
-                        (currentUser as any)?.isMissedCallCallback ? 'text-white' : 'text-white'
+                        (currentUser as any)?.isMissedCallCallback ? 'text-red-900' : 
+                        (currentUser as any)?.isCallbackCall ? 'text-blue-900' : 'text-slate-900'
                       }`}>
                         {currentUser.phoneNumber}
                       </p>
                       <div className="flex items-center gap-3">
                         {currentUser.email && (
-                          <p className="text-white font-semibold text-base drop-shadow-lg">{currentUser.email}</p>
+                          <p className={`font-semibold text-base drop-shadow-lg ${
+                            (currentUser as any)?.isMissedCallCallback ? 'text-red-900' : 
+                            (currentUser as any)?.isCallbackCall ? 'text-blue-900' : 'text-slate-900'
+                          }`}>{currentUser.email}</p>
                         )}
-                        <div className="bg-white/30 px-4 py-2 rounded-xl border-2 border-white/40 shadow-lg backdrop-blur-sm">
-                          <span className="text-white font-bold text-sm uppercase tracking-wider drop-shadow-md">ID: {currentUser.userId}</span>
+                        <div className="bg-slate-200/60 px-4 py-2 rounded-xl border-2 border-slate-300/60 shadow-lg backdrop-blur-sm">
+                          <span className={`font-bold text-sm uppercase tracking-wider drop-shadow-md ${
+                            (currentUser as any)?.isMissedCallCallback ? 'text-red-900' : 
+                            (currentUser as any)?.isCallbackCall ? 'text-blue-900' : 'text-slate-900'
+                          }`}>ID: {currentUser.userId}</span>
                         </div>
                       </div>
                     </div>
@@ -475,10 +485,19 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                   
                   {/* Quick Stats - No overlap now that missed call banner is separate */}
                   <div className="text-right">
-                    <div className="bg-white/40 rounded-2xl p-6 backdrop-blur-sm shadow-2xl border-3 border-white/50">
-                      <div className="text-sm text-white font-black mb-2 uppercase tracking-wider drop-shadow-lg">Active Claims</div>
-                      <div className="text-4xl font-black text-white drop-shadow-xl">{currentUser.claims.length}</div>
-                      <div className="text-white text-sm font-bold mt-1 drop-shadow-lg">pending review</div>
+                    <div className="bg-slate-200/70 rounded-2xl p-6 backdrop-blur-sm shadow-2xl border-3 border-slate-300/60">
+                      <div className={`text-sm font-black mb-2 uppercase tracking-wider drop-shadow-lg ${
+                        (currentUser as any)?.isMissedCallCallback ? 'text-red-900' : 
+                        (currentUser as any)?.isCallbackCall ? 'text-blue-900' : 'text-slate-900'
+                      }`}>Active Claims</div>
+                      <div className={`text-4xl font-black drop-shadow-xl ${
+                        (currentUser as any)?.isMissedCallCallback ? 'text-red-900' : 
+                        (currentUser as any)?.isCallbackCall ? 'text-blue-900' : 'text-slate-900'
+                      }`}>{currentUser.claims.length}</div>
+                      <div className={`text-sm font-bold mt-1 drop-shadow-lg ${
+                        (currentUser as any)?.isMissedCallCallback ? 'text-red-900' : 
+                        (currentUser as any)?.isCallbackCall ? 'text-blue-900' : 'text-slate-900'
+                      }`}>pending review</div>
                     </div>
                   </div>
                 </div>
@@ -489,7 +508,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
               {/* Contact Information */}
-              <Card className="border-2 border-slate-300 shadow-2xl bg-white backdrop-blur-sm hover:shadow-3xl transition-all duration-300">
+              <Card className="border-2 border-slate-300 shadow-2xl bg-blue-50/90 backdrop-blur-sm hover:shadow-3xl transition-all duration-300">
                 <CardHeader className="bg-gradient-to-r from-blue-100 via-slate-100 to-blue-100 border-b-2 border-slate-300 pb-3">
                   <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-3">
                     <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg">
@@ -554,7 +573,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
               </Card>
 
               {/* Claims Summary */}
-              <Card className="border-2 border-slate-300 shadow-2xl bg-white backdrop-blur-sm hover:shadow-3xl transition-all duration-300 lg:col-span-2">
+              <Card className="border-2 border-slate-300 shadow-2xl bg-orange-50/90 backdrop-blur-sm hover:shadow-3xl transition-all duration-300 lg:col-span-2">
                 <CardHeader className="bg-gradient-to-r from-orange-100 via-slate-100 to-orange-100 border-b-2 border-slate-300 pb-3">
                   <CardTitle className="text-lg font-bold text-slate-900 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -572,9 +591,9 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                   {currentUser.claims.length > 0 ? (
                     <div className="space-y-6">
                       {currentUser.claims.slice(0, 3).map((claim, index) => (
-                        <div key={index} className="border-2 border-slate-300 rounded-xl p-6 bg-gradient-to-r from-white to-slate-50 hover:border-slate-400 transition-all duration-300 shadow-lg hover:shadow-xl">
+                        <div key={index} className="border-2 border-slate-300 rounded-xl p-6 bg-gradient-to-r from-slate-50 to-slate-100 hover:border-slate-400 transition-all duration-300 shadow-lg hover:shadow-xl">
                           <div className="flex items-center gap-4 mb-4">
-                            <div className="w-8 h-8 bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl flex items-center justify-center shadow-lg text-white font-bold text-sm">
+                            <div className="w-8 h-8 bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl flex items-center justify-center shadow-lg text-slate-100 font-bold text-sm">
                               {index + 1}
                             </div>
                             <span className={`inline-flex px-3 py-1 rounded-xl text-xs font-bold border-2 ${
@@ -586,15 +605,15 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                             </span>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="p-3 rounded-xl bg-white border-2 border-slate-300 shadow-sm">
+                            <div className="p-3 rounded-xl bg-slate-50 border-2 border-slate-300 shadow-sm">
                               <div className="text-xs text-slate-700 font-bold uppercase tracking-wider mb-1">Lender</div>
                               <div className="font-bold text-sm text-slate-900">{claim.lender}</div>
                             </div>
-                            <div className="p-3 rounded-xl bg-white border-2 border-slate-300 shadow-sm">
+                            <div className="p-3 rounded-xl bg-slate-50 border-2 border-slate-300 shadow-sm">
                               <div className="text-xs text-slate-700 font-bold uppercase tracking-wider mb-1">Status</div>
                               <div className="font-bold text-sm text-slate-900 capitalize">{claim.status}</div>
                             </div>
-                            <div className="p-3 rounded-xl bg-white border-2 border-slate-300 shadow-sm">
+                            <div className="p-3 rounded-xl bg-slate-50 border-2 border-slate-300 shadow-sm">
                               <div className="text-xs text-slate-700 font-bold uppercase tracking-wider mb-1">Requirements</div>
                               <div className="font-bold text-sm text-slate-900">
                                 {claim.requirements ? claim.requirements.length : 0} pending
@@ -629,7 +648,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
             </div>
 
             {/* Action Buttons - Prominent and Accessible */}
-            <Card className="border-2 border-slate-300 shadow-2xl bg-white backdrop-blur-sm hover:shadow-3xl transition-all duration-300">
+            <Card className="border-2 border-slate-300 shadow-2xl bg-slate-50/90 backdrop-blur-sm hover:shadow-3xl transition-all duration-300">
               <CardContent className="py-10 px-8">
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
                   <Button
@@ -654,7 +673,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                       }
                     }}
                     disabled={isActivatingInterface}
-                    className={`px-12 py-6 text-lg font-bold bg-gradient-to-r ${teamConfig.color.gradient} text-white hover:shadow-2xl transform hover:scale-105 transition-all duration-300 border-0 rounded-2xl shadow-lg`}
+                    className={`px-12 py-6 text-lg font-bold bg-gradient-to-r ${teamConfig.color.gradient} text-slate-900 hover:shadow-2xl transform hover:scale-105 transition-all duration-300 border-0 rounded-2xl shadow-lg`}
                     size="lg"
                   >
                     {isActivatingInterface ? (
@@ -674,7 +693,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                     onClick={skipUser}
                     variant="outline"
                     size="lg"
-                    className="px-12 py-6 text-lg font-bold border-3 border-slate-600 bg-slate-700 text-white hover:bg-slate-800 hover:border-slate-700 hover:shadow-2xl transform hover:scale-105 transition-all duration-300 rounded-2xl shadow-lg"
+                    className="px-12 py-6 text-lg font-bold border-3 border-slate-600 bg-slate-700 text-slate-100 hover:bg-slate-800 hover:border-slate-700 hover:shadow-2xl transform hover:scale-105 transition-all duration-300 rounded-2xl shadow-lg"
                   >
                     <SkipForward className="w-6 h-6 mr-3" />
                     Skip User
@@ -691,7 +710,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                     }}
                     variant="outline"
                     size="default"
-                    className="px-4 py-3 text-blue-700 bg-blue-50 hover:text-white hover:bg-blue-600 rounded-xl font-bold transition-all duration-200 border-2 border-blue-200 hover:border-blue-600 shadow-lg hover:shadow-xl"
+                    className="px-4 py-3 text-blue-700 bg-blue-50 hover:text-slate-900 hover:bg-blue-200 rounded-xl font-bold transition-all duration-200 border-2 border-blue-200 hover:border-blue-600 shadow-lg hover:shadow-xl"
                   >
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Refresh Data
@@ -700,7 +719,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                     onClick={loadNextUser}
                     variant="outline"
                     size="default"
-                    className="px-4 py-3 text-slate-800 bg-white hover:text-white hover:bg-slate-700 rounded-xl font-bold transition-all duration-200 border-2 border-slate-600 hover:border-slate-700 shadow-lg hover:shadow-xl"
+                    className="px-4 py-3 text-slate-800 bg-slate-50 hover:text-slate-900 hover:bg-slate-200 rounded-xl font-bold transition-all duration-200 border-2 border-slate-600 hover:border-slate-700 shadow-lg hover:shadow-xl"
                   >
                     <SkipForward className="w-4 h-4 mr-2" />
                     Load Next User
@@ -709,7 +728,7 @@ export function AutoDiallerDashboard({ teamType }: AutoDiallerDashboardProps) {
                     onClick={pauseSession}
                     variant="outline"
                     size="default"
-                    className="px-4 py-3 text-slate-800 bg-white hover:text-white hover:bg-slate-700 rounded-xl font-bold transition-all duration-200 border-2 border-slate-600 hover:border-slate-700 shadow-lg hover:shadow-xl"
+                    className="px-4 py-3 text-slate-800 bg-slate-50 hover:text-slate-900 hover:bg-slate-200 rounded-xl font-bold transition-all duration-200 border-2 border-slate-600 hover:border-slate-700 shadow-lg hover:shadow-xl"
                   >
                     <Pause className="w-4 h-4 mr-2" />
                     Pause Session
