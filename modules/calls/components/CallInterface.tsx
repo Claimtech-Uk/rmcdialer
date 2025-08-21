@@ -213,6 +213,9 @@ export function CallInterface({
   
   const { toast } = useToast();
 
+  // Get most recent call for top display (minimal addition)
+  const mostRecentCall = callHistoryResponse?.calls?.[0];
+
   // Get authenticated agent context from tRPC - with optimized settings
   const { data: agentContext, isLoading: agentLoading, error: agentError } = api.auth.me.useQuery(
     undefined,
@@ -945,13 +948,36 @@ export function CallInterface({
             </div>
           </div>
         </div>
-      )}
+              )}
 
-      <div 
-        className="grid grid-cols-1 lg:grid-cols-3 gap-6 call-interface"
-        data-in-call={isInCall ? 'true' : 'false'}
-        data-call-active={isInCall ? 'true' : 'false'}
-      >
+        {/* 💡 SOFT ADDITION: Recent Call Summary - Simple Banner */}
+        {mostRecentCall && !callHistoryLoading && callHistoryResponse?.calls?.length && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-4">
+                <span className="text-blue-600 font-medium">Last Call:</span>
+                <Badge className="bg-blue-100 text-blue-800">
+                  {mostRecentCall.outcome}
+                </Badge>
+                <span className="text-slate-600">
+                  {new Date(mostRecentCall.startedAt).toLocaleDateString()} at {new Date(mostRecentCall.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className="text-slate-600">by {mostRecentCall.agentName}</span>
+              </div>
+              {mostRecentCall.outcomeNotes && (
+                <div className="text-slate-700 italic max-w-xs truncate">
+                  "{mostRecentCall.outcomeNotes}"
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div 
+          className="grid grid-cols-1 lg:grid-cols-3 gap-6 call-interface"
+          data-in-call={isInCall ? 'true' : 'false'}
+          data-call-active={isInCall ? 'true' : 'false'}
+        >
         {/* Main Content Panel */}
         <div className="lg:col-span-2 space-y-6">
           {/* Customer Information */}
