@@ -1,0 +1,37 @@
+version: 1
+backend:
+  phases:
+    build:
+      commands:
+        - npm ci
+        - npm run db:generate:all
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+        - echo "🔧 Generating Prisma clients for AWS Amplify..."
+        - npm run db:generate:all:skip-if-exists
+    build:
+      commands:
+        - echo "🚀 Building RMC Dialler for AWS Amplify..."
+        - npm run build
+        - echo "✅ Build completed successfully!"
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*
+      - .next/standalone/**/*
+customHeaders:
+  - pattern: '/api/**'
+    headers:
+      - key: 'Access-Control-Allow-Origin'
+        value: '*'
+      - key: 'Access-Control-Allow-Methods'
+        value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT'
+      - key: 'Access-Control-Allow-Headers'
+        value: 'Content-Type, Authorization'
