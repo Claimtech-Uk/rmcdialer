@@ -8,7 +8,14 @@ const globalForReplicaDb = globalThis as unknown as {
 
 // Build replica database URL with optimized connection pool parameters
 function buildReplicaDatabaseUrl(): string {
-  const baseUrl = process.env.REPLICA_DATABASE_URL || ''
+  const baseUrl = process.env.REPLICA_DATABASE_URL
+  
+  // 🛡️ Runtime safety: Handle missing REPLICA_DATABASE_URL
+  if (!baseUrl) {
+    console.warn('⚠️ REPLICA_DATABASE_URL not found - using placeholder for build/startup')
+    return 'mysql://placeholder:placeholder@localhost:3306/placeholder'
+  }
+  
   const url = new URL(baseUrl)
   
   // Add MySQL-specific connection pool parameters - optimized for high concurrency

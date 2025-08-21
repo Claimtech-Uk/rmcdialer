@@ -6,7 +6,14 @@ const globalForPrisma = globalThis as unknown as {
 
 // Build database URL with optimized connection pool parameters
 function buildDatabaseUrl(): string {
-  const baseUrl = process.env.DATABASE_URL || ''
+  const baseUrl = process.env.DATABASE_URL
+  
+  // 🛡️ Build-time safety: Skip URL construction during build
+  if (!baseUrl) {
+    console.warn('⚠️ DATABASE_URL not found - using default for build phase')
+    return 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
+  }
+  
   const url = new URL(baseUrl)
   
   // Add connection pool parameters for better performance
