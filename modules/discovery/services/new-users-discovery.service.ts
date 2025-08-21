@@ -6,6 +6,7 @@
 import { replicaDb } from '@/lib/mysql'
 import { prisma } from '@/lib/db'
 import { logger } from '@/modules/core'
+import { ReviewRequestScheduler } from '@/modules/sms-followups'
 import type { 
   NewUsersDiscoveryResult, 
   NewUserData, 
@@ -214,6 +215,19 @@ export class NewUsersDiscoveryService {
         result.newUsersCreated += usersToCreate.length
         logger.info(`✅ [BATCH ${Math.floor(i / this.BATCH_SIZE) + 1}] Created ${usersToCreate.length} user_call_scores entries`)
         logger.info(`   📈 Progress: ${result.newUsersCreated}/${newUsers.length} total users added to system`)
+
+        // Schedule review requests for new users who already have signatures
+        const reviewScheduler = new ReviewRequestScheduler();
+        for (const user of usersToCreate) {
+          if (user.hasSignature) {
+            try {
+              await reviewScheduler.scheduleReviewRequest(user.id, 'new_user_signed');
+            } catch (reviewError) {
+              logger.error(`❌ Failed to schedule review SMS for new signed user ${user.id}:`, reviewError);
+              // Don't throw - user creation was successful, SMS scheduling is secondary
+            }
+          }
+        }
       }
 
       // Update counters

@@ -5,7 +5,7 @@ import { SMSService } from '@/modules/communications/services/sms.service'
 import { MagicLinkService } from '@/modules/communications/services/magic-link.service'
 import { generateAIMagicLink, formatMagicLinkForSMS } from '../core/ai-magic-link-generator'
 import { logger } from '@/modules/core'
-import { recordAILinkAction } from '../core/intelligent-personalization'
+// REMOVED: recordAILinkAction import - intelligent-personalization deleted
 
 export type PortalLinkActionResult = {
   success: boolean
@@ -217,13 +217,7 @@ export class PortalLinkAction {
    */
   private async recordAIAction(params: PortalLinkActionParams, linkUrl: string, messageId: string): Promise<void> {
     try {
-      // Use existing AI action recording
-      await recordAILinkAction(
-        params.phoneNumber,
-        `Portal link sent to ${params.userName || 'user'} - ${params.reasoning || 'AI decision'}`
-      )
-
-      // Additional logging for AI learning
+      // Simple logging for AI learning (recordAILinkAction removed with intelligent-personalization)
       logger.info('AI action recorded for learning', {
         action: 'send_portal_link',
         userId: params.userId,

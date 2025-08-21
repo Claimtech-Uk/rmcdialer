@@ -64,9 +64,13 @@ Agent opens their queue and sees:
 - **"Wrong number"** → Score +50 points (big problem)
 - **"Not interested"** → Score +100 points (very low priority)
 
-### **Daily Aging**
-- **Monday through Saturday** → +5 points per day
-- **Sunday** → No change (we don't age leads on Sundays)
+### **Weekly Aging (Day-of-Week System)**
+- **Every day at 12:01 AM** → Age users created on same day of week
+- **Monday**: Ages all Monday-born users (+5 points)
+- **Tuesday**: Ages all Tuesday-born users (+5 points)
+- **etc.** → Each user gets aged once per week on their "birthday"
+- **Minimum age**: Users must be 7+ days old before first aging
+- **Result**: Natural aging progression with no tracking complexity
 
 ---
 

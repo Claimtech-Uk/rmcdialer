@@ -103,12 +103,19 @@ export class LeadScoringService {
   }
 
   /**
-   * Daily aging - simplified version
+   * Daily aging - DEPRECATED
+   * 
+   * ✅ REPLACED BY: Day-of-week weekly aging cron job
+   * - Runs at 12:01 AM each day
+   * - Ages users created on same day of week (7+ days ago)
+   * - +5 points per week vs old +1 per day
+   * - Batched processing for scalability
+   * - No tracking fields needed
    */
   private async performDailyAging(): Promise<void> {
-    // DISABLED: Conflicts with new weekly aging system (+5 per week)
-    // The new weekly aging system provides better control and prevents over-aging
-    logger.info('📅 Daily aging disabled - using weekly aging system (+5 per week)');
+    // DISABLED: Replaced by elegant day-of-week weekly aging system
+    // See: app/api/cron/weekly-score-aging/route.ts
+    logger.info('📅 Daily aging disabled - using day-of-week weekly aging system');
     return;
   }
 

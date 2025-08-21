@@ -1,6 +1,5 @@
 import { SMSService, MagicLinkService } from '@/modules/communications'
 import { AgentRuntimeService, type AgentTurnInput, type AgentTurnOutput } from '../../core/agent-runtime.service'
-import { SmsAgentRouter } from './router/sms-agent-router'
 // REMOVED: import { popDueFollowups } from '../../core/followup.store' - legacy follow-up service
 import { containsAbuseIntent, containsComplaintIntent } from '../../core/guardrails'
 import { isAutomationHalted, setAutomationHalt, isIdempotencyKeyUsed, markIdempotencyKeyUsed, getLastReviewAskAt, setLastReviewAskAt, recordLinkSent } from '../../core/memory.store'
@@ -10,8 +9,7 @@ export class SmsAgentService {
   constructor(
     private readonly smsService: SMSService,
     private readonly magicLinkService: MagicLinkService,
-    private readonly runtime = new AgentRuntimeService(),
-    private readonly router = new SmsAgentRouter()
+    private readonly runtime = new AgentRuntimeService()
   ) {}
 
 
@@ -264,9 +262,8 @@ export class SmsAgentService {
             // Note: SMS service automatically uses test number for auto_response messages
           })
 
-          // End review session immediately
-          const signalsAfter = await this.runtime.getUserSignalsForRouting(input.fromPhone)
-          await this.router.endIfGoalAchieved(input.fromPhone, 'review_collection' as any, signalsAfter)
+          // Simplified - no session management needed
+          console.log('AI SMS | ⭐ Review link sent (simplified mode)')
         })
       }
     }

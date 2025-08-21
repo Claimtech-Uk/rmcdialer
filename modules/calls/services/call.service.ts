@@ -25,6 +25,7 @@ import { CallOutcomeManager } from '@/modules/call-outcomes/services/call-outcom
 import type { CallOutcomeContext } from '@/modules/call-outcomes/types/call-outcome.types'
 import { createMissedCallService } from '@/modules/missed-calls/services/missed-call.service';
 import { universalQueueTransitionService } from '@/modules/queue/services/universal-queue-transition.service';
+import { OutcomeFollowupScheduler } from '@/modules/sms-followups';
 
 // Dependencies that will be injected
 interface CallServiceDependencies {
@@ -391,9 +392,24 @@ export class CallService {
     try {
       console.log(`📋 Recording call outcome for session ${sessionId}:`, outcome);
 
+      // Get user context before transaction for SMS scheduling
+      const callSession = await this.deps.prisma.callSession.findUnique({
+        where: { id: sessionId },
+        select: { userId: true }
+      });
+      
+      if (!callSession) {
+        throw new Error(`Call session ${sessionId} not found`);
+      }
+      
+      const userContext = await this.userService.getUserCallContext(Number(callSession.userId));
+      if (!userContext) {
+        throw new Error(`User context not found for user ${callSession.userId}`);
+      }
+
       await this.deps.prisma.$transaction(async (tx) => {
         // Get the call session details for conversion tracking
-        const callSession = await tx.callSession.findUnique({
+        const callSessionWithDetails = await tx.callSession.findUnique({
           where: { id: sessionId },
           include: {
             callQueue: {
@@ -404,18 +420,18 @@ export class CallService {
           }
         });
 
-        if (!callSession) {
+        if (!callSessionWithDetails) {
           throw new Error(`Call session ${sessionId} not found`);
         }
 
         // Process outcome using CallOutcomeManager
                  const outcomeContext: CallOutcomeContext = {
            sessionId,
-           userId: Number(callSession.userId),
+           userId: Number(callSessionWithDetails.userId),
            agentId,
-           callDurationSeconds: callSession.durationSeconds || 0,
-           callStartedAt: callSession.startedAt,
-           queueType: callSession.sourceQueueType || undefined
+           callDurationSeconds: callSessionWithDetails.durationSeconds || 0,
+           callStartedAt: callSessionWithDetails.startedAt,
+           queueType: callSessionWithDetails.sourceQueueType || undefined
          };
 
         const outcomeResult = await this.callOutcomeManager.processOutcome(
@@ -461,7 +477,7 @@ export class CallService {
         if (outcome.callbackDateTime || outcomeResult.callbackDateTime) {
           // Determine queue type based on user's current queue type
           const userScore = await tx.userCallScore.findUnique({
-            where: { userId: callSession.userId },
+            where: { userId: callSessionWithDetails.userId },
             select: { currentQueueType: true }
           });
           
@@ -469,7 +485,7 @@ export class CallService {
           
           await tx.callback.create({
             data: {
-              userId: callSession.userId,
+              userId: callSessionWithDetails.userId,
               scheduledFor: outcomeResult.callbackDateTime || outcome.callbackDateTime!,
               callbackReason: outcomeResult.callbackReason || outcome.callbackReason || `Callback for ${outcome.outcomeType} outcome`,
               preferredAgentId: agentId, // Assign to current agent who processed the outcome
@@ -505,7 +521,7 @@ export class CallService {
         // 5. Update user score using outcome result score adjustment
         await this.updateUserScoreAfterCall(
           tx,
-          Number(callSession.userId),
+          Number(callSessionWithDetails.userId),
           outcome.outcomeType,
           outcomeResult.scoreAdjustment,
           outcomeResult.nextCallDelayHours, // CRITICAL FIX: Pass delay hours
@@ -514,7 +530,26 @@ export class CallService {
         );
 
         // 6. Check for pending callbacks for this user and mark them as completed
-        await this.completeCallbacksForUser(tx, Number(callSession.userId), sessionId);
+        await this.completeCallbacksForUser(tx, Number(callSessionWithDetails.userId), sessionId);
+
+        // 7. Schedule SMS follow-ups based on outcome type
+        if (userContext.user.phoneNumber) {
+          const followupScheduler = new OutcomeFollowupScheduler();
+          const userScore = await tx.userCallScore.findUnique({
+            where: { userId: BigInt(callSessionWithDetails.userId) },
+            select: { totalAttempts: true }
+          });
+          
+          await followupScheduler.scheduleFollowUps({
+            userId: Number(callSessionWithDetails.userId),
+            phoneNumber: userContext.user.phoneNumber,
+            sessionId,
+            agentId,
+            outcomeType: outcome.outcomeType,
+            outcomeResult,
+            userScore: userScore ? { totalAttempts: userScore.totalAttempts } : undefined
+          });
+        }
 
         console.log(`✅ Call outcome recorded successfully for session ${sessionId}`);
       });
@@ -1566,4 +1601,6 @@ export class CallService {
       // Don't throw - we don't want to fail the call status update if cleanup fails
     }
   }
+
+
 } 

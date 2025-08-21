@@ -1,7 +1,8 @@
 import type { AgentTurnInput } from '../../../core/agent-runtime.service'
-import type { SmsAgentSession, SmsAgentType } from '../../../core/session.store'
-import { getActiveSession, startSession, completeSession } from '../../../core/session.store'
 import { getBehaviourOverride } from '../../../core/agent-behavior-override.store'
+
+// Simplified agent types without session dependencies
+export type SmsAgentType = 'customer_service' | 'unsigned_chase' | 'requirements' | 'review_collection'
 
 export type RouteDecision = {
   type: SmsAgentType
@@ -16,46 +17,27 @@ export type UserRoutingSignals = {
 }
 
 export class SmsAgentRouter {
-  // Default TTLs per agent type (seconds)
-  private ttl: Record<SmsAgentType, number> = {
-    customer_service: 0, // stateless default
-    unsigned_chase: 3 * 24 * 60 * 60,
-    requirements: 5 * 24 * 60 * 60,
-    review_collection: 7 * 24 * 60 * 60
-  }
-
   async route(phone: string, signals: UserRoutingSignals): Promise<RouteDecision> {
-    // 0) Behaviour override check
+    // Check behaviour override
     try {
       const override = await getBehaviourOverride(phone)
       if (override?.type) {
         console.log('AI SMS | 🧭 Router: behaviour override active', { phone, type: override.type })
-        // Start a sticky session for the override type with a short TTL window
-        const ttlSeconds = 60 * 60 // 1 hour session stickiness by default
-        await startSession(phone, { type: override.type, startedAt: Date.now(), lastAt: Date.now(), ttlSeconds })
-        return { type: override.type, reason: 'behaviour_override', sessionStarted: true }
+        return { type: override.type, reason: 'behaviour_override' }
       }
     } catch (err) {
       console.warn('AI SMS | ⚠️ Router: behaviour override check failed', { err })
     }
 
-    const existing = await getActiveSession(phone)
-    if (existing && existing.type !== 'customer_service') {
-      console.log('AI SMS | 🧭 Router: sticky', { phone, type: existing.type })
-      return { type: existing.type, reason: 'sticky_session' }
-    }
-
-    // Choose based on current status
+    // Simple routing based on signals (no session management)
     if (signals.found) {
       if (signals.hasSignature === false) {
-        await startSession(phone, { type: 'unsigned_chase', startedAt: Date.now(), lastAt: Date.now(), ttlSeconds: this.ttl.unsigned_chase })
-        console.log('AI SMS | 🧭 Router: start unsigned', { phone })
-        return { type: 'unsigned_chase', reason: 'unsigned', sessionStarted: true }
+        console.log('AI SMS | 🧭 Router: unsigned user', { phone })
+        return { type: 'unsigned_chase', reason: 'unsigned' }
       }
       if ((signals.pendingRequirements || 0) > 0) {
-        await startSession(phone, { type: 'requirements', startedAt: Date.now(), lastAt: Date.now(), ttlSeconds: this.ttl.requirements })
-        console.log('AI SMS | 🧭 Router: start requirements', { phone })
-        return { type: 'requirements', reason: 'pending_requirements', sessionStarted: true }
+        console.log('AI SMS | 🧭 Router: requirements needed', { phone })
+        return { type: 'requirements', reason: 'pending_requirements' }
       }
     }
 
@@ -64,22 +46,9 @@ export class SmsAgentRouter {
   }
 
   async endIfGoalAchieved(phone: string, type: SmsAgentType, signals: UserRoutingSignals): Promise<boolean> {
-    if (type === 'unsigned_chase' && signals.hasSignature === true) {
-      await completeSession(phone)
-      console.log('AI SMS | 🧭 Router: end unsigned (signed)', { phone })
-      return true
-    }
-    if (type === 'requirements' && (signals.pendingRequirements || 0) === 0) {
-      await completeSession(phone)
-      console.log('AI SMS | 🧭 Router: end requirements (cleared)', { phone })
-      return true
-    }
-    if (type === 'review_collection') {
-      await completeSession(phone)
-      console.log('AI SMS | 🧭 Router: end review (link sent)', { phone })
-      return true
-    }
-    return false
+    // Simplified - no session management needed
+    console.log('AI SMS | 🧭 Router: goal achievement check (simplified)', { phone, type })
+    return false // No session ending needed in simplified mode
   }
 }
 

@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/db'
 import { logger } from '@/modules/core'
+import { ReviewRequestScheduler } from '@/modules/sms-followups'
 
 export interface ConversionData {
   userId: bigint
@@ -73,6 +74,17 @@ export class ConversionLoggingService {
       });
 
       logger.info(`📝 [CONVERSION] Created ${conversionType} record for user ${userId} via ${source} (ID: ${conversion.id})`);
+
+      // Schedule review request SMS for signed users
+      if (conversionType === 'signature_obtained' || conversionType === 'requirements_completed') {
+        try {
+          const reviewScheduler = new ReviewRequestScheduler();
+          await reviewScheduler.scheduleReviewRequest(Number(userId), 'conversion');
+        } catch (reviewError) {
+          logger.error(`❌ Failed to schedule review SMS for user ${userId}:`, reviewError);
+          // Don't throw - conversion was successful, SMS scheduling is secondary
+        }
+      }
 
       // Inline Agent Attribution (most recent qualifying call in last 30 days)
       const LOOKBACK_DAYS = 30

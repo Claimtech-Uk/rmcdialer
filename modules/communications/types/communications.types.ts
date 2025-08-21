@@ -23,14 +23,16 @@ export interface SendSMSOptions {
   userId?: number;
   callSessionId?: string;
   /** 
-   * Message type determines sender number routing:
+   * Message type determines sender number routing and categorization:
    * - 'manual': Human agent actions → main production number
    * - 'auto_response': AI responses → test number  
    * - 'magic_link': AI-triggered links → test number
    * - 'callback_confirmation': Callback confirmations → main number
    * - 'review_request': Review requests → main number
+   * - 'no_answer_checkin': First call no answer follow-up → main number
+   * - 'completion_reminder': Form completion reminders → main number
    */
-  messageType?: 'manual' | 'auto_response' | 'magic_link' | 'callback_confirmation' | 'review_request';
+  messageType?: 'manual' | 'auto_response' | 'magic_link' | 'callback_confirmation' | 'review_request' | 'no_answer_checkin' | 'completion_reminder';
   templateId?: string;
   /** Optional: override the Twilio sender number for this send (E.164) */
   fromNumberOverride?: string;

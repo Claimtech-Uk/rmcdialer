@@ -481,3 +481,45 @@ model MissedCall {
   @@index([phoneNumber], map: "idx_missed_calls_phone_number")
   @@map("missed_calls")
 }
+
+// =============================================================================
+// SCHEDULED SMS (DB-first follow-ups pipeline)
+// =============================================================================
+
+model ScheduledSms {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           BigInt    @map("user_id")
+  phoneNumber      String    @map("phone_number")
+
+  // Classification
+  followUpType     String    @map("follow_up_type")
+  messageType      String    @map("message_type")
+  templateKey      String?   @map("template_key")
+  message          String?   @map("message")
+
+  // Scheduling & status
+  scheduledFor     DateTime  @map("scheduled_for")
+  status           String    @default("pending")
+  processingAt     DateTime? @map("processing_at")
+  sentAt           DateTime? @map("sent_at")
+  errorMessage     String?   @map("error_message")
+
+  // Cancellations
+  canceledAt       DateTime? @map("canceled_at")
+  canceledByEvent  String?   @map("canceled_by_event")
+  canceledReason   String?   @map("canceled_reason")
+
+  // Provenance & control
+  origin           String    @default("system") @map("origin") // 'ai' | 'agent' | 'system'
+  createdByAgentId Int?      @map("created_by_agent_id")
+  dedupKey         String?   @unique @map("dedup_key")
+  meta             Json?     @map("meta")
+
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, scheduledFor])
+  @@index([userId])
+  @@index([followUpType])
+  @@map("scheduled_sms")
+}

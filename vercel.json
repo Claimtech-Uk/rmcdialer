@@ -68,10 +68,7 @@
       "path": "/api/cron/daily-cleanup",
       "schedule": "0 2 * * *"
     },
-    {
-      "path": "/api/cron/queue-processor",
-      "schedule": "* * * * *"
-    },
+
     {
       "path": "/api/cron/session-cleanup",
       "schedule": "*/5 * * * *"
@@ -95,7 +92,7 @@
     },
     {
       "path": "/api/cron/weekly-score-aging",
-      "schedule": "0 0 * * *"
+      "schedule": "1 0 * * *"
     },
     {
       "path": "/api/cron/process-transcriptions",

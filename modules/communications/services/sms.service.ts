@@ -94,15 +94,15 @@ export class SMSService {
    * CRITICAL SEPARATION: Manual vs AI actions use different numbers
    */
   private getAiSmsFromNumber(messageType?: string, fromNumberOverride?: string): string {
-    // AI-ONLY actions: Use test number to prevent production spam from AI experiments
+    // AI-ONLY experimental actions: Use test number to prevent production spam
     if (messageType === 'auto_response' || messageType === 'magic_link') {
       const testNumber = process.env.AI_SMS_TEST_NUMBER || '+447723495560';
       console.log('AI SMS | 🧪 Using AI test number for message type:', messageType, 'Number:', testNumber);
       return testNumber;
     }
     
-    // MANUAL agent actions: Use main number (includes 'manual' messageType from dialler portal links)
-    // This ensures human-initiated actions use the production number
+    // ALL OTHER message types: Use main number (manual, follow-ups, confirmations, reviews)
+    // This includes: 'manual', 'no_answer_checkin', 'callback_confirmation', 'review_request', etc.
     console.log('AI SMS | 👥 Using main number for message type:', messageType || 'default', 'Number:', fromNumberOverride || this.fromNumber);
     return fromNumberOverride || this.fromNumber;
   }

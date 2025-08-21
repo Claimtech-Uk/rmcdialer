@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { chat } from '@/modules/ai-agents/core/llm.client'
+import { universalChat } from '@/modules/ai-agents/core/multi-provider-llm.client'
 // import { getSmsAgent } from '@/modules/ai-agents/channels/sms/sms-agent.service'
 
 export async function POST(request: NextRequest) {
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       try {
         const startTime = Date.now()
         
-        const result = await chat({
+        const result = await universalChat({
           system: "You are a helpful assistant. Respond with exactly: 'Model working: [MODEL_NAME]'",
           user: "Test message",
           model: model
@@ -54,9 +54,9 @@ export async function POST(request: NextRequest) {
 
         modelTest.responseTime = Date.now() - startTime
         modelTest.success = true
-        modelTest.response = result
+        modelTest.response = result.content || ''
         
-        console.log(`✅ ${model} - SUCCESS: ${result.substring(0, 50)}...`)
+        console.log(`✅ ${model} - SUCCESS: ${(result.content || '').substring(0, 50)}...`)
         
       } catch (error: any) {
         modelTest.error = {

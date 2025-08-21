@@ -1,74 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { smsQueueService } from '@/modules/ai-agents/core/sms-queue.service'
+import { databaseSmsHandler } from '@/modules/ai-agents/channels/sms/database-sms-handler'
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🧪 Testing SMS Queue Service (direct - no background processor)...')
+    console.log('🧪 Testing Database SMS Processing (replaces queue system)...')
     
     const results = {
-      queueServiceExists: !!smsQueueService,
+      processingSystemExists: !!databaseSmsHandler,
       tests: {},
       timing: {}
     }
     
     const startTime = Date.now()
     
-    // Test clear (to start clean)
+    // Test processing stats
     try {
-      await smsQueueService.clearAll()
-      results.tests.clearAll = 'success'
+      const stats = await databaseSmsHandler.getProcessingStats()
+      results.tests.processingStats = { success: true, stats }
     } catch (error) {
-      results.tests.clearAll = `failed: ${error.message}`
+      results.tests.processingStats = `failed: ${error.message}`
       return NextResponse.json({ success: false, results }, { status: 500 })
     }
     
-    // Test enqueue
+    // Test clean stuck processing
     try {
-      const id = await smsQueueService.enqueue({
-        phoneNumber: '447123456789',
-        message: 'Debug test message',
-        messageSid: 'DEBUG_SID_123',
-        receivedAt: new Date()
-      })
-      results.tests.enqueue = { success: true, id }
+      const cleaned = await databaseSmsHandler.cleanStuckProcessing(1) // Clean messages older than 1 minute
+      results.tests.cleanStuckProcessing = { success: true, cleaned }
     } catch (error) {
-      results.tests.enqueue = `failed: ${error.message}`
-      return NextResponse.json({ success: false, results }, { status: 500 })
-    }
-    
-    // Test stats after enqueue
-    try {
-      const stats = await smsQueueService.getStats()
-      results.tests.statsAfterEnqueue = { success: true, stats }
-    } catch (error) {
-      results.tests.statsAfterEnqueue = `failed: ${error.message}`
-    }
-    
-    // Test dequeue
-    try {
-      const message = await smsQueueService.dequeue()
-      results.tests.dequeue = { 
-        success: true, 
-        hasMessage: !!message,
-        messageId: message?.id,
-        phoneNumber: message?.phoneNumber
-      }
-      
-      // If we got a message, mark it completed
-      if (message) {
-        await smsQueueService.markCompleted(message.id)
-        results.tests.markCompleted = 'success'
-      }
-    } catch (error) {
-      results.tests.dequeue = `failed: ${error.message}`
-    }
-    
-    // Test stats after processing
-    try {
-      const finalStats = await smsQueueService.getStats()
-      results.tests.finalStats = { success: true, stats: finalStats }
-    } catch (error) {
-      results.tests.finalStats = `failed: ${error.message}`
+      results.tests.cleanStuckProcessing = `failed: ${error.message}`
     }
     
     const endTime = Date.now()
@@ -76,15 +35,16 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json({ 
       success: true,
-      message: 'Queue service test completed',
+      message: 'Database SMS processing test completed (queue system removed)',
+      note: 'This endpoint now tests the database-first SMS processing system',
       totalTimeMs: endTime - startTime,
       results 
     })
     
   } catch (error) {
-    console.error('Queue debug failed:', error)
+    console.error('SMS processing debug failed:', error)
     return NextResponse.json({ 
-      error: 'Queue debug failed', 
+      error: 'SMS processing debug failed', 
       details: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined
     }, { status: 500 })

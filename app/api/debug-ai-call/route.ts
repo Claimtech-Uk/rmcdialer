@@ -2,7 +2,7 @@
 // Bypasses all agent logic to test pure AI functionality
 
 import { NextRequest } from 'next/server';
-import { chat } from '@/modules/ai-agents/core/llm.client';
+import { universalChat } from '@/modules/ai-agents/core/multi-provider-llm.client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,32 +47,35 @@ Respond naturally and decide if they need a portal link to proceed.`;
     console.log('🔬 [AI DEBUG] Calling OpenAI with prompts...');
     
     const startTime = Date.now();
-    const aiResponse = await chat({
+    const aiResponse = await universalChat({
       system: systemPrompt,
       user: userPrompt,
       model: 'gpt-4o-mini',
       responseFormat: { type: 'json_object' }
     });
+    const responseContent = aiResponse.content || '';
     
     const duration = Date.now() - startTime;
     
-    console.log('🔬 [AI DEBUG] OpenAI responded successfully', {
+    console.log('🔬 [AI DEBUG] AI responded successfully', {
       duration: `${duration}ms`,
-      responseLength: aiResponse.length,
-      responsePreview: aiResponse.substring(0, 100) + '...'
+      responseLength: responseContent.length,
+      responsePreview: responseContent.substring(0, 100) + '...',
+      provider: aiResponse.provider,
+      modelUsed: aiResponse.modelUsed
     });
 
     // Try to parse the JSON
     let parsedResponse;
     try {
-      parsedResponse = JSON.parse(aiResponse);
+      parsedResponse = JSON.parse(responseContent);
       console.log('🔬 [AI DEBUG] JSON parsing successful');
     } catch (parseError) {
       console.log('🔬 [AI DEBUG] JSON parsing failed:', parseError);
       return new Response(JSON.stringify({
         success: false,
         error: 'JSON parsing failed',
-        rawResponse: aiResponse,
+        rawResponse: responseContent,
         parseError: parseError instanceof Error ? parseError.message : 'Unknown parse error'
       }), { 
         status: 500,
@@ -95,7 +98,7 @@ Respond naturally and decide if they need a portal link to proceed.`;
         systemPromptLength: systemPrompt.length,
         userPromptLength: userPrompt.length
       },
-      rawResponse: aiResponse,
+      rawResponse: responseContent,
       parsedResponse,
       analysis: {
         hasMessages: Array.isArray(parsedResponse.messages),
