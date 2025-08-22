@@ -4,6 +4,11 @@
   "outputDirectory": ".next",
   "installCommand": "npm ci",
   "framework": "nextjs",
+  "protectionBypass": {
+    "paths": [
+      "/api/webhooks/twilio/*"
+    ]
+  },
   "functions": {
     "app/api/**": {
       "maxDuration": 60,
