@@ -4,8 +4,11 @@ frontend:
     preBuild:
       commands:
         - npm ci
-        - echo "🔧 Generating Prisma clients for AWS Amplify..."
-        - npm run db:generate:all:skip-if-exists
+        - echo "🔧 Clearing old Prisma clients and regenerating for AWS Lambda..."
+        - rm -rf node_modules/.prisma || true
+        - rm -rf prisma/generated || true
+        - npm run db:generate:all
+        - echo "✅ Fresh Prisma clients generated with AWS Lambda support"
     build:
       commands:
         - echo "🚀 Building RMC Dialler for AWS Amplify..."
