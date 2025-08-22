@@ -3,21 +3,25 @@ import type { NextRequest } from 'next/server'
 
 // 🧪 DEVELOPMENT ENVIRONMENT SAFETY RESTRICTIONS
 function applyDevelopmentRestrictions(request: NextRequest): NextResponse | null {
-  const isDevelopment = process.env.ENVIRONMENT_NAME === 'aws-development'
+  const environmentName = process.env.ENVIRONMENT_NAME || ''
+  const isDevelopment = environmentName === 'staging-development'
+    || environmentName === 'aws-development'
+    || environmentName.endsWith('-development')
   if (!isDevelopment) return null // Skip restrictions in production
   
   const url = request.nextUrl.pathname
   const method = request.method
 
-  console.log('🧪 [AWS-DEV] Processing request:', url, method)
+  const envLabel = (environmentName || 'development').toUpperCase()
+  console.log(`🧪 [${envLabel}] Processing request:`, url, method)
 
   // 🚫 CRITICAL: Block ALL cron jobs (prevent interference with Vercel production)
   if (url.startsWith('/api/cron/')) {
     console.log('🚫 [AWS-DEV-SAFETY] Cron job blocked:', url)
     return NextResponse.json({ 
-      error: 'Cron jobs disabled in AWS development environment',
+      error: 'Cron jobs disabled in development environment',
       reason: 'Production cron jobs running on Vercel',
-      mode: 'aws-development-safety',
+      mode: `${environmentName || 'development'}-safety`,
       path: url 
     }, { status: 503 })
   }
@@ -40,7 +44,7 @@ function applyDevelopmentRestrictions(request: NextRequest): NextResponse | null
         error: 'SMS blocked - development environment safety',
         allowedNumbers: allowedNumbers,
         attempted: { from: fromNumber, to: toNumber },
-        mode: 'aws-development-safety'
+        mode: `${environmentName || 'development'}-safety`
       }, { status: 403 })
     }
   }
@@ -51,7 +55,7 @@ function applyDevelopmentRestrictions(request: NextRequest): NextResponse | null
     return NextResponse.json({
       error: 'Queue modifications disabled in development',
       reason: 'Read-only access to production data',
-      mode: 'aws-development-safety'
+      mode: `${environmentName || 'development'}-safety`
     }, { status: 403 })
   }
 
@@ -69,10 +73,10 @@ function applyDevelopmentRestrictions(request: NextRequest): NextResponse | null
 
   const isAllowedPath = allowedDevPaths.some(path => url.startsWith(path))
   if (isAllowedPath) {
-    console.log('✅ [AWS-DEV] AI voice agent endpoint allowed:', url)
+    console.log(`✅ [${envLabel}] AI voice agent endpoint allowed:`, url)
   }
 
-  console.log('🔍 [AWS-DEV] Request passed safety checks - continuing to auth middleware')
+  console.log(`🔍 [${envLabel}] Request passed safety checks - continuing to auth middleware`)
   return null // Continue to existing middleware
 }
 
