@@ -22,8 +22,6 @@ run:
     - name: AI_VOICE_NAME
       value: alloy
     - name: DEBUG_OPENAI
-      value: 'false'
+      value: 'true'
     - name: DEBUG_TWILIO
-      value: 'false'
-
-
+      value: 'true'
