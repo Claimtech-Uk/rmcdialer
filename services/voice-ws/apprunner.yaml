@@ -1,0 +1,25 @@
+version: 1.0
+runtime: nodejs18
+build:
+  commands: npm ci --omit=dev
+run:
+  commands: node server.js
+  network:
+    port: 8080
+  env:
+    - name: ENVIRONMENT_NAME
+      value: staging-development
+    - name: AI_VOICE_ALLOWED_ENVIRONMENTS
+      value: staging-development
+    - name: VOICE_MAX_CONCURRENT_STREAMS
+      value: '2'
+    - name: VOICE_STREAM_TOKEN
+      value: set-a-random-dev-token
+health:
+  path: /healthz
+  interval: 10
+  timeout: 5
+  healthy_threshold: 1
+  unhealthy_threshold: 5
+
+
