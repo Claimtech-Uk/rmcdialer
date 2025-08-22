@@ -532,6 +532,7 @@ server.listen(PORT, () => {
    Voice: ${AI_VOICE_NAME}
    Token Required: ${!!STREAM_TOKEN}
    OpenAI Configured: ${!!OPENAI_API_KEY}
+   Version: 0.2.1
   `)
 })
 
