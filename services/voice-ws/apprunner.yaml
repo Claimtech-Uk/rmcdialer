@@ -24,4 +24,4 @@ run:
     - name: DEBUG_OPENAI
       value: 'true'
     - name: DEBUG_TWILIO
-      value: 'true'
+      value: 'false'
