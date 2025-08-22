@@ -1,0 +1,165 @@
+# RMC Dialler - AI Voice Agent Development Rules
+
+## 🛡️ PRODUCTION SAFETY - CRITICAL BOUNDARIES
+
+### Feature Separation Rules
+1. **NEVER modify existing voice endpoints**: `/api/webhooks/twilio/voice` must remain untouched
+2. **ALL AI voice code must be behind feature flags**: Check `ENABLE_AI_VOICE_AGENT` before any AI voice logic
+3. **Use separate API routes**: AI voice gets `/api/webhooks/twilio/voice-ai`, `/api/ai-voice/*`
+4. **Separate Twilio resources**: Dev uses separate TwiML App + phone number, never share with production
+
+### Environment Boundaries
+- **Production**: `ENABLE_AI_VOICE_AGENT=false` (or unset) - HARD BLOCK all AI voice features
+- **Dev/Preview**: `ENABLE_AI_VOICE_AGENT=true` + `ENVIRONMENT_NAME=staging-development`
+- **Middleware guards**: Block AI voice endpoints when feature flag is disabled
+
+### Code Organization
+```
+/api/webhooks/twilio/
+  voice/          # EXISTING - DO NOT MODIFY
+  voice-ai/       # NEW - AI voice only, feature-gated
+/api/ai-voice/    # NEW - AI voice tokens, dev-only
+```
+
+### Database Isolation
+- Existing: `CallSession`, `CallOutcome` tables (untouched)
+- New: `AIVoiceSession` table for AI voice tracking (separate schema)
+- No foreign keys between old and new voice systems
+
+### Middleware Safety Checks
+```typescript
+// Required pattern for all AI voice endpoints
+if (request.nextUrl.pathname.startsWith('/api/ai-voice/') || 
+    request.nextUrl.pathname.startsWith('/api/webhooks/twilio/voice-ai')) {
+  if (!FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT) {
+    return NextResponse.json({ 
+      error: 'AI Voice agent disabled',
+      mode: 'production-safety' 
+    }, { status: 403 })
+  }
+}
+```
+
+## 🏗️ DEVELOPMENT GUIDELINES
+
+### Feature Flag Pattern
+```typescript
+// lib/config/features.ts
+export const FEATURE_FLAGS = {
+  ENABLE_AI_VOICE_AGENT: process.env.ENABLE_AI_VOICE_AGENT === 'true', // Default: false
+}
+
+// Usage in components/services
+import { FEATURE_FLAGS } from '@/lib/config/features'
+
+if (!FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT) {
+  return null // or redirect/error
+}
+```
+
+### WebSocket Service Boundaries
+- **App Runner WS**: `ws.dev.solvosolutions.co.uk` (dev-only)
+- **Environment check**: Only accepts `ENVIRONMENT_NAME=staging-development`
+- **Token validation**: Requires `VOICE_STREAM_TOKEN` from TwiML parameters
+- **Connection limits**: `VOICE_MAX_CONCURRENT_STREAMS=2` (cost protection)
+
+### TwiML Separation
+```xml
+<!-- EXISTING (Production) - DO NOT CHANGE -->
+<Response>
+  <Dial>
+    <Client>agent_123</Client>
+  </Dial>
+</Response>
+
+<!-- NEW (Dev AI Voice) -->
+<Response>
+  <Start>
+    <Stream url="wss://ws.dev.solvosolutions.co.uk/twilio/media">
+      <Parameter name="env" value="staging-development"/>
+      <Parameter name="auth" value="VOICE_STREAM_TOKEN"/>
+    </Stream>
+  </Start>
+  <Say>Connecting you to the AI assistant.</Say>
+</Response>
+```
+
+## 🧪 TESTING RULES
+
+### Dev Environment Only
+- AI voice features only work when `ENVIRONMENT_NAME=staging-development`
+- Use separate dev Twilio number for testing
+- Never test AI voice with production phone numbers
+
+### Smoke Tests Before Deploy
+```bash
+# Confirm production safety
+curl -s https://prod-domain/api/ai-voice/token
+# Should return: {"error": "AI Voice agent disabled", "mode": "production-safety"}
+
+# Confirm dev functionality
+curl -s https://dev-domain/api/ai-voice/token
+# Should work when ENABLE_AI_VOICE_AGENT=true
+```
+
+## 🚨 EMERGENCY PROCEDURES
+
+### Immediate Rollback
+1. Set `ENABLE_AI_VOICE_AGENT=false` in all environments
+2. Redeploy (middleware will block all AI voice endpoints)
+3. Existing voice system continues unaffected
+
+### Circuit Breaker Pattern
+- Monitor AI voice error rates
+- Auto-disable if error rate > 5% or connection failures
+- Alert on OpenAI API quota/cost thresholds
+
+## 📁 FILE ORGANIZATION
+
+### Untouchable (Existing Voice)
+```
+/api/webhooks/twilio/voice/     # Existing Twilio voice webhook
+/components/*Voice*             # Existing voice components  
+/modules/twilio-voice/          # Existing Twilio voice services
+/hooks/useGlobalCall.ts         # Existing call management
+```
+
+### New (AI Voice - Feature Gated)
+```
+/api/webhooks/twilio/voice-ai/  # AI voice webhook (new)
+/api/ai-voice/                  # AI voice tokens/config (new)
+/services/voice-ws/             # WebSocket service (separate repo folder)
+/modules/ai-voice-agent/        # AI voice services (new)
+/components/AIVoice*            # AI voice components (new)
+```
+
+## 🔍 CODE REVIEW CHECKLIST
+
+### Before Merging AI Voice Code
+- [ ] Feature flag check implemented?
+- [ ] Middleware guard in place?
+- [ ] No modifications to existing voice endpoints?
+- [ ] Separate database tables/schemas?
+- [ ] Dev-only Twilio resources used?
+- [ ] Production safety tested (flag=false blocks everything)?
+- [ ] WebSocket service environment validation?
+
+### Deployment Safety
+- [ ] `ENABLE_AI_VOICE_AGENT=false` in production
+- [ ] `ENABLE_AI_VOICE_AGENT=true` only in dev/preview
+- [ ] Separate TwiML Apps configured correctly
+- [ ] WebSocket service only accepts staging-development env
+
+## 💡 ARCHITECTURAL PRINCIPLES
+
+1. **Additive Only**: Never modify existing voice system
+2. **Feature Gated**: All AI voice behind ENABLE_AI_VOICE_AGENT flag
+3. **Environment Isolated**: Dev experiments never touch production
+4. **Resource Separated**: Different Twilio apps, numbers, webhooks
+5. **Fail Safe**: Default to disabled, require explicit enabling
+6. **Monitorable**: Clear separation in logs, metrics, alerts
+
+---
+
+**Remember**: The existing voice system is battle-tested and handles real customer calls. 
+AI voice is experimental. Keep them completely separate until AI voice is proven reliable.
