@@ -1,9 +1,9 @@
 version: 1.0
 runtime: nodejs18
 build:
-  commands:
-    - cd services/voice-ws
-    - npm ci --omit=dev
+  command: |
+    cd services/voice-ws
+    npm ci --omit=dev
 run:
   command: node services/voice-ws/server.js
   network:
