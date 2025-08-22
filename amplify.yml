@@ -3,7 +3,16 @@ frontend:
   phases:
     preBuild:
       commands:
-        - npm ci
+        - echo "🔧 Ensuring predictable build runtime (CI mode)"
+        - export NEXT_TELEMETRY_DISABLED=1
+        - export PRISMA_HIDE_UPDATE_MESSAGE=1
+        - echo "🧪 Runtime versions:" && node -v && npm -v || true
+        - echo "📦 Installing dependencies (skip lifecycle scripts)"
+        - npm ci --ignore-scripts --no-audit --no-fund
+        - echo "🔍 Prisma/OS diagnostics:" && npx prisma -v || true
+        - openssl version || true
+        - uname -a || true
+        - cat /etc/os-release || true
         - echo "🧹 Clearing Next.js cache to avoid stale artifacts..."
         - rm -rf .next/cache || true
         - echo "🔧 Clearing old Prisma clients and regenerating for AWS Lambda..."
@@ -16,6 +25,7 @@ frontend:
     build:
       commands:
         - echo "🚀 Building RMC Dialler for AWS Amplify..."
+        - export NEXT_TELEMETRY_DISABLED=1
         - npm run build
         - echo "✅ Build completed successfully!"
   artifacts:
