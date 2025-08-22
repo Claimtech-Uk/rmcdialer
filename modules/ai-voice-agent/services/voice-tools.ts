@@ -2,15 +2,93 @@
  * Voice Agent Tools
  * 
  * Tools available to the AI voice agent for claim operations
- * Based on OpenAI Realtime Agents patterns
+ * Simplified set with placeholders for testing
  */
 
 export const voiceAgentTools = [
   {
     type: 'function',
     function: {
-      name: 'check_claim_status',
-      description: 'Check the current status of a claim',
+      name: 'schedule_callback',
+      description: 'Schedule a callback for the customer at their preferred time',
+      parameters: {
+        type: 'object',
+        properties: {
+          preferred_time: {
+            type: 'string',
+            description: 'When the customer wants to be called back (e.g., "tomorrow at 2pm", "Monday morning")'
+          },
+          reason: {
+            type: 'string',
+            description: 'Why they need a callback'
+          }
+        },
+        required: ['preferred_time']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_review_link',
+      description: 'Send a link for the customer to leave a review about their experience',
+      parameters: {
+        type: 'object',
+        properties: {
+          method: {
+            type: 'string',
+            enum: ['sms', 'email'],
+            description: 'How to send the review link'
+          }
+        },
+        required: ['method']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_portal_link',
+      description: 'Send a magic link to access the customer portal',
+      parameters: {
+        type: 'object',
+        properties: {
+          method: {
+            type: 'string',
+            enum: ['sms', 'email'],
+            description: 'How to send the portal link'
+          }
+        },
+        required: ['method']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'check_user_details',
+      description: 'Look up and verify customer information',
+      parameters: {
+        type: 'object',
+        properties: {
+          phone_number: {
+            type: 'string',
+            description: 'Customer phone number'
+          },
+          claim_reference: {
+            type: 'string',
+            description: 'Claim reference if provided'
+          }
+        },
+        required: ['phone_number']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'check_claim_details',
+      description: 'Get detailed information about a specific claim',
       parameters: {
         type: 'object',
         properties: {
@@ -26,74 +104,25 @@ export const voiceAgentTools = [
   {
     type: 'function',
     function: {
-      name: 'schedule_callback',
-      description: 'Schedule a callback for the customer',
+      name: 'check_requirements',
+      description: 'Check what documents or information are still needed for the claim',
       parameters: {
         type: 'object',
         properties: {
-          preferred_time: {
+          claim_reference: {
             type: 'string',
-            description: 'Preferred callback time (e.g., "tomorrow at 2pm")'
-          },
-          reason: {
-            type: 'string',
-            description: 'Reason for the callback'
+            description: 'The claim reference number'
           }
         },
-        required: ['preferred_time']
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'send_information',
-      description: 'Send information to the customer via SMS or email',
-      parameters: {
-        type: 'object',
-        properties: {
-          method: {
-            type: 'string',
-            enum: ['sms', 'email'],
-            description: 'How to send the information'
-          },
-          content_type: {
-            type: 'string',
-            enum: ['portal_link', 'claim_update', 'documents_needed'],
-            description: 'Type of information to send'
-          }
-        },
-        required: ['method', 'content_type']
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'transfer_to_human',
-      description: 'Transfer the call to a human agent when needed',
-      parameters: {
-        type: 'object',
-        properties: {
-          reason: {
-            type: 'string',
-            description: 'Reason for transfer'
-          },
-          urgency: {
-            type: 'string',
-            enum: ['low', 'medium', 'high'],
-            description: 'Urgency level'
-          }
-        },
-        required: ['reason']
+        required: ['claim_reference']
       }
     }
   }
 ]
 
 /**
- * Tool execution logic
- * Maps tool calls to actual operations
+ * Tool execution logic - PLACEHOLDER IMPLEMENTATIONS
+ * These will be connected to real services in production
  */
 export async function executeVoiceTool(
   toolName: string, 
@@ -103,37 +132,66 @@ export async function executeVoiceTool(
   console.log(`🔧 [VOICE-TOOL] Executing ${toolName}`, { args, context })
 
   switch (toolName) {
-    case 'check_claim_status':
-      // In production, this would query the database
-      return {
-        success: true,
-        status: 'under_review',
-        last_updated: new Date().toISOString(),
-        message: 'Your claim is currently under review. We expect to have an update within 2-3 business days.'
-      }
-
     case 'schedule_callback':
-      // In production, this would create a callback record
+      // PLACEHOLDER: In production, creates callback in database
       return {
         success: true,
         scheduled_time: args.preferred_time,
         confirmation: `I've scheduled a callback for ${args.preferred_time}. You'll receive a confirmation SMS shortly.`
       }
 
-    case 'send_information':
-      // In production, this would trigger SMS/email service
+    case 'send_review_link':
+      // PLACEHOLDER: In production, sends actual review link via SMS/email
       return {
         success: true,
         method: args.method,
-        message: `I'll send that information to you via ${args.method} right away.`
+        message: `I've sent the review link to you via ${args.method}. Thank you for your feedback!`
       }
 
-    case 'transfer_to_human':
-      // In production, this would initiate transfer via Twilio
+    case 'send_portal_link':
+      // PLACEHOLDER: In production, generates magic link and sends it
       return {
         success: true,
-        transfer_initiated: true,
-        message: 'I\'m transferring you to a specialist who can better assist you. Please hold.'
+        method: args.method,
+        portal_url: 'https://dev.solvosolutions.co.uk/claims',
+        message: `I've sent you a secure link to access your claim portal via ${args.method}.`
+      }
+
+    case 'check_user_details':
+      // PLACEHOLDER: In production, queries user database
+      return {
+        success: true,
+        user_found: true,
+        name: 'John Smith',
+        phone: context.from,
+        claims_count: 1,
+        message: 'I found your account with one active claim.'
+      }
+
+    case 'check_claim_details':
+      // PLACEHOLDER: In production, queries claim database
+      return {
+        success: true,
+        claim_reference: args.claim_reference,
+        status: 'under_review',
+        lender: 'Example Lender',
+        amount: '£2,500',
+        submitted_date: '2024-01-15',
+        last_update: '2024-01-20',
+        message: 'Your claim is currently under review with Example Lender.'
+      }
+
+    case 'check_requirements':
+      // PLACEHOLDER: In production, checks missing documents
+      return {
+        success: true,
+        claim_reference: args.claim_reference,
+        requirements_complete: false,
+        missing_items: [
+          'Bank statement from last 3 months',
+          'Proof of PPI payment'
+        ],
+        message: 'You still need to provide 2 documents to complete your claim.'
       }
 
     default:

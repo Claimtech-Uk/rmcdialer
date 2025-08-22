@@ -95,7 +95,94 @@ class VoiceSession {
               silence_duration_ms: 200,  // Reduced for more responsive interruptions
               create_response: true       // Auto-respond when user stops speaking
             },
-            tools: [],
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'schedule_callback',
+                  description: 'Schedule a callback for the customer at their preferred time',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      preferred_time: { type: 'string' },
+                      reason: { type: 'string' }
+                    },
+                    required: ['preferred_time']
+                  }
+                }
+              },
+              {
+                type: 'function',
+                function: {
+                  name: 'send_review_link',
+                  description: 'Send a review link to the customer',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      method: { type: 'string', enum: ['sms', 'email'] }
+                    },
+                    required: ['method']
+                  }
+                }
+              },
+              {
+                type: 'function',
+                function: {
+                  name: 'send_portal_link',
+                  description: 'Send a magic link to access the customer portal',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      method: { type: 'string', enum: ['sms', 'email'] }
+                    },
+                    required: ['method']
+                  }
+                }
+              },
+              {
+                type: 'function',
+                function: {
+                  name: 'check_user_details',
+                  description: 'Look up customer information',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      phone_number: { type: 'string' },
+                      claim_reference: { type: 'string' }
+                    },
+                    required: ['phone_number']
+                  }
+                }
+              },
+              {
+                type: 'function',
+                function: {
+                  name: 'check_claim_details',
+                  description: 'Get information about a specific claim',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      claim_reference: { type: 'string' }
+                    },
+                    required: ['claim_reference']
+                  }
+                }
+              },
+              {
+                type: 'function',
+                function: {
+                  name: 'check_requirements',
+                  description: 'Check what documents are still needed',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      claim_reference: { type: 'string' }
+                    },
+                    required: ['claim_reference']
+                  }
+                }
+              }
+            ],
             tool_choice: 'auto',
             temperature: 0.8,
             max_response_output_tokens: 4096
@@ -181,6 +268,12 @@ class VoiceSession {
         }
         break
 
+      case 'response.function_call_arguments.done':
+        // Handle tool calls
+        console.log(`🔧 Tool call on ${this.callSid}: ${msg.name}`, msg.arguments)
+        this.handleToolCall(msg.name, msg.arguments, msg.call_id)
+        break
+
       case 'error':
         console.error(`❌ OpenAI error for call ${this.callSid}:`, msg.error)
         break
@@ -221,6 +314,90 @@ class VoiceSession {
       }))
     } catch (error) {
       console.error(`❌ Failed to send audio to Twilio for call ${this.callSid}:`, error)
+    }
+  }
+
+  async handleToolCall(toolName, args, callId) {
+    console.log(`🔧 Processing tool: ${toolName} for call ${this.callSid}`)
+    
+    // Parse arguments if they're a string
+    const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
+    
+    // Placeholder tool responses
+    let result = {}
+    
+    switch (toolName) {
+      case 'schedule_callback':
+        result = {
+          success: true,
+          message: `Callback scheduled for ${parsedArgs.preferred_time}`
+        }
+        console.log(`📅 Scheduled callback: ${parsedArgs.preferred_time}`)
+        break
+        
+      case 'send_review_link':
+        result = {
+          success: true,
+          message: `Review link sent via ${parsedArgs.method}`
+        }
+        console.log(`📧 Sent review link via ${parsedArgs.method}`)
+        break
+        
+      case 'send_portal_link':
+        result = {
+          success: true,
+          message: `Portal link sent via ${parsedArgs.method}`
+        }
+        console.log(`🔗 Sent portal link via ${parsedArgs.method}`)
+        break
+        
+      case 'check_user_details':
+        result = {
+          found: true,
+          name: 'Test User',
+          claims: 1
+        }
+        console.log(`👤 Checked user details for ${parsedArgs.phone_number}`)
+        break
+        
+      case 'check_claim_details':
+        result = {
+          status: 'under_review',
+          lender: 'Test Lender',
+          amount: '£2,500'
+        }
+        console.log(`📋 Checked claim: ${parsedArgs.claim_reference}`)
+        break
+        
+      case 'check_requirements':
+        result = {
+          complete: false,
+          missing: ['Bank statement', 'Proof of payment']
+        }
+        console.log(`📝 Checked requirements for: ${parsedArgs.claim_reference}`)
+        break
+        
+      default:
+        result = {
+          error: `Unknown tool: ${toolName}`
+        }
+    }
+    
+    // Send tool result back to OpenAI
+    if (this.openaiWs && this.openaiWs.readyState === WebSocket.OPEN) {
+      this.openaiWs.send(JSON.stringify({
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id: callId,
+          output: JSON.stringify(result)
+        }
+      }))
+      
+      // Trigger response generation after tool output
+      this.openaiWs.send(JSON.stringify({
+        type: 'response.create'
+      }))
     }
   }
 
