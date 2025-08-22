@@ -2,10 +2,10 @@ version: 1.0
 runtime: nodejs18
 build:
   commands:
-    - npm ci --omit=dev
+    build:
+      - npm ci --omit=dev
 run:
-  commands:
-    - node server.js
+  command: node server.js
   network:
     port: 8080
   env:
