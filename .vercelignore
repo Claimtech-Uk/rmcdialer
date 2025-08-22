@@ -10,4 +10,4 @@ coverage/
 .nyc_output/
 .jest/
 # Keep essential files for build
-!scripts/ci-assert-main.js
+!scripts/ci-assert-main.js# Force clean build Fri Aug 22 14:58:43 SAST 2025
