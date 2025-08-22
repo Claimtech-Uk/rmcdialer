@@ -17,5 +17,13 @@ run:
       value: '2'
     - name: VOICE_STREAM_TOKEN
       value: set-a-random-dev-token
+    - name: AI_VOICE_MODEL
+      value: gpt-4o-realtime-preview-2024-12-17
+    - name: AI_VOICE_NAME
+      value: alloy
+    - name: DEBUG_OPENAI
+      value: 'false'
+    - name: DEBUG_TWILIO
+      value: 'false'
 
 
