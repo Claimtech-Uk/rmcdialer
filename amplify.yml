@@ -4,11 +4,15 @@ frontend:
     preBuild:
       commands:
         - npm ci
+        - echo "🧹 Clearing Next.js cache to avoid stale artifacts..."
+        - rm -rf .next/cache || true
         - echo "🔧 Clearing old Prisma clients and regenerating for AWS Lambda..."
         - rm -rf node_modules/.prisma || true
         - rm -rf prisma/generated || true
         - npm run db:generate:all
         - echo "✅ Fresh Prisma clients generated with AWS Lambda support"
+        - echo "🔎 Environment report (sanitized)"
+        - node scripts/ci-env-report.js
     build:
       commands:
         - echo "🚀 Building RMC Dialler for AWS Amplify..."
@@ -21,7 +25,7 @@ frontend:
   cache:
     paths:
       - node_modules/**/*
-      - .next/cache/**/*
+      # Removed .next/cache caching to prevent stale build issues
 customHeaders:
   - pattern: '/api/**'
     headers:
