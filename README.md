@@ -534,3 +534,4 @@ This project is proprietary to Resolve My Claim Ltd.
 
 **Need support?** All monitoring endpoints are live and the system includes comprehensive health checks and auto-healing capabilities. # Force rebuild with updated schema Thu Aug  7 21:24:05 SAST 2025
 # Deploy without password protection Thu Aug  7 21:30:28 SAST 2025
+# Trigger fresh deployment
