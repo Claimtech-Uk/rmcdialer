@@ -17,11 +17,5 @@ run:
       value: '2'
     - name: VOICE_STREAM_TOKEN
       value: set-a-random-dev-token
-health:
-  path: /healthz
-  interval: 10
-  timeout: 5
-  healthy_threshold: 1
-  unhealthy_threshold: 5
 
 
