@@ -8,6 +8,15 @@ run:
   command: node services/voice-ws/server.js
   network:
     port: 8080
+  env:
+    - name: ENVIRONMENT_NAME
+      value: staging-development
+    - name: AI_VOICE_ALLOWED_ENVIRONMENTS
+      value: staging-development
+    - name: VOICE_MAX_CONCURRENT_STREAMS
+      value: '2'
+    - name: VOICE_STREAM_TOKEN
+      value: set-a-random-dev-token
 health:
   path: /healthz
   interval: 10
