@@ -302,7 +302,9 @@ export const FEATURE_FLAGS = {
   // AI agents
   ENABLE_AI_SMS_AGENT: process.env.ENABLE_AI_SMS_AGENT !== 'false', // Default enabled (opt-out)
   // Prefer AI-specific env var if provided, fallback to legacy
-  CONVERSATIONAL_MODE_ENABLED: (process.env.AI_SMS_CONVERSATIONAL_MODE ?? process.env.CONVERSATIONAL_MODE_ENABLED) !== 'false' // Default enabled (opt-out) - New 3-part message structure
+  CONVERSATIONAL_MODE_ENABLED: (process.env.AI_SMS_CONVERSATIONAL_MODE ?? process.env.CONVERSATIONAL_MODE_ENABLED) !== 'false', // Default enabled (opt-out) - New 3-part message structure
+  // AI Voice Agent (Production Safety - Default DISABLED)
+  ENABLE_AI_VOICE_AGENT: process.env.ENABLE_AI_VOICE_AGENT === 'true', // Default: false (opt-in only)
 } as const;
 
 // ============================================================================

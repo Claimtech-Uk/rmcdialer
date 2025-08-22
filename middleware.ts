@@ -62,13 +62,15 @@ function applyDevelopmentRestrictions(request: NextRequest): NextResponse | null
   // ✅ Allow AI voice agent endpoints (your main development focus)
   const allowedDevPaths = [
     '/api/webhooks/twilio/voice',     // Voice webhooks for AI testing
-    '/api/audio/',                     // Audio processing
-    '/api/debug/',                     // Debug endpoints
-    '/api/test-',                      // Test endpoints
-    '/api/health',                     // Health checks
-    '/api/transcription',              // Transcription testing
-    '/api/ai-',                        // AI agent endpoints
-    '/api/hume'                        // Hume AI endpoints
+    '/api/webhooks/twilio/voice-ai',  // AI voice webhooks (new)
+    '/api/ai-voice/',                 // AI voice tokens/config (new)
+    '/api/audio/',                    // Audio processing
+    '/api/debug/',                    // Debug endpoints
+    '/api/test-',                     // Test endpoints
+    '/api/health',                    // Health checks
+    '/api/transcription',             // Transcription testing
+    '/api/ai-',                       // AI agent endpoints
+    '/api/hume'                       // Hume AI endpoints
   ]
 
   const isAllowedPath = allowedDevPaths.some(path => url.startsWith(path))
@@ -84,6 +86,19 @@ export function middleware(request: NextRequest) {
   // 🛡️ Apply development restrictions FIRST
   const devRestriction = applyDevelopmentRestrictions(request)
   if (devRestriction) return devRestriction
+
+  // 🚫 PRODUCTION SAFETY: Block AI voice endpoints when feature disabled
+  if (request.nextUrl.pathname.startsWith('/api/ai-voice/') || 
+      request.nextUrl.pathname.startsWith('/api/webhooks/twilio/voice-ai')) {
+    if (process.env.ENABLE_AI_VOICE_AGENT !== 'true') {
+      console.log('🚫 AI Voice agent blocked - feature disabled in production')
+      return NextResponse.json({ 
+        error: 'AI Voice agent disabled',
+        mode: 'production-safety',
+        path: request.nextUrl.pathname
+      }, { status: 403 })
+    }
+  }
 
   // CRITICAL: Allow Twilio webhooks, audio endpoints, and CRON jobs to bypass authentication
   const isWebhookPath = request.nextUrl.pathname.startsWith('/api/webhooks/twilio/') || 
