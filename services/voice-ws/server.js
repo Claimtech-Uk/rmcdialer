@@ -67,7 +67,7 @@ class VoiceSession {
         console.log(`🤖 OpenAI Realtime connected for call ${this.callSid}`)
         this.isConnected = true
         
-        // Configure session
+        // Configure session with OpenAI best practices
         this.openaiWs.send(JSON.stringify({
           type: 'session.update',
           session: {
@@ -75,10 +75,16 @@ class VoiceSession {
             instructions: `You are a helpful AI assistant for Resolve My Claim. 
               Keep responses concise and professional. 
               You're helping customers with their insurance claims.
-              Be empathetic and solution-focused.`,
+              Be empathetic and solution-focused.
+              
+              Important guidelines:
+              - Speak naturally and conversationally
+              - Allow interruptions and respond appropriately
+              - Keep responses brief unless detail is requested
+              - Confirm important information by repeating it back`,
             voice: AI_VOICE_NAME,
-            input_audio_format: 'g711_ulaw',
-            output_audio_format: 'g711_ulaw',
+            input_audio_format: 'g711_ulaw',  // Twilio's format
+            output_audio_format: 'g711_ulaw', // Twilio's format
             input_audio_transcription: {
               model: 'whisper-1'
             },
@@ -86,7 +92,8 @@ class VoiceSession {
               type: 'server_vad',
               threshold: 0.5,
               prefix_padding_ms: 300,
-              silence_duration_ms: 500
+              silence_duration_ms: 200,  // Reduced for more responsive interruptions
+              create_response: true       // Auto-respond when user stops speaking
             },
             tools: [],
             tool_choice: 'auto',
