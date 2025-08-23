@@ -25,3 +25,6 @@ run:
       value: 'true'
     - name: DEBUG_TWILIO
       value: 'false'
+    - name: OPENAI_API_KEY
+      value: '${OPENAI_API_KEY}'
+   
