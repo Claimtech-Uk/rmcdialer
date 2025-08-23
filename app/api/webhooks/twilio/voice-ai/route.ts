@@ -43,6 +43,9 @@ export async function POST(request: NextRequest) {
     const streamToken = process.env.VOICE_STREAM_TOKEN || 'set-a-random-dev-token'
     const wsUrl = process.env.WS_VOICE_URL || 'wss://ezv3xwkq7j.eu-west-1.awsapprunner.com/twilio/media'
     
+    console.log(`🎙️ [AI-VOICE] Using WebSocket URL: ${wsUrl}`)
+    console.log(`🎙️ [AI-VOICE] Environment: ${environmentName}`)
+    
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Start>
