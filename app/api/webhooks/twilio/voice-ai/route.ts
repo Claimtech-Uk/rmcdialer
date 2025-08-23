@@ -41,7 +41,10 @@ export async function POST(request: NextRequest) {
 
     // Generate TwiML for AI voice streaming
     const streamToken = process.env.VOICE_STREAM_TOKEN || 'set-a-random-dev-token'
-    const wsUrl = process.env.WS_VOICE_URL || 'wss://ezv3xwkq7j.eu-west-1.awsapprunner.com/twilio/media'
+    
+    // Use EC2 instance for Hume EVI voice service
+    // Can be overridden with WS_VOICE_URL environment variable
+    const wsUrl = process.env.WS_VOICE_URL || 'ws://54.155.120.236:8080/twilio/media'
     
     console.log(`🎙️ [AI-VOICE] Using WebSocket URL: ${wsUrl}`)
     console.log(`🎙️ [AI-VOICE] Environment: ${environmentName}`)
@@ -109,7 +112,7 @@ export async function GET() {
     message: 'AI Voice webhook ready',
     endpoint: 'POST /api/webhooks/twilio/voice-ai',
     environment: process.env.ENVIRONMENT_NAME || 'unknown',
-    wsEndpoint: process.env.WS_VOICE_URL || 'wss://ezv3xwkq7j.eu-west-1.awsapprunner.com/twilio/media',
+    wsEndpoint: process.env.WS_VOICE_URL || 'ws://54.155.120.236:8080/twilio/media',
     timestamp: new Date().toISOString()
   })
 }
