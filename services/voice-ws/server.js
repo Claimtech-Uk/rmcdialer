@@ -6,9 +6,41 @@ const ENVIRONMENT_NAME = process.env.ENVIRONMENT_NAME || 'staging-development'
 const ALLOWED_ENVS = (process.env.AI_VOICE_ALLOWED_ENVIRONMENTS || 'staging-development').split(',')
 const MAX_STREAMS = parseInt(process.env.VOICE_MAX_CONCURRENT_STREAMS || '2', 10)
 const STREAM_TOKEN = process.env.VOICE_STREAM_TOKEN || ''
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || ''
+let OPENAI_API_KEY = process.env.OPENAI_API_KEY || '' // Will be fetched from Secrets Manager
 const AI_VOICE_MODEL = process.env.AI_VOICE_MODEL || 'gpt-4o-realtime-preview-2024-12-17'
 const AI_VOICE_NAME = process.env.AI_VOICE_NAME || 'alloy'
+
+// Fetch OpenAI API key from AWS Secrets Manager
+async function fetchOpenAIKey() {
+  try {
+    // Try to import AWS SDK (will fail if not available)
+    const { SecretsManagerClient, GetSecretValueCommand } = await import('@aws-sdk/client-secrets-manager')
+    
+    console.log('🔐 Fetching OpenAI API key from AWS Secrets Manager...')
+    const client = new SecretsManagerClient({ region: 'eu-west-1' })
+    
+    const response = await client.send(
+      new GetSecretValueCommand({
+        SecretId: 'dev/openai/voice',
+        VersionStage: 'AWSCURRENT'
+      })
+    )
+    
+    if (response.SecretString) {
+      // The secret is a JSON object with the key
+      const secret = JSON.parse(response.SecretString)
+      OPENAI_API_KEY = secret.OPENAI_API_KEY || secret.apiKey || secret.key || response.SecretString
+      console.log('✅ OpenAI API key fetched from Secrets Manager')
+    }
+  } catch (error) {
+    console.log('⚠️ Could not fetch from Secrets Manager, using environment variable')
+    console.log('   Error:', error.message)
+    // Fall back to environment variable if AWS SDK not available or fetch fails
+  }
+}
+
+// Initialize the API key fetch
+fetchOpenAIKey()
 
 // OpenAI Realtime API endpoint
 const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime'
