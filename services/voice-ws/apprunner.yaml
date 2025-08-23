@@ -26,5 +26,5 @@ run:
     - name: DEBUG_TWILIO
       value: 'false'
     - name: OPENAI_API_KEY
-      value: '${OPENAI_API_KEY}'
+      value_from: 'arn:aws:secretsmanager:eu-west-1:730335573400:secret:dev/openai/voice-6gf7ef'
    
