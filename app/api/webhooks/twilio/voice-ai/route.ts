@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
     
     console.log(`🎙️ [AI-VOICE] Using WebSocket URL: ${wsUrl}`)
     console.log(`🎙️ [AI-VOICE] Environment: ${environmentName}`)
+    console.log(`🎙️ [AI-VOICE] Stream Token: ${streamToken ? 'SET' : 'NOT SET'} (${streamToken?.substring(0, 10)}...)`)
     
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -60,6 +61,15 @@ export async function POST(request: NextRequest) {
 </Response>`
 
     console.log(`🎙️ [AI-VOICE] Generated TwiML for call ${callSid}`)
+    console.log(`📄 [AI-VOICE] TwiML Response:`)
+    console.log(twiml)
+    console.log(`🔗 [AI-VOICE] Stream Parameters:`, {
+      url: wsUrl,
+      env: environmentName,
+      auth: streamToken?.substring(0, 10) + '...',
+      callSid,
+      from
+    })
     
     return new NextResponse(twiml, {
       headers: {
