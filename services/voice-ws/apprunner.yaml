@@ -6,8 +6,11 @@ build:
   commands:
     build:
       - echo "Building in source directory /services/voice-ws"
+      - echo "Node version:" && node --version
+      - echo "NPM version:" && npm --version
       - ls -la
-      - npm ci --omit=dev
+      - echo "Installing dependencies..."
+      - npm install --production
 run:
   command: node server.js
   network:
