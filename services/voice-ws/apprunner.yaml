@@ -1,3 +1,4 @@
+# Updated: 2025-08-23 - AWS Secrets Manager integration
 version: 1.0
 runtime: nodejs18
 build:
