@@ -3,10 +3,15 @@ version: 1.0
 runtime: nodejs18
 build:
   commands:
+    pre-build:
+      - echo "Installing dependencies for voice-ws service"
+      - ls -la
+      - ls -la services/voice-ws
     build:
-      - cd services/voice-ws && npm ci --omit=dev
+      - npm --prefix services/voice-ws ci --omit=dev
 run:
-  command: node services/voice-ws/server.js
+  runtime-version: 18
+  command: cd services/voice-ws && node server.js
   network:
     port: 8080
   env:
