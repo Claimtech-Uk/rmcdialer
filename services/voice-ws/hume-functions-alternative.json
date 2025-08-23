@@ -1,0 +1,16 @@
+{
+  "name": "schedule_callback",
+  "description": "Schedule a callback for the customer at their preferred time",
+  "type": "object",
+  "properties": {
+    "preferred_time": {
+      "type": "string",
+      "description": "When the customer wants to be called back"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why they need a callback"
+    }
+  },
+  "required": ["preferred_time"]
+}

@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["preferred_time"],
+  "properties": {
+    "preferred_time": {
+      "type": "string",
+      "description": "When the customer wants to be called back (e.g., 'tomorrow at 2pm', 'Monday morning')"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why they need a callback"
+    }
+  }
+}

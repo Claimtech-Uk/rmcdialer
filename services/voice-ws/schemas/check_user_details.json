@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["phone_number"],
+  "properties": {
+    "phone_number": {
+      "type": "string",
+      "description": "Customer phone number to lookup"
+    },
+    "claim_reference": {
+      "type": "string",
+      "description": "Optional claim reference for additional context"
+    }
+  }
+}

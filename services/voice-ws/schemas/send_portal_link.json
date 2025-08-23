@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["method"],
+  "properties": {
+    "method": {
+      "type": "string",
+      "description": "How to send the link (sms or email)"
+    },
+    "link_type": {
+      "type": "string",
+      "description": "Type of portal access needed (claims, documents, or status)"
+    }
+  }
+}

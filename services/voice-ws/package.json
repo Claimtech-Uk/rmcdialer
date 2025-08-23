@@ -1,13 +1,17 @@
 {
   "name": "voice-ws",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "start:openai": "node server.js",
+    "start:hume": "node hume-server.js",
+    "start:auto": "node provider-selector.js"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.614.0",
+    "hume": "^0.9.0",
     "ws": "^8.18.0"
   }
 }

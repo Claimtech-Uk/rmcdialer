@@ -1,5 +1,6 @@
 import http from 'http'
 import { WebSocketServer, WebSocket } from 'ws'
+import { voiceActionRegistry } from './voice-actions/voice-action-registry.js'
 
 const PORT = process.env.PORT || 8080
 const ENVIRONMENT_NAME = process.env.ENVIRONMENT_NAME || 'staging-development'
@@ -105,15 +106,49 @@ class VoiceSession {
           session: {
             modalities: ['text', 'audio'],
             instructions: `You are a helpful AI assistant for Resolve My Claim. 
-              Keep responses concise and professional. 
-              You're helping customers with their insurance claims.
-              Be empathetic and solution-focused.
+              You're helping customers with their motor finance compensation claims in the UK.
               
-              Important guidelines:
-              - Speak naturally and conversationally
-              - Allow interruptions and respond appropriately
+              SPEAKING STYLE - CRITICAL:
+              - Speak English (UK) with a modern RP accent (General Southern British)
+              - Use UK spellings (colour, realise, centre, organised, etc.)
+              - Sound friendly, modern, and upbeat—natural, never pompous
+              - Pace slightly faster than casual conversation
+              - Vary sentence length for natural flow
+              - Add brief pauses only before key points when helpful
+              - Use contractions naturally: "I'll", "we're", "that's", "you'll", "can't", "won't"
+              - Allow words to flow together naturally (linking/elision) when it sounds right
+              - Avoid Americanisms unless in a direct quote
+              - If accent drifts, ease back to UK RP over the next sentence
+              
+              CORE KNOWLEDGE - MOTOR FINANCE CLAIMS:
+              
+              WHAT THIS IS ABOUT:
+              - Motor finance brokers/dealers secretly increased interest rates 2007-2021 to earn higher commissions
+              - FCA investigated and found widespread mis-selling affecting millions
+              - Claims are based on DCA (Discretionary Commission Arrangements) and unfair relationships under Section 140A
+              - Supreme Court 2024 ruling confirmed both pathways remain valid
+              - FCA confirmed £9-18 billion total compensation scheme coming by end-2025
+              
+              ELIGIBILITY & SCOPE:
+              - PCP and HP agreements 2007-2021 mainly affected
+              - Each agreement is a separate case 
+              - Complaints are made against lenders/finance providers
+              - We can find old agreements back to 2007 (lenders often delete after 6 years)
+              
+              TIMING & PROCESS:
+              - FCA pause until December 4, 2025, but customers can complain now
+              - Most payments expected early 2026
+              - We're FCA-regulated (ref 838936) and backed by Prowse Phillips Law
+              - No-win-no-fee with capped rates at 30% + VAT (sliding scale)
+              - Process: Sign up → find agreements → assess claims → lodge complaints → recover money
+              
+              CONVERSATION APPROACH:
+              - Be empathetic and solution-focused
+              - Address common concerns: legitimacy, DIY options, fees, timing
+              - Allow interruptions and respond appropriately  
               - Keep responses brief unless detail is requested
-              - Confirm important information by repeating it back`,
+              - Sound like a modern, professional British assistant
+              - Maintain natural warmth and helpfulness`,
             voice: AI_VOICE_NAME,
             input_audio_format: 'g711_ulaw',  // Twilio's format
             output_audio_format: 'g711_ulaw', // Twilio's format
@@ -128,89 +163,28 @@ class VoiceSession {
               create_response: true       // Auto-respond when user stops speaking
             },
             tools: [
+              // Dynamic business action functions
+              ...voiceActionRegistry.getOpenAIFunctions(),
+              // Knowledge base search function (local implementation)
               {
                 type: 'function',
                 function: {
-                  name: 'schedule_callback',
-                  description: 'Schedule a callback for the customer at their preferred time',
+                  name: 'search_knowledge_base',
+                  description: 'Search detailed knowledge base for specific information about motor finance claims, objections, processes, or regulations',
                   parameters: {
                     type: 'object',
                     properties: {
-                      preferred_time: { type: 'string' },
-                      reason: { type: 'string' }
+                      query: { 
+                        type: 'string',
+                        description: 'What to search for (e.g. "Supreme Court ruling", "DCA definition", "objection handling", "fees structure")'
+                      },
+                      category: {
+                        type: 'string',
+                        enum: ['legitimacy', 'eligibility', 'timing', 'process', 'fees', 'regulations', 'objections'],
+                        description: 'Category of information needed'
+                      }
                     },
-                    required: ['preferred_time']
-                  }
-                }
-              },
-              {
-                type: 'function',
-                function: {
-                  name: 'send_review_link',
-                  description: 'Send a review link to the customer',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      method: { type: 'string', enum: ['sms', 'email'] }
-                    },
-                    required: ['method']
-                  }
-                }
-              },
-              {
-                type: 'function',
-                function: {
-                  name: 'send_portal_link',
-                  description: 'Send a magic link to access the customer portal',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      method: { type: 'string', enum: ['sms', 'email'] }
-                    },
-                    required: ['method']
-                  }
-                }
-              },
-              {
-                type: 'function',
-                function: {
-                  name: 'check_user_details',
-                  description: 'Look up customer information',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      phone_number: { type: 'string' },
-                      claim_reference: { type: 'string' }
-                    },
-                    required: ['phone_number']
-                  }
-                }
-              },
-              {
-                type: 'function',
-                function: {
-                  name: 'check_claim_details',
-                  description: 'Get information about a specific claim',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      claim_reference: { type: 'string' }
-                    },
-                    required: ['claim_reference']
-                  }
-                }
-              },
-              {
-                type: 'function',
-                function: {
-                  name: 'check_requirements',
-                  description: 'Check what documents are still needed',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      claim_reference: { type: 'string' }
-                    },
-                    required: ['claim_reference']
+                    required: ['query']
                   }
                 }
               }
@@ -350,69 +324,40 @@ class VoiceSession {
   }
 
   async handleToolCall(toolName, args, callId) {
-    console.log(`🔧 Processing tool: ${toolName} for call ${this.callSid}`)
+    console.log(`🔧 [OpenAI] Processing tool: ${toolName} for call ${this.callSid}`)
     
     // Parse arguments if they're a string
     const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
     
-    // Placeholder tool responses
     let result = {}
     
-    switch (toolName) {
-      case 'schedule_callback':
-        result = {
-          success: true,
-          message: `Callback scheduled for ${parsedArgs.preferred_time}`
+    try {
+      // Handle knowledge base search locally (not in action registry)
+      if (toolName === 'search_knowledge_base') {
+        result = await this.searchKnowledgeBase(parsedArgs.query, parsedArgs.category)
+        console.log(`🧠 Knowledge search: "${parsedArgs.query}" in ${parsedArgs.category || 'all'}`)
+      } else {
+        // Use voice action registry for all business functions
+        const context = {
+          callSid: this.callSid,
+          from: this.from || 'unknown',
+          provider: 'openai'
         }
-        console.log(`📅 Scheduled callback: ${parsedArgs.preferred_time}`)
-        break
         
-      case 'send_review_link':
-        result = {
-          success: true,
-          message: `Review link sent via ${parsedArgs.method}`
-        }
-        console.log(`📧 Sent review link via ${parsedArgs.method}`)
-        break
-        
-      case 'send_portal_link':
-        result = {
-          success: true,
-          message: `Portal link sent via ${parsedArgs.method}`
-        }
-        console.log(`🔗 Sent portal link via ${parsedArgs.method}`)
-        break
-        
-      case 'check_user_details':
-        result = {
-          found: true,
-          name: 'Test User',
-          claims: 1
-        }
-        console.log(`👤 Checked user details for ${parsedArgs.phone_number}`)
-        break
-        
-      case 'check_claim_details':
-        result = {
-          status: 'under_review',
-          lender: 'Test Lender',
-          amount: '£2,500'
-        }
-        console.log(`📋 Checked claim: ${parsedArgs.claim_reference}`)
-        break
-        
-      case 'check_requirements':
-        result = {
-          complete: false,
-          missing: ['Bank statement', 'Proof of payment']
-        }
-        console.log(`📝 Checked requirements for: ${parsedArgs.claim_reference}`)
-        break
-        
-      default:
-        result = {
-          error: `Unknown tool: ${toolName}`
-        }
+        result = await voiceActionRegistry.execute(toolName, context, parsedArgs)
+      }
+      
+    } catch (error) {
+      console.error(`❌ [OpenAI] Tool execution failed: ${toolName}`, {
+        error: error.message,
+        callSid: this.callSid
+      })
+      
+      result = {
+        success: false,
+        error: error.message,
+        message: "I'm sorry, I couldn't complete that action right now. Please try again or contact us directly."
+      }
     }
     
     // Send tool result back to OpenAI
@@ -430,6 +375,98 @@ class VoiceSession {
       this.openaiWs.send(JSON.stringify({
         type: 'response.create'
       }))
+    }
+  }
+
+  // Knowledge base search method
+  async searchKnowledgeBase(query, category) {
+    // Simplified knowledge base - can be expanded with full KB_SUMMARY from modules/ai-agents/knowledge/kb-summary.ts
+    const knowledgeBase = {
+      legitimacy: {
+        title: "Legitimacy & Credibility",
+        content: [
+          "This is a real industry-wide issue investigated by the FCA",
+          "Motor finance brokers secretly increased rates 2007-2021 for higher commissions", 
+          "FCA banned these practices in January 2021",
+          "Supreme Court 2024 ruling confirmed claim pathways remain valid",
+          "We're FCA-regulated (ref 838936) and backed by Prowse Phillips Law",
+          "Multiple court cases already won by consumers"
+        ]
+      },
+      eligibility: {
+        title: "Who Can Claim", 
+        content: [
+          "PCP and HP agreements 2007-2021 mainly affected",
+          "Each agreement is a separate case",
+          "Complaints made against lenders/finance providers",
+          "We can find old agreements back to 2007",
+          "Lenders often delete records after 6 years"
+        ]
+      },
+      fees: {
+        title: "Costs & Fees",
+        content: [
+          "No-win-no-fee structure",
+          "Capped at 30% + VAT on sliding scale", 
+          "Lower percentage for higher recovery amounts",
+          "You only pay if we successfully recover money",
+          "No upfront costs"
+        ]
+      },
+      timing: {
+        title: "Timeline & Process",
+        content: [
+          "FCA pause until December 4, 2025",
+          "Most payments expected early 2026",
+          "Customers can still complain now",
+          "£9-18 billion total compensation scheme confirmed",
+          "We handle all lender chasing and communications"
+        ]
+      }
+    }
+
+    try {
+      // Search for relevant information
+      let searchResults = []
+      const searchTerm = query.toLowerCase()
+
+      // If category is specified, search within that category
+      if (category && knowledgeBase[category]) {
+        const categoryData = knowledgeBase[category]
+        const relevantContent = categoryData.content.filter(item => 
+          item.toLowerCase().includes(searchTerm)
+        )
+        
+        if (relevantContent.length > 0) {
+          searchResults = relevantContent
+        }
+      } else {
+        // Search across all categories
+        for (const [cat, data] of Object.entries(knowledgeBase)) {
+          const relevantContent = data.content.filter(item => 
+            item.toLowerCase().includes(searchTerm)
+          )
+          searchResults = searchResults.concat(relevantContent.map(content => 
+            `${data.title}: ${content}`
+          ))
+        }
+      }
+
+      return {
+        success: true,
+        query: query,
+        category: category || 'all',
+        results: searchResults.slice(0, 3), // Limit to top 3 results
+        found: searchResults.length > 0
+      }
+    } catch (error) {
+      console.error('Knowledge base search error:', error)
+      return {
+        success: false,
+        query: query,
+        error: 'Search failed',
+        results: []
+      }
     }
   }
 
