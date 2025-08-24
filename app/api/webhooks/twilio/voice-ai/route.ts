@@ -54,38 +54,33 @@ export async function POST(request: NextRequest) {
     // Basic Twilio signature validation could go here
     // For now, we'll trust the middleware and environment checks
 
-    // Generate TwiML for AI voice streaming
-    const streamToken = process.env.VOICE_STREAM_TOKEN || 'set-a-random-dev-token'
+    // Use Hume's direct Twilio integration endpoint
+    // This handles audio conversion and all WebSocket management automatically
+    const humeApiKey = process.env.HUME_API_KEY || ''
+    const humeConfigId = process.env.HUME_CONFIG_ID || 'd5e403eb-9a95-4821-8b95-e1dd4702f0d5'
     
-    // Use PartyKit WebSocket bridge for Hume EVI voice service
-    // Can be overridden with WS_VOICE_URL environment variable
-    const partyKitUrl = process.env.PARTYKIT_URL || 'rmc-voice-bridge.jamesclaimtechio.partykit.dev'
-    const wsUrl = process.env.WS_VOICE_URL || `wss://${partyKitUrl}/parties/main/${callSid}`
+    // Build Hume's Twilio endpoint URL with authentication
+    const humeEndpoint = `https://api.hume.ai/v0/evi/twilio?config_id=${humeConfigId}&api_key=${humeApiKey}`
     
-    console.log(`🎙️ [AI-VOICE] Using WebSocket URL: ${wsUrl}`)
+    console.log(`🎙️ [AI-VOICE] Using Hume Direct Twilio Endpoint`)
+    console.log(`🎙️ [AI-VOICE] Config ID: ${humeConfigId}`)
+    console.log(`🎙️ [AI-VOICE] API Key: ${humeApiKey ? 'SET' : 'NOT SET'} (${humeApiKey?.substring(0, 10)}...)`)
     console.log(`🎙️ [AI-VOICE] Environment: ${environmentName}`)
-    console.log(`🎙️ [AI-VOICE] Stream Token: ${streamToken ? 'SET' : 'NOT SET'} (${streamToken?.substring(0, 10)}...)`)
     
+    // Redirect the call to Hume's Twilio endpoint
+    // Hume will handle all audio conversion from μ-law automatically
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Start>
-    <Stream url="${wsUrl}">
-      <Parameter name="env" value="${environmentName}"/>
-      <Parameter name="auth" value="${streamToken}"/>
-      <Parameter name="callSid" value="${callSid}"/>
-      <Parameter name="from" value="${from}"/>
-    </Stream>
-  </Start>
-  <Say voice="alice">Connecting you to the AI assistant. Please hold while we establish the connection.</Say>
+  <Redirect method="POST">${humeEndpoint}</Redirect>
 </Response>`
 
-    console.log(`🎙️ [AI-VOICE] Generated TwiML for call ${callSid}`)
+    console.log(`🎙️ [AI-VOICE] Generated TwiML redirect for call ${callSid}`)
     console.log(`📄 [AI-VOICE] TwiML Response:`)
     console.log(twiml)
-    console.log(`🔗 [AI-VOICE] Stream Parameters:`, {
-      url: wsUrl,
-      env: environmentName,
-      auth: streamToken?.substring(0, 10) + '...',
+    console.log(`🔗 [AI-VOICE] Hume will handle:`, {
+      audioConversion: 'μ-law to supported format',
+      emotionalIntelligence: 'Built-in EVI',
+      voiceModel: 'Configured in Hume dashboard',
       callSid,
       from
     })
@@ -139,10 +134,20 @@ export async function GET() {
 
   return NextResponse.json({
     success: true,
-    message: 'AI Voice webhook ready',
+    message: 'AI Voice webhook ready (Hume Direct Integration)',
     endpoint: 'POST /api/webhooks/twilio/voice-ai',
     environment: environmentName,
-    wsEndpoint: process.env.WS_VOICE_URL || `wss://${process.env.PARTYKIT_URL || 'rmc-voice-bridge.jamesclaimtechio.partykit.dev'}/parties/main/[callSid]`,
+    humeIntegration: {
+      mode: 'Direct Twilio Endpoint',
+      configId: process.env.HUME_CONFIG_ID || 'd5e403eb-9a95-4821-8b95-e1dd4702f0d5',
+      apiKeySet: !!process.env.HUME_API_KEY,
+      features: [
+        'Automatic μ-law audio conversion',
+        'Built-in emotional intelligence',
+        'British voice support',
+        'Natural interruption handling'
+      ]
+    },
     timestamp: new Date().toISOString(),
     debug: debugInfo
   })

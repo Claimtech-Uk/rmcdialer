@@ -15,6 +15,7 @@
   "type": "commonjs",
   "dependencies": {
     "@types/node": "^24.3.0",
+    "hume": "^0.13.3",
     "partykit": "^0.0.115",
     "typescript": "^5.9.2"
   }
