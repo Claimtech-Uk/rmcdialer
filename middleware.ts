@@ -88,21 +88,32 @@ export function middleware(request: NextRequest) {
   if (devRestriction) return devRestriction
 
   // 🚫 PRODUCTION SAFETY: Block AI voice endpoints when feature disabled
-  // Note: AI voice webhook checks are handled in the route itself for better control
-  if (request.nextUrl.pathname.startsWith('/api/ai-voice/')) {
-    if (process.env.ENABLE_AI_VOICE_AGENT !== 'true') {
+  // BUT allow in development environments
+  const isAIVoiceEndpoint = request.nextUrl.pathname.startsWith('/api/ai-voice/') || 
+                            request.nextUrl.pathname.startsWith('/api/webhooks/twilio/voice-ai')
+  
+  if (isAIVoiceEndpoint) {
+    const environmentName = process.env.ENVIRONMENT_NAME || ''
+    const isDevelopment = environmentName.endsWith('-development')
+    const isFeatureEnabled = process.env.ENABLE_AI_VOICE_AGENT === 'true'
+    
+    // Allow in dev environments OR when feature is explicitly enabled
+    if (!isDevelopment && !isFeatureEnabled) {
       console.log('🚫 AI Voice agent blocked - feature disabled in production')
       return NextResponse.json({ 
         error: 'AI Voice agent disabled',
         mode: 'production-safety',
-        path: request.nextUrl.pathname
+        path: request.nextUrl.pathname,
+        environment: environmentName
       }, { status: 403 })
     }
-  }
-  
-  // Allow voice-ai webhook to handle its own feature flag checks
-  if (request.nextUrl.pathname.startsWith('/api/webhooks/twilio/voice-ai')) {
-    console.log('🎙️ [AI-VOICE] Allowing voice-ai webhook to handle feature flags internally')
+    
+    console.log('✅ AI Voice endpoint allowed:', {
+      path: request.nextUrl.pathname,
+      environment: environmentName,
+      isDevelopment,
+      featureEnabled: isFeatureEnabled
+    })
   }
 
   // CRITICAL: Allow Twilio webhooks, audio endpoints, and CRON jobs to bypass authentication

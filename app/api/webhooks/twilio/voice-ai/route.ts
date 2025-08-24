@@ -10,41 +10,37 @@ export const dynamic = 'force-dynamic'
  * Separate from production voice webhook
  */
 export async function POST(request: NextRequest) {
+  const environmentName = process.env.ENVIRONMENT_NAME || ''
+  const isDevelopment = environmentName.endsWith('-development')
+  const isFeatureEnabled = FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT
+  
   // Debug logging
-  console.log('🔍 [AI-VOICE-DEBUG] Environment variables:', {
+  console.log('🔍 [AI-VOICE-DEBUG] Request received:', {
     ENABLE_AI_VOICE_AGENT: process.env.ENABLE_AI_VOICE_AGENT,
-    FEATURE_FLAG_VALUE: FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT,
-    ENVIRONMENT_NAME: process.env.ENVIRONMENT_NAME,
+    FEATURE_FLAG_VALUE: isFeatureEnabled,
+    ENVIRONMENT_NAME: environmentName,
+    isDevelopment,
     NODE_ENV: process.env.NODE_ENV
   })
   
-  // Feature flag check (production safety)
-  if (!FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT) {
+  // Allow in dev environments OR when feature is explicitly enabled
+  if (!isDevelopment && !isFeatureEnabled) {
+    console.log('🚫 [AI-VOICE] Blocked - not development and feature disabled')
     return NextResponse.json({ 
-      error: 'AI Voice agent disabled',
+      error: 'AI Voice agent disabled in production',
       mode: 'production-safety',
       path: request.nextUrl.pathname,
-      debug: {
-        envVar: process.env.ENABLE_AI_VOICE_AGENT,
-        flagValue: FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT,
-        environmentName: process.env.ENVIRONMENT_NAME
-      }
-    }, { status: 403 })
-  }
-
-  // Environment check (dev-only)
-  const environmentName = process.env.ENVIRONMENT_NAME || ''
-  if (!environmentName.endsWith('-development')) {
-    return NextResponse.json({ 
-      error: 'AI Voice agent only available in development environments',
       environment: environmentName,
       debug: {
+        envVar: process.env.ENABLE_AI_VOICE_AGENT,
+        flagValue: isFeatureEnabled,
         environmentName,
-        requiredSuffix: '-development',
-        checkResult: environmentName.endsWith('-development')
+        isDevelopment
       }
     }, { status: 403 })
   }
+  
+  console.log('✅ [AI-VOICE] Request allowed - proceeding with call handling')
 
   try {
     const formData = await request.formData()
@@ -119,18 +115,23 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
+  const environmentName = process.env.ENVIRONMENT_NAME || ''
+  const isDevelopment = environmentName.endsWith('-development')
+  const isFeatureEnabled = FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT
+  
   // Debug info in GET request
   const debugInfo = {
     ENABLE_AI_VOICE_AGENT: process.env.ENABLE_AI_VOICE_AGENT,
-    FEATURE_FLAG_VALUE: FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT,
-    ENVIRONMENT_NAME: process.env.ENVIRONMENT_NAME,
+    FEATURE_FLAG_VALUE: isFeatureEnabled,
+    ENVIRONMENT_NAME: environmentName,
+    isDevelopment,
     NODE_ENV: process.env.NODE_ENV
   }
   
-  // Feature flag check
-  if (!FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT) {
+  // Allow in dev environments OR when feature is explicitly enabled
+  if (!isDevelopment && !isFeatureEnabled) {
     return NextResponse.json({ 
-      error: 'AI Voice agent disabled',
+      error: 'AI Voice agent disabled in production',
       mode: 'production-safety',
       debug: debugInfo
     }, { status: 403 })
@@ -140,7 +141,7 @@ export async function GET() {
     success: true,
     message: 'AI Voice webhook ready',
     endpoint: 'POST /api/webhooks/twilio/voice-ai',
-    environment: process.env.ENVIRONMENT_NAME || 'unknown',
+    environment: environmentName,
     wsEndpoint: process.env.WS_VOICE_URL || `wss://${process.env.PARTYKIT_URL || 'rmc-voice-bridge.jamesclaimtechio.partykit.dev'}/parties/main/[callSid]`,
     timestamp: new Date().toISOString(),
     debug: debugInfo
