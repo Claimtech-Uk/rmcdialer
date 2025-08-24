@@ -301,7 +301,10 @@ export default class VoiceParty implements Party.Server {
           console.error('Error message:', message.message);
         }
         if (message.code === 'I0100') {
-          console.error('💡 I0100 error - audio format should now be compatible with conversion');
+          console.error('🔴 I0100 is a HUME INTERNAL ERROR - Not our issue!');
+          console.error('📞 Contact Hume support: support@hume.ai');
+          console.error('💬 Or join Discord: https://discord.gg/hume');
+          console.error('ℹ️  Hume team has been automatically alerted');
         }
         break;
         
