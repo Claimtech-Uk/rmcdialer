@@ -272,4 +272,23 @@ export default class VoiceParty implements Party.Server {
   async onClose(conn: Party.Connection) {
     this.cleanup();
   }
+
+  async onRequest(request: Party.Request) {
+    // Handle HTTP requests (non-WebSocket)
+    return new Response(
+      JSON.stringify({
+        status: 'ready',
+        message: 'Voice Party WebSocket bridge is running',
+        party: this.room.id,
+        wsUrl: `wss://${request.headers.get('host')}/parties/voice/${this.room.id}`,
+        timestamp: new Date().toISOString()
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+  }
 }

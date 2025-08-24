@@ -88,8 +88,8 @@ export function middleware(request: NextRequest) {
   if (devRestriction) return devRestriction
 
   // 🚫 PRODUCTION SAFETY: Block AI voice endpoints when feature disabled
-  if (request.nextUrl.pathname.startsWith('/api/ai-voice/') || 
-      request.nextUrl.pathname.startsWith('/api/webhooks/twilio/voice-ai')) {
+  // Note: AI voice webhook checks are handled in the route itself for better control
+  if (request.nextUrl.pathname.startsWith('/api/ai-voice/')) {
     if (process.env.ENABLE_AI_VOICE_AGENT !== 'true') {
       console.log('🚫 AI Voice agent blocked - feature disabled in production')
       return NextResponse.json({ 
@@ -98,6 +98,11 @@ export function middleware(request: NextRequest) {
         path: request.nextUrl.pathname
       }, { status: 403 })
     }
+  }
+  
+  // Allow voice-ai webhook to handle its own feature flag checks
+  if (request.nextUrl.pathname.startsWith('/api/webhooks/twilio/voice-ai')) {
+    console.log('🎙️ [AI-VOICE] Allowing voice-ai webhook to handle feature flags internally')
   }
 
   // CRITICAL: Allow Twilio webhooks, audio endpoints, and CRON jobs to bypass authentication
