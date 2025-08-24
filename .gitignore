@@ -187,3 +187,4 @@ production-ready.log
 logs/
 *.log
 db-backups/
+.env.vercel
