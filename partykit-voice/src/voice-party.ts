@@ -107,55 +107,64 @@ export default class VoiceParty implements Party.Server {
     const HUME_API_KEY = await this.room.env.HUME_API_KEY as string;
     const HUME_CONFIG_ID = await this.room.env.HUME_CONFIG_ID as string;
     
+    console.log('🔑 Hume credentials check:', {
+      hasApiKey: !!HUME_API_KEY,
+      apiKeyLength: HUME_API_KEY?.length,
+      hasConfigId: !!HUME_CONFIG_ID,
+      configId: HUME_CONFIG_ID
+    });
+    
     if (!HUME_API_KEY || !HUME_CONFIG_ID) {
-      console.error('❌ Hume credentials not configured');
+      console.error('❌ Hume credentials not configured', {
+        HUME_API_KEY: HUME_API_KEY ? 'SET' : 'MISSING',
+        HUME_CONFIG_ID: HUME_CONFIG_ID || 'MISSING'
+      });
       return;
     }
 
     try {
       // Connect to Hume EVI WebSocket
-      this.humeWs = new WebSocket('wss://api.hume.ai/v0/evi/ws', {
-        headers: {
-          'X-Hume-Api-Key': HUME_API_KEY,
-        }
-      });
+      // Use the /chat endpoint with access_token (which is your API key)
+      const humeWsUrl = `wss://api.hume.ai/v0/evi/chat?access_token=${HUME_API_KEY}`;
+      console.log('🔗 Connecting to Hume WebSocket at: wss://api.hume.ai/v0/evi/chat');
+      console.log('📊 Using config:', HUME_CONFIG_ID);
+      
+      this.humeWs = new WebSocket(humeWsUrl);
 
       this.humeWs.addEventListener('open', () => {
         console.log(`🎭 Hume EVI connected for call ${this.callSid}`);
         
-        // Configure Hume session
-        this.humeWs!.send(JSON.stringify({
-          type: 'session_config',
-          config: {
-            config_id: HUME_CONFIG_ID,
-            audio_config: {
-              encoding: 'linear16',
-              sample_rate: 8000,
-              channels: 1
-            },
-            language: 'en-GB',
-            session_settings: {
-              custom_session_id: this.callSid,
-              context: {
-                caller_type: 'motor_finance_customer',
-                call_purpose: 'claim_inquiry',
-                preferred_style: 'british_professional'
-              }
-            }
-          }
-        }));
+        // Send the config_id to initialize the session
+        // The config_id contains all voice and behavior settings from Hume dashboard
+        const sessionInit = {
+          type: 'session_settings',
+          config_id: HUME_CONFIG_ID
+        };
+        
+        console.log('📤 Sending Hume session init:', JSON.stringify(sessionInit, null, 2));
+        this.humeWs!.send(JSON.stringify(sessionInit));
       });
 
       this.humeWs.addEventListener('message', (event) => {
-        this.handleHumeMessage(JSON.parse(event.data));
+        try {
+          const message = JSON.parse(event.data);
+          console.log('📨 Hume message received:', message.type);
+          this.handleHumeMessage(message);
+        } catch (error) {
+          console.error('❌ Failed to parse Hume message:', error, event.data);
+        }
       });
 
-      this.humeWs.addEventListener('close', () => {
-        console.log(`🔌 Hume EVI disconnected for call ${this.callSid}`);
+      this.humeWs.addEventListener('close', (event) => {
+        console.log(`🔌 Hume EVI disconnected for call ${this.callSid}`, {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean
+        });
       });
 
       this.humeWs.addEventListener('error', (error) => {
-        console.error(`❌ Hume WebSocket error:`, error);
+        console.error(`❌ Hume WebSocket error for call ${this.callSid}:`, error);
       });
       
     } catch (error) {
@@ -165,6 +174,8 @@ export default class VoiceParty implements Party.Server {
 
   handleHumeMessage(msg: any) {
     // Handle different Hume message types
+    console.log(`📝 Processing Hume message type: ${msg.type}`);
+    
     switch (msg.type) {
       case 'audio_output':
         if (this.twilioWs && msg.data) {
@@ -182,9 +193,23 @@ export default class VoiceParty implements Party.Server {
         }
         break;
         
+      case 'tool_call':
       case 'function_call':
         // Handle voice actions
+        console.log(`🔧 Function/tool call received:`, msg);
         this.handleVoiceAction(msg);
+        break;
+        
+      case 'user_message':
+        console.log(`💬 User said: ${msg.message?.content || msg.text}`);
+        break;
+        
+      case 'assistant_message':
+        console.log(`🤖 Assistant: ${msg.message?.content || msg.text}`);
+        break;
+        
+      case 'session_settings_response':
+        console.log(`✅ Session configured successfully`);
         break;
         
       case 'emotion':
@@ -193,8 +218,11 @@ export default class VoiceParty implements Party.Server {
         break;
         
       case 'error':
-        console.error(`❌ Hume error:`, msg.error);
+        console.error(`❌ Hume error:`, msg.error || msg.message || msg);
         break;
+        
+      default:
+        console.log(`❓ Unknown Hume message type:`, msg);
     }
   }
 
