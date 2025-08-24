@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     // Use PartyKit WebSocket bridge for Hume EVI voice service
     // Can be overridden with WS_VOICE_URL environment variable
     const partyKitUrl = process.env.PARTYKIT_URL || 'rmc-voice-bridge.jamesclaimtechio.partykit.dev'
-    const wsUrl = process.env.WS_VOICE_URL || `wss://${partyKitUrl}/parties/voice/${callSid}`
+    const wsUrl = process.env.WS_VOICE_URL || `wss://${partyKitUrl}/parties/main/${callSid}`
     
     console.log(`🎙️ [AI-VOICE] Using WebSocket URL: ${wsUrl}`)
     console.log(`🎙️ [AI-VOICE] Environment: ${environmentName}`)
@@ -113,7 +113,7 @@ export async function GET() {
     message: 'AI Voice webhook ready',
     endpoint: 'POST /api/webhooks/twilio/voice-ai',
     environment: process.env.ENVIRONMENT_NAME || 'unknown',
-    wsEndpoint: process.env.WS_VOICE_URL || `wss://${process.env.PARTYKIT_URL || 'rmc-voice-bridge.jamesclaimtechio.partykit.dev'}/parties/voice/[callSid]`,
+          wsEndpoint: process.env.WS_VOICE_URL || `wss://${process.env.PARTYKIT_URL || 'rmc-voice-bridge.jamesclaimtechio.partykit.dev'}/parties/main/[callSid]`,
     timestamp: new Date().toISOString()
   })
 }
