@@ -1,0 +1,147 @@
+# EC2 Voice Server Setup Documentation
+
+**Created:** 2025-08-23  
+**Purpose:** AI Voice Agent WebSocket Service (moved from App Runner due to WebSocket limitations)
+
+## 🔐 SSH Key Management
+
+### Key File Location
+```bash
+~/.ssh/rmc-voice-server.pem
+```
+
+**Full Path:** `/Users/cheshyy/.ssh/rmc-voice-server.pem`  
+**Permissions:** `400` (read-only for owner)  
+**Created:** 2025-08-23 11:49  
+
+### SSH Connection Command
+```bash
+ssh -i ~/.ssh/rmc-voice-server.pem ec2-user@54.155.120.236
+```
+
+## 🏗️ EC2 Instance Configuration
+
+### Instance Details
+- **Name:** RMC-Voice-WebSocket-Server
+- **Instance ID:** i-08144da8c45625fb8
+- **Instance Type:** t3.micro (1 vCPU, 1GB RAM)
+- **AMI:** Amazon Linux 2023
+- **Region:** eu-west-1 (Ireland)
+- **Public IP:** 54.155.120.236
+- **Private IP:** 172.31.43.249
+- **Key Pair:** rmc-voice-server
+- **IAM Role:** EC2-VoiceService-Role
+
+### Security Group Rules
+- **SSH (22):** Your IP only
+- **HTTP (8080):** 0.0.0.0/0 (WebSocket service port)
+
+### IAM Role
+- **Role Name:** EC2-VoiceService-Role
+- **Policies:** SecretsManagerReadWrite
+- **Purpose:** Access to `dev/openai/voice` secret
+
+## 🚀 Deployment Steps
+
+### 1. Connect to Instance
+```bash
+ssh -i ~/.ssh/rmc-voice-server.pem ec2-user@54.155.120.236
+```
+
+### 2. Install Dependencies
+```bash
+# Update system
+sudo yum update -y
+
+# Install Node.js (latest LTS)
+curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash -
+sudo yum install -y nodejs
+
+# Install Git
+sudo yum install -y git
+```
+
+### 3. Deploy Voice Service
+```bash
+# Clone repository
+git clone https://github.com/your-org/rmc-dialler.git
+cd rmc-dialler/services/voice-ws
+
+# Install dependencies
+npm install
+
+# Start service
+npm start
+```
+
+### 4. Configure as System Service
+```bash
+# Create systemd service file
+sudo nano /etc/systemd/system/voice-ws.service
+```
+
+## 🔧 Environment Variables (Set on EC2)
+- `ENVIRONMENT_NAME=staging-development`
+- `AI_VOICE_ALLOWED_ENVIRONMENTS=staging-development`
+- `VOICE_MAX_CONCURRENT_STREAMS=2`
+- `VOICE_STREAM_TOKEN=set-a-random-dev-token`
+- `AI_VOICE_MODEL=gpt-4o-realtime-preview-2024-12-17`
+- `AI_VOICE_NAME=alloy`
+- `DEBUG_OPENAI=true`
+- `DEBUG_TWILIO=false`
+
+**Note:** OpenAI API key is fetched from AWS Secrets Manager using IAM role.
+
+## 🧪 Testing
+
+### Health Check
+```bash
+curl http://54.155.120.236:8080/health
+```
+
+### WebSocket Test
+```bash
+curl -i -N -H "Connection: Upgrade" -H "Upgrade: websocket" \
+     -H "Sec-WebSocket-Key: test" -H "Sec-WebSocket-Version: 13" \
+     http://54.155.120.236:8080/twilio/media
+```
+
+## 🔄 Integration Points
+
+### Vercel Webhook URL Update
+Update `WS_VOICE_URL` environment variable in Vercel:
+```
+WS_VOICE_URL=ws://54.155.120.236:8080/twilio/media
+```
+
+**Live Instance WebSocket URL:**
+```
+ws://54.155.120.236:8080/twilio/media
+```
+
+### Twilio Configuration
+Update webhook URL in Twilio Console:
+```
+https://dev.solvosolutions.co.uk/api/webhooks/twilio/voice-ai?x-vercel-protection-bypass=devtwiliobypass2024secureaivoice
+```
+
+## 📝 Important Notes
+
+- **Security:** Never expose this key file or commit it to version control
+- **Backup:** Consider backing up the key file securely
+- **Access:** Only authorized team members should have access to this key
+- **Monitoring:** Set up CloudWatch monitoring for the EC2 instance
+- **Costs:** Monitor EC2 usage to control costs
+
+## 🚨 Emergency Access
+
+If you lose access to the key file:
+1. Stop the EC2 instance
+2. Create a new key pair
+3. Attach the new key pair to the instance
+4. Update this documentation
+
+---
+
+**Last Updated:** 2025-08-23  
+**Maintainer:** Development Team

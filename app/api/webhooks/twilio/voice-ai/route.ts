@@ -42,9 +42,10 @@ export async function POST(request: NextRequest) {
     // Generate TwiML for AI voice streaming
     const streamToken = process.env.VOICE_STREAM_TOKEN || 'set-a-random-dev-token'
     
-    // Use ngrok secure tunnel for Hume EVI voice service
+    // Use PartyKit WebSocket bridge for Hume EVI voice service
     // Can be overridden with WS_VOICE_URL environment variable
-    const wsUrl = process.env.WS_VOICE_URL || 'wss://29d505f34193.ngrok-free.app/twilio/media'
+    const partyKitUrl = process.env.PARTYKIT_URL || 'rmc-voice-bridge.jamesclaimtechio.partykit.dev'
+    const wsUrl = process.env.WS_VOICE_URL || `wss://${partyKitUrl}/parties/voice/${callSid}`
     
     console.log(`🎙️ [AI-VOICE] Using WebSocket URL: ${wsUrl}`)
     console.log(`🎙️ [AI-VOICE] Environment: ${environmentName}`)
@@ -112,7 +113,7 @@ export async function GET() {
     message: 'AI Voice webhook ready',
     endpoint: 'POST /api/webhooks/twilio/voice-ai',
     environment: process.env.ENVIRONMENT_NAME || 'unknown',
-    wsEndpoint: process.env.WS_VOICE_URL || 'wss://29d505f34193.ngrok-free.app/twilio/media',
+    wsEndpoint: process.env.WS_VOICE_URL || `wss://${process.env.PARTYKIT_URL || 'rmc-voice-bridge.jamesclaimtechio.partykit.dev'}/parties/voice/[callSid]`,
     timestamp: new Date().toISOString()
   })
 }
