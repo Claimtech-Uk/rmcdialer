@@ -140,10 +140,22 @@ export default class VoiceParty implements Party.Server {
               // Convert μ-law to linear16 PCM
               const convertedAudio = this.convertMulawToLinear16(msg.media.payload);
               
+              // IMPORTANT: Hume EVI expects browser audio with:
+              // - Echo cancellation (telephony doesn't have this)
+              // - Noise suppression (telephony has different characteristics) 
+              // - Auto gain control (telephony is already normalized)
+              // We're sending raw telephony audio which may cause issues
+              
               // Send audio_input message following Hume's specification
               const audioMessage = {
                 type: 'audio_input',
-                data: convertedAudio // Base64 encoded linear16 PCM
+                data: convertedAudio, // Base64 encoded linear16 PCM
+                // Add metadata to indicate telephony source
+                metadata: {
+                  source: 'twilio_telephony',
+                  sample_rate: 8000,
+                  encoding: 'linear16_converted_from_mulaw'
+                }
               };
               
               // Send ALL chunks for continuous stream (Hume requirement)
@@ -197,11 +209,17 @@ export default class VoiceParty implements Party.Server {
       console.log('🎵 Audio format: Converting μ-law to linear16 PCM');
       
       // Build WebSocket URL with authentication
+      // IMPORTANT: Hume EVI expects browser-like audio with echo cancellation,
+      // noise suppression, and auto gain control. Twilio telephony lacks these.
       const wsUrl = new URL('wss://api.hume.ai/v0/evi/chat');
       wsUrl.searchParams.append('api_key', HUME_API_KEY);
       if (HUME_CONFIG_ID) {
         wsUrl.searchParams.append('config_id', HUME_CONFIG_ID);
       }
+      
+      // Tell Hume this is telephony audio, not browser audio
+      wsUrl.searchParams.append('audio_source', 'telephony');
+      wsUrl.searchParams.append('sample_rate', '8000');
       
       console.log('🔐 Using API key authentication');
       
@@ -213,6 +231,28 @@ export default class VoiceParty implements Party.Server {
         console.log('✅ Hume EVI WebSocket opened successfully!');
         console.log('⏳ Waiting for session to be ready...');
         console.log('🎵 Audio conversion: μ-law → linear16 PCM active');
+        console.log('⚠️  NOTE: Sending telephony audio (no echo cancellation/noise suppression)');
+        
+        // Send initial configuration for telephony audio
+        const initMessage = {
+          type: 'session_settings',
+          session_settings: {
+            audio: {
+              source_type: 'telephony',
+              sample_rate: 8000,
+              encoding: 'linear16',
+              // Telephony doesn't have these browser features:
+              echo_cancellation: false,
+              noise_suppression: false,
+              auto_gain_control: false
+            }
+          }
+        };
+        
+        console.log('📤 Sending telephony audio configuration to Hume');
+        if (this.humeWs) {
+          this.humeWs.send(JSON.stringify(initMessage));
+        }
       });
       
       this.humeWs.addEventListener('message', (event) => {
