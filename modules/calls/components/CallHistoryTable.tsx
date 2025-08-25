@@ -10,7 +10,7 @@ import { Clock, Phone, MessageSquare, Calendar, User, Filter, ChevronDown, Chevr
 import { format, subDays, isAfter, isBefore } from 'date-fns'
 import { api } from '@/lib/trpc/client'
 import { useToast } from '@/modules/core/hooks/use-toast'
-import { AsyncTranscriptionButton } from '@/modules/transcription-async/client'
+import { TranscriptionButton } from '@/modules/transcription/components/TranscriptionButton'
 import type { CallHistoryEntry } from '../types/call.types'
 
 interface CallHistoryTableProps {
@@ -750,14 +750,14 @@ export function CallHistoryTable({
                           {/* Recording Player */}
                           <RecordingPlayer call={call} />
                           
-                          {/* Async Transcription Button - Lightweight & SSR-Safe */}
-                          <AsyncTranscriptionButton
-                            callId={call.id}
-                            disabled={!call.recordingUrl || call.recordingStatus !== 'completed'}
-                            size="sm"
-                            initialStatus={call.transcriptStatus as any}
-                            initialDownloadUrl={call.transcriptUrl}
-                          />
+                                                      {/* Sync Transcription Button - Reliable & Working */}
+                            <TranscriptionButton
+                              callSessionId={call.id}
+                              disabled={!call.recordingUrl || call.recordingStatus !== 'completed'}
+                              currentStatus={call.transcriptStatus}
+                              size="sm"
+                              showText={false}
+                            />
                           
                           {/* Portal Link Button */}
                           <Button

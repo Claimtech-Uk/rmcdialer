@@ -222,7 +222,7 @@ export default class VoiceParty implements Party.Server {
           type: 'session_settings',
           // NO nesting under 'session_settings' - direct under root
           audio: {
-            format: 'linear16',     // MUST be 'format' not 'encoding'
+            encoding: 'linear16',   // API expects 'encoding' not 'format'
             sample_rate: 8000,      // Twilio telephony is 8kHz
             channels: 1             // Mono audio (REQUIRED field)
           }
