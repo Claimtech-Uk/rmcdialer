@@ -1,9 +1,9 @@
 {
   "$schema": "https://partykit.io/schema.json",
   "name": "rmc-voice-bridge",
-  "main": "dist/voice-party-audio.js",
+  "main": "dist/voice-party-fixed.js",
   "parties": {
-    "voice": "dist/voice-party-audio.js"
+    "voice": "dist/voice-party-fixed.js"
   },
   "compatibilityDate": "2024-01-01"
 }
