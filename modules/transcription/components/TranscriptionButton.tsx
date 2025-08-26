@@ -41,15 +41,16 @@ export function TranscriptionButton({
     callSessionId !== 'undefined' && 
     callSessionId !== 'null'
 
-  // Don't even try to use the hook until mounted AND valid ID
-  const transcriptionHook = (isMounted && isValidCallSessionId) ? useTranscription({
-    callSessionId,
+  // ALWAYS call the hook (React Rules of Hooks - must be unconditional)
+  // But pass a safe dummy ID when not ready to prevent errors
+  const transcriptionHook = useTranscription({
+    callSessionId: (isMounted && isValidCallSessionId) ? callSessionId : 'dummy-id-not-ready',
     // Start with no auto-refresh or initial fetch to prevent N requests on large tables.
     // We'll enable auto-refresh after a user action (trigger/retranscribe).
     autoRefresh: false,
     initialFetch: false,
-    onStatusChange
-  }) : null
+    onStatusChange: (isMounted && isValidCallSessionId) ? onStatusChange : undefined
+  })
 
   // Show loading state until mounted to prevent hydration issues
   if (!isMounted) {
@@ -67,7 +68,7 @@ export function TranscriptionButton({
   }
 
   // Return safe fallback if callSessionId is invalid to prevent URL errors
-  if (!isValidCallSessionId || !transcriptionHook) {
+  if (!isValidCallSessionId) {
     return (
       <Button
         variant="ghost"

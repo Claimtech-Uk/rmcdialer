@@ -241,7 +241,7 @@ export function useTranscription(options: UseTranscriptionOptions): UseTranscrip
         stopStatusPolling()
       }
     }, refreshInterval)
-  }, [refreshInterval, status, statusQuery])
+  }, [refreshInterval, status]) // Removed statusQuery from deps
 
   const stopStatusPolling = useCallback(() => {
     if (refreshIntervalRef.current) {
@@ -263,7 +263,7 @@ export function useTranscription(options: UseTranscriptionOptions): UseTranscrip
 
   const refreshStatus = useCallback(async () => {
     await statusQuery.refetch()
-  }, [statusQuery])
+  }, []) // Removed statusQuery from deps - it's stable from useQuery
 
   const downloadTranscript = useCallback(async (format: 'txt' | 'json' | 'srt' = 'txt') => {
     await downloadMutation.mutateAsync({
@@ -284,7 +284,7 @@ export function useTranscription(options: UseTranscriptionOptions): UseTranscrip
       }, 100)
       return () => clearTimeout(timeoutId)
     }
-  }, [initialFetch, callSessionId, statusQuery])
+  }, [initialFetch, callSessionId]) // Removed statusQuery from deps to prevent infinite re-renders
 
   // Auto-refresh management (only in browser environment)
   useEffect(() => {

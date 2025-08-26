@@ -1,7 +1,7 @@
 import type * as Party from "partykit/server";
 
-// Version: Hume Docs Compliant - Deploy: 2025-08-24-v7
-// FIXED: Follows Hume documentation exactly for session_settings and audio_input
+// Version: TypedArray Buffer Fix - Deploy: 2025-08-24-v10
+// FIXED: Proper buffer handling for WAV to PCM conversion
 
 // μ-law to linear16 conversion table (ITU-T G.711 standard)
 const MULAW_DECODE_TABLE = new Int16Array([
@@ -47,6 +47,7 @@ export default class VoiceParty implements Party.Server {
   isSessionReady: boolean = false;
   sessionReadyLogged: boolean = false;
   audioChunkCounter: number = 0;
+  outputChunkCounter: number = 0;
   
   constructor(public room: Party.Room) {}
 
@@ -91,6 +92,104 @@ export default class VoiceParty implements Party.Server {
       console.error('❌ Audio conversion error:', error);
       return base64MulawAudio; // Return original if conversion fails
     }
+  }
+
+  /**
+   * Convert WAV file from Hume back to μ-law for Twilio
+   * IMPORTANT: Hume sends WAV files, not raw PCM!
+   * @param base64WavAudio - Base64 encoded WAV file from Hume
+   * @returns Base64 encoded μ-law audio for Twilio
+   */
+  convertLinear16ToMulaw(base64WavAudio: string): string {
+    try {
+      // Decode base64 to binary
+      const binaryString = atob(base64WavAudio);
+      const wavBytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        wavBytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // WAV files have headers - find the 'data' chunk
+      // Standard WAV header is 44 bytes for PCM, but let's parse it properly
+      let dataOffset = 44; // Default for standard PCM WAV
+      
+      // Look for 'data' chunk (safer approach)
+      // 'data' in hex: 0x64 0x61 0x74 0x61
+      for (let i = 36; i < wavBytes.length - 4; i++) {
+        if (wavBytes[i] === 0x64 && wavBytes[i+1] === 0x61 && 
+            wavBytes[i+2] === 0x74 && wavBytes[i+3] === 0x61) { // 'data'
+          dataOffset = i + 8; // Skip 'data' marker and size field (4+4 bytes)
+          console.log(`📦 Found WAV data chunk at offset ${dataOffset}`);
+          break;
+        }
+      }
+
+      // Extract PCM data (skip WAV header)
+      const pcmBytes = wavBytes.slice(dataOffset);
+      
+      // Create a new buffer from the sliced bytes (fixes TypedArray issue)
+      const pcmBuffer = new ArrayBuffer(pcmBytes.length);
+      new Uint8Array(pcmBuffer).set(pcmBytes);
+      
+      // Convert byte array to Int16Array (little-endian)
+      const pcmData = new Int16Array(pcmBuffer);
+      
+      // Convert each linear16 sample to μ-law
+      const mulawData = new Uint8Array(pcmData.length);
+      for (let i = 0; i < pcmData.length; i++) {
+        mulawData[i] = this.linear16ToMulawSample(pcmData[i]);
+      }
+
+      // Convert μ-law data to base64
+      let binaryMulaw = '';
+      for (let i = 0; i < mulawData.length; i++) {
+        binaryMulaw += String.fromCharCode(mulawData[i]);
+      }
+      
+      // Log first conversion and then occasionally
+      this.outputChunkCounter = (this.outputChunkCounter || 0) + 1;
+      if (this.outputChunkCounter === 1 || this.outputChunkCounter % 10 === 0) {
+        console.log(`🔊 WAV→μ-law #${this.outputChunkCounter}: ${wavBytes.length} bytes → ${mulawData.length} samples`);
+      }
+      
+      return btoa(binaryMulaw);
+    } catch (error) {
+      console.error('❌ WAV → μ-law conversion error:', error);
+      return base64WavAudio;
+    }
+  }
+
+  /**
+   * Convert a single linear16 PCM sample to μ-law
+   * Using ITU-T G.711 standard algorithm
+   */
+  linear16ToMulawSample(sample: number): number {
+    const MULAW_BIAS = 0x84;
+    const MULAW_CLIP = 32635;
+    
+    // Get sign bit
+    let sign = (sample >> 8) & 0x80;
+    
+    // Get magnitude
+    if (sign) sample = -sample;
+    
+    // Clip magnitude
+    if (sample > MULAW_CLIP) sample = MULAW_CLIP;
+    
+    // Add bias
+    sample = sample + MULAW_BIAS;
+    
+    // Find exponent
+    let exponent = 7;
+    for (let expMask = 0x4000; (sample & expMask) === 0 && exponent > 0; exponent--, expMask >>= 1) {}
+    
+    // Extract mantissa
+    let mantissa = (sample >> (exponent + 3)) & 0x0F;
+    
+    // Combine and invert
+    let mulawByte = ~(sign | (exponent << 4) | mantissa);
+    
+    return mulawByte & 0xFF;
   }
 
   async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
@@ -282,18 +381,26 @@ export default class VoiceParty implements Party.Server {
   handleHumeMessage(message: any) {
     switch (message.type) {
       case 'audio_output':
-        // TODO: Implement audio queue as per Hume docs
-        // "Audio from EVI can arrive faster than it is spoken"
-        // For now, send directly to Twilio
+        // Convert linear16 back to μ-law for Twilio
         if (this.twilioWs && message.data) {
-          // TODO: Convert linear16 back to μ-law for Twilio
-          this.twilioWs.send(JSON.stringify({
-            event: 'media',
-            streamSid: this.streamSid,
-            media: {
-              payload: message.data // Audio from Hume (linear16)
+          try {
+            const convertedAudio = this.convertLinear16ToMulaw(message.data);
+            
+            this.twilioWs.send(JSON.stringify({
+              event: 'media',
+              streamSid: this.streamSid,
+              media: {
+                payload: convertedAudio // Now sending μ-law to Twilio
+              }
+            }));
+            
+            // Log occasionally to track output
+            if (Math.random() > 0.95) {
+              console.log('🔊 Sending audio back to Twilio (linear16 → μ-law)');
             }
-          }));
+          } catch (error) {
+            console.error('❌ Error converting output audio:', error);
+          }
         }
         break;
         
@@ -387,6 +494,7 @@ export default class VoiceParty implements Party.Server {
     this.isSessionReady = false;
     this.sessionReadyLogged = false;
     this.audioChunkCounter = 0;
+    this.outputChunkCounter = 0;
   }
   
   async onRequest(req: Party.Request) {
