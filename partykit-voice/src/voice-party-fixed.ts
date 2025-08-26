@@ -1,7 +1,7 @@
 import type * as Party from "partykit/server";
 
-// Version: TypedArray Buffer Fix - Deploy: 2025-08-24-v10
-// FIXED: Proper buffer handling for WAV to PCM conversion
+// Version: Twilio Clear Event Fix - Deploy: 2025-08-24-v11
+// FIXED: Added required clear event before audio playback + better logging
 
 // μ-law to linear16 conversion table (ITU-T G.711 standard)
 const MULAW_DECODE_TABLE = new Int16Array([
@@ -48,6 +48,8 @@ export default class VoiceParty implements Party.Server {
   sessionReadyLogged: boolean = false;
   audioChunkCounter: number = 0;
   outputChunkCounter: number = 0;
+  outputsSent: number = 0;
+  hasSentClear: boolean = false;
   
   constructor(public room: Party.Room) {}
 
@@ -381,26 +383,43 @@ export default class VoiceParty implements Party.Server {
   handleHumeMessage(message: any) {
     switch (message.type) {
       case 'audio_output':
-        // Convert linear16 back to μ-law for Twilio
+        // Convert WAV to μ-law and send to Twilio
         if (this.twilioWs && message.data) {
           try {
+            // Send clear event first (REQUIRED by Twilio!)
+            if (!this.hasSentClear) {
+              console.log('📤 Sending clear event to Twilio (required before audio)');
+              this.twilioWs.send(JSON.stringify({
+                event: 'clear',
+                streamSid: this.streamSid
+              }));
+              this.hasSentClear = true;
+            }
+            
             const convertedAudio = this.convertLinear16ToMulaw(message.data);
             
-            this.twilioWs.send(JSON.stringify({
+            // Send the audio chunk
+            const mediaMessage = JSON.stringify({
               event: 'media',
               streamSid: this.streamSid,
               media: {
-                payload: convertedAudio // Now sending μ-law to Twilio
+                payload: convertedAudio // μ-law audio for Twilio
               }
-            }));
+            });
             
-            // Log occasionally to track output
-            if (Math.random() > 0.95) {
-              console.log('🔊 Sending audio back to Twilio (linear16 → μ-law)');
+            this.twilioWs.send(mediaMessage);
+            
+            // Log first few and then occasionally
+            this.outputsSent++;
+            if (this.outputsSent <= 3 || this.outputsSent % 10 === 0) {
+              console.log(`🔊 Sent audio chunk #${this.outputsSent} to Twilio (${convertedAudio.length} chars)`);
             }
           } catch (error) {
-            console.error('❌ Error converting output audio:', error);
+            console.error('❌ Error sending audio to Twilio:', error);
+            console.error('Error details:', error instanceof Error ? error.message : error);
           }
+        } else {
+          console.log('⚠️ No Twilio connection or data for audio_output');
         }
         break;
         
@@ -495,6 +514,8 @@ export default class VoiceParty implements Party.Server {
     this.sessionReadyLogged = false;
     this.audioChunkCounter = 0;
     this.outputChunkCounter = 0;
+    this.outputsSent = 0;
+    this.hasSentClear = false;
   }
   
   async onRequest(req: Party.Request) {
