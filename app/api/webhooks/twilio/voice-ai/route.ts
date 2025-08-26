@@ -1,61 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { FEATURE_FLAGS } from '@/lib/config/features'
+import { getTwilioClient } from '@/modules/twilio-voice/services/twilio-client'
 
-export const dynamic = 'force-dynamic'
+// CRITICAL: This endpoint is for AI voice ONLY
+// Protected by middleware when ENABLE_AI_VOICE_AGENT=false
 
-/**
- * AI Voice Webhook (Dev Only)
- * 
- * Handles Twilio voice calls for AI voice agent development
- * Separate from production voice webhook
- */
 export async function POST(request: NextRequest) {
   const environmentName = process.env.ENVIRONMENT_NAME || ''
   const isDevelopment = environmentName.endsWith('-development')
-  const isFeatureEnabled = FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT
   
-  // Debug logging
-  console.log('🔍 [AI-VOICE-DEBUG] Request received:', {
-    ENABLE_AI_VOICE_AGENT: process.env.ENABLE_AI_VOICE_AGENT,
-    FEATURE_FLAG_VALUE: isFeatureEnabled,
-    ENVIRONMENT_NAME: environmentName,
-    isDevelopment,
-    NODE_ENV: process.env.NODE_ENV
-  })
-  
-  // Allow in dev environments OR when feature is explicitly enabled
-  if (!isDevelopment && !isFeatureEnabled) {
-    console.log('🚫 [AI-VOICE] Blocked - not development and feature disabled')
-    return NextResponse.json({ 
-      error: 'AI Voice agent disabled in production',
-      mode: 'production-safety',
-      path: request.nextUrl.pathname,
-      environment: environmentName,
-      debug: {
-        envVar: process.env.ENABLE_AI_VOICE_AGENT,
-        flagValue: isFeatureEnabled,
-        environmentName,
-        isDevelopment
-      }
-    }, { status: 403 })
-  }
-  
-  console.log('✅ [AI-VOICE] Request allowed - proceeding with call handling')
-
   try {
+    console.log('🎙️ [AI-VOICE] Webhook received')
+    console.log(`🎙️ [AI-VOICE] Environment: ${environmentName}`)
+    console.log(`🎙️ [AI-VOICE] Is Development: ${isDevelopment}`)
+    console.log(`🎙️ [AI-VOICE] Feature Flag: ${process.env.ENABLE_AI_VOICE_AGENT}`)
+    
+    // Parse Twilio webhook data
     const formData = await request.formData()
     const callSid = formData.get('CallSid') as string
-    const from = formData.get('From') as string
-    const to = formData.get('To') as string
-    const callStatus = formData.get('CallStatus') as string
-
-    console.log('🎙️ [AI-VOICE] Incoming call:', { callSid, from, to, callStatus })
-
-    // Basic Twilio signature validation could go here
-    // For now, we'll trust the middleware and environment checks
-
-    // Generate TwiML for AI voice streaming via PartyKit WebSocket bridge
+    const from = formData.get('From') as string || 'unknown'
+    const to = formData.get('To') as string || 'unknown'
+    const direction = formData.get('Direction') as string || 'unknown'
+    
+    console.log(`🎙️ [AI-VOICE] Call Details:`, {
+      callSid,
+      from,
+      to,
+      direction
+    })
+    
+    // Double-check feature flag (middleware should have blocked already)
+    if (process.env.ENABLE_AI_VOICE_AGENT !== 'true') {
+      console.error('❌ [AI-VOICE] Feature disabled but webhook was called')
+      return new NextResponse(
+        '<?xml version="1.0" encoding="UTF-8"?><Response><Reject reason="rejected"/></Response>',
+        { headers: { 'Content-Type': 'text/xml' } }
+      )
+    }
+    
+    // Development environment check
+    if (!isDevelopment) {
+      console.error('❌ [AI-VOICE] Not in development environment')
+      return new NextResponse(
+        '<?xml version="1.0" encoding="UTF-8"?><Response><Say>This service is only available in development.</Say><Hangup/></Response>',
+        { headers: { 'Content-Type': 'text/xml' } }
+      )
+    }
+    
+    // Get the voice stream token from environment
     const streamToken = process.env.VOICE_STREAM_TOKEN || 'set-a-random-dev-token'
+    
+    // Generate TwiML response to connect to our WebSocket service
+    // The WebSocket service will handle the actual Hume EVI connection
+    console.log(`🎙️ [AI-VOICE] Generating TwiML for WebSocket bridge`)
+    
+    // Log which service we're using
+    const useOpenAI = process.env.USE_OPENAI_VOICE === 'true'
+    console.log(`🎙️ [AI-VOICE] Voice Service: ${useOpenAI ? 'OpenAI Realtime' : 'Hume EVI'}`)
+    
+    if (useOpenAI) {
+      console.log('⚠️ [AI-VOICE] OpenAI Realtime API integration not yet implemented')
+    }
     
     // Use PartyKit WebSocket bridge for Hume EVI voice service
     // This allows full tool/function support
@@ -77,7 +81,8 @@ export async function POST(request: NextRequest) {
       <Parameter name="from" value="${from}"/>
     </Stream>
   </Start>
-  <Say voice="alice">Connecting you to the AI assistant. Please hold while we establish the connection.</Say>
+  <Say voice="alice">Connecting you to the AI assistant.</Say>
+  <Pause length="3600"/><!-- Keep call alive for 1 hour to allow streaming -->
 </Response>`
 
     console.log(`🎙️ [AI-VOICE] Generated TwiML for call ${callSid}`)
@@ -118,40 +123,38 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   const environmentName = process.env.ENVIRONMENT_NAME || ''
   const isDevelopment = environmentName.endsWith('-development')
-  const isFeatureEnabled = FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT
   
-  // Debug info in GET request
-  const debugInfo = {
-    ENABLE_AI_VOICE_AGENT: process.env.ENABLE_AI_VOICE_AGENT,
-    FEATURE_FLAG_VALUE: isFeatureEnabled,
-    ENVIRONMENT_NAME: environmentName,
-    isDevelopment,
-    NODE_ENV: process.env.NODE_ENV
-  }
-  
-  // Allow in dev environments OR when feature is explicitly enabled
-  if (!isDevelopment && !isFeatureEnabled) {
-    return NextResponse.json({ 
-      error: 'AI Voice agent disabled in production',
-      mode: 'production-safety',
-      debug: debugInfo
-    }, { status: 403 })
-  }
-
-  return NextResponse.json({
-    success: true,
-    message: 'AI Voice webhook ready (PartyKit WebSocket Bridge)',
-    endpoint: 'POST /api/webhooks/twilio/voice-ai',
+  // Return status information
+  const status = {
+    service: 'ai-voice-webhook',
     environment: environmentName,
-    wsEndpoint: process.env.WS_VOICE_URL || `wss://${process.env.PARTYKIT_URL || 'rmc-voice-bridge.jamesclaimtechio.partykit.dev'}/parties/voice/[callSid]`,
-    features: [
-      'Full tool/function support',
-      'Emotional intelligence via Hume EVI',
-      'British voice support',
-      'Natural interruption handling',
-      'Real-time audio streaming'
-    ],
-    timestamp: new Date().toISOString(),
-    debug: debugInfo
-  })
+    isDevelopment,
+    featureEnabled: process.env.ENABLE_AI_VOICE_AGENT === 'true',
+    voiceService: process.env.USE_OPENAI_VOICE === 'true' ? 'OpenAI' : 'Hume EVI',
+    partyKitUrl: process.env.PARTYKIT_URL || 'rmc-voice-bridge.jamesclaimtechio.partykit.dev',
+    info: isDevelopment 
+      ? 'AI Voice service is available' 
+      : 'AI Voice is disabled in production'
+  }
+  
+  return NextResponse.json(status)
+}
+
+// Handle fallback for voice status updates
+export async function PUT(request: NextRequest) {
+  try {
+    const data = await request.json()
+    console.log('📊 [AI-VOICE] Status update received:', data)
+    
+    // Log status events
+    if (data.CallStatus) {
+      console.log(`📊 [AI-VOICE] Call ${data.CallSid} status: ${data.CallStatus}`)
+    }
+    
+    // Return empty response (Twilio doesn't expect content)
+    return new NextResponse('', { status: 204 })
+  } catch (error) {
+    console.error('❌ [AI-VOICE] Status update error:', error)
+    return new NextResponse('', { status: 204 })
+  }
 }

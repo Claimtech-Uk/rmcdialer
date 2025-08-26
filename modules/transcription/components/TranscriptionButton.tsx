@@ -140,6 +140,11 @@ export function TranscriptionButton({
 
   // Get appropriate icon based on status
   const getStatusIcon = () => {
+    // If disabled (no recording), show static icon, not loading
+    if (disabled) {
+      return <FileText className="h-3 w-3" />
+    }
+    
     if (isLoading || isProcessing) {
       return <Loader2 className="h-3 w-3 animate-spin" />
     }
