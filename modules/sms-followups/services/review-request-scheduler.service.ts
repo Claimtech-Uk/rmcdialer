@@ -61,11 +61,12 @@ export class ReviewRequestScheduler {
    * Get next morning at 9 AM UK time
    */
   private getNextMorning(): Date {
-    // Simple approach: UK is UTC+0 (GMT) or UTC+1 (BST)
-    const ukOffsetHours = 1; // BST offset
+    // Determine if we're in BST (summer) or GMT (winter)
+    const now = new Date();
+    const isCurrentlyBST = this.isInBST(now);
+    const ukOffsetHours = isCurrentlyBST ? 1 : 0; // BST = UTC+1, GMT = UTC+0
     
     // Get current date in UK timezone
-    const now = new Date();
     const ukNow = new Date(now.getTime() + (ukOffsetHours * 60 * 60 * 1000));
     
     // Get tomorrow's date in UK timezone
@@ -80,5 +81,24 @@ export class ReviewRequestScheduler {
     // Create 9 AM UK time and convert back to UTC
     const ukMorning = new Date(Date.UTC(year, month, day, 9, 0, 0)); // 9 AM UK
     return new Date(ukMorning.getTime() - (ukOffsetHours * 60 * 60 * 1000)); // Convert to UTC
+  }
+
+  /**
+   * Check if a date falls within British Summer Time
+   * BST runs from last Sunday in March to last Sunday in October
+   */
+  private isInBST(date: Date): boolean {
+    const year = date.getFullYear();
+    
+    // Get last Sunday in March
+    const marchLastSunday = new Date(year, 2, 31); // March 31
+    marchLastSunday.setDate(31 - marchLastSunday.getDay()); // Go back to Sunday
+    
+    // Get last Sunday in October
+    const octoberLastSunday = new Date(year, 9, 31); // October 31
+    octoberLastSunday.setDate(31 - octoberLastSunday.getDay()); // Go back to Sunday
+    
+    // Check if date is within BST period
+    return date >= marchLastSunday && date < octoberLastSunday;
   }
 }

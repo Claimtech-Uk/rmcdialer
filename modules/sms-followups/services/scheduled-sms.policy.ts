@@ -190,8 +190,8 @@ export const scheduledSmsPolicies: FollowUpPolicyMap = {
   no_answer_checkin: {
     isEligible: async ({ userId }: EligibilityContext) => {
       return await checks.noActiveConversation(userId, 60)
-        && await checks.commsAllowed(userId)
-        && await checks.quietHoursOk();
+        && await checks.commsAllowed(userId);
+      // QUIET HOURS REMOVED - Scheduled messages go out at their scheduled time
     },
     cancelOnEvents: ['inbound_sms'],
     description: 'Check-in SMS after first call attempt no answer, canceled if user texts back'
@@ -200,8 +200,8 @@ export const scheduledSmsPolicies: FollowUpPolicyMap = {
   callback_confirmation: {
     isEligible: async ({ meta }: EligibilityContext) => {
       return await checks.callbackPending(meta?.callbackId)
-        && await checks.commsAllowed(meta?.userId || 0)
-        && await checks.quietHoursOk();
+        && await checks.commsAllowed(meta?.userId || 0);
+      // QUIET HOURS REMOVED - Scheduled messages go out at their scheduled time
     },
     cancelOnEvents: ['callback_canceled', 'callback_completed'],
     description: 'Confirm callback scheduled, canceled if callback changes'
@@ -211,8 +211,8 @@ export const scheduledSmsPolicies: FollowUpPolicyMap = {
     isEligible: async ({ userId }: EligibilityContext) => {
       return await checks.notSigned(userId)
         && await checks.noActiveConversation(userId, 60)
-        && await checks.commsAllowed(userId)
-        && await checks.quietHoursOk();
+        && await checks.commsAllowed(userId);
+      // QUIET HOURS REMOVED - Evening reminders should send in the evening (7-8 PM)
     },
     cancelOnEvents: ['inbound_sms', 'user_signed'],
     description: 'Evening reminder to complete form, canceled if signed or active chat'
@@ -222,8 +222,8 @@ export const scheduledSmsPolicies: FollowUpPolicyMap = {
     isEligible: async ({ userId }: EligibilityContext) => {
       return await checks.notSigned(userId)
         && await checks.noActiveConversation(userId, 60)
-        && await checks.commsAllowed(userId)
-        && await checks.quietHoursOk();
+        && await checks.commsAllowed(userId);
+      // QUIET HOURS REMOVED - Scheduled messages go out at their scheduled time
     },
     cancelOnEvents: ['inbound_sms', 'user_signed'],
     description: '3-day reminder to complete form, canceled if signed or active chat'
@@ -233,8 +233,8 @@ export const scheduledSmsPolicies: FollowUpPolicyMap = {
     isEligible: async ({ userId }: EligibilityContext) => {
       return await checks.notSigned(userId)
         && await checks.noActiveConversation(userId, 60)
-        && await checks.commsAllowed(userId)
-        && await checks.quietHoursOk();
+        && await checks.commsAllowed(userId);
+      // QUIET HOURS REMOVED - Evening reminders should send in the evening (7-8 PM)
     },
     cancelOnEvents: ['inbound_sms', 'user_signed'],
     description: 'Evening follow-up for maybe completion, canceled if signed or active chat'
@@ -244,8 +244,8 @@ export const scheduledSmsPolicies: FollowUpPolicyMap = {
     isEligible: async ({ userId }: EligibilityContext) => {
       return await checks.notSigned(userId)
         && await checks.noActiveConversation(userId, 60)
-        && await checks.commsAllowed(userId)
-        && await checks.quietHoursOk();
+        && await checks.commsAllowed(userId);
+      // QUIET HOURS REMOVED - Scheduled messages go out at their scheduled time
     },
     cancelOnEvents: ['inbound_sms', 'user_signed'],
     description: '5-day follow-up for maybe completion, canceled if signed or active chat'
@@ -255,8 +255,8 @@ export const scheduledSmsPolicies: FollowUpPolicyMap = {
     isEligible: async ({ userId }: EligibilityContext) => {
       return await checks.signed(userId)
         && await checks.reviewThrottleOk(userId)
-        && await checks.commsAllowed(userId)
-        && await checks.quietHoursOk();
+        && await checks.commsAllowed(userId);
+      // QUIET HOURS REMOVED - Scheduled messages go out at their scheduled time
     },
     cancelOnEvents: [],
     description: 'Review request for signed users, respects throttle window'

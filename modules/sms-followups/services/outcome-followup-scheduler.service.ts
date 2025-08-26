@@ -239,23 +239,43 @@ export class OutcomeFollowupScheduler {
   // ---------------------------------------------------------------------------
 
   /**
-   * Get evening time (8 PM UK time) for a given date
+   * Get evening time (7 PM UK time) for a given date
    */
   private getEveningTime(date: Date): Date {
-    // Simple approach: UK is UTC+0 (GMT) or UTC+1 (BST)
-    // For now, assume BST (UTC+1) - adjust manually if needed
-    const ukOffsetHours = 1; // BST offset
+    // Determine if we're in BST (summer) or GMT (winter)
+    // UK uses BST from last Sunday in March to last Sunday in October
+    const isCurrentlyBST = this.isInBST(date);
+    const ukOffsetHours = isCurrentlyBST ? 1 : 0; // BST = UTC+1, GMT = UTC+0
     
     // Get today's date in UK timezone
     const ukDate = new Date(date.getTime() + (ukOffsetHours * 60 * 60 * 1000));
     
-    // Set to 8 PM UK time
+    // Set to 7 PM UK time (within quiet hours which end at 8 PM)
     const year = ukDate.getUTCFullYear();
     const month = ukDate.getUTCMonth();
     const day = ukDate.getUTCDate();
     
-    // Create 8 PM UK time and convert back to UTC
-    const ukEvening = new Date(Date.UTC(year, month, day, 20, 0, 0)); // 8 PM UK
+    // Create 7 PM UK time and convert back to UTC
+    const ukEvening = new Date(Date.UTC(year, month, day, 19, 0, 0)); // 7 PM UK
     return new Date(ukEvening.getTime() - (ukOffsetHours * 60 * 60 * 1000)); // Convert to UTC
+  }
+
+  /**
+   * Check if a date falls within British Summer Time
+   * BST runs from last Sunday in March to last Sunday in October
+   */
+  private isInBST(date: Date): boolean {
+    const year = date.getFullYear();
+    
+    // Get last Sunday in March
+    const marchLastSunday = new Date(year, 2, 31); // March 31
+    marchLastSunday.setDate(31 - marchLastSunday.getDay()); // Go back to Sunday
+    
+    // Get last Sunday in October
+    const octoberLastSunday = new Date(year, 9, 31); // October 31
+    octoberLastSunday.setDate(31 - octoberLastSunday.getDay()); // Go back to Sunday
+    
+    // Check if date is within BST period
+    return date >= marchLastSunday && date < octoberLastSunday;
   }
 }

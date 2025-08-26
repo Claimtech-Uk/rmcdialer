@@ -76,8 +76,8 @@ export class ScheduledSmsService {
     // Generate dedup key if not provided
     const finalDedupKey = dedupKey || this.generateDedupKey(userId, followUpType, scheduledFor);
 
-    // Adjust for quiet hours if needed
-    const adjustedScheduledFor = await this.adjustForQuietHours(scheduledFor);
+    // NO LONGER ADJUSTING FOR QUIET HOURS - Messages go out at scheduled time
+    // Quiet hours check happens at send-time in the policy eligibility checks
 
     try {
       const scheduledSms = await prisma.scheduledSms.create({
@@ -88,7 +88,7 @@ export class ScheduledSmsService {
           messageType,
           templateKey,
           message,
-          scheduledFor: adjustedScheduledFor,
+          scheduledFor, // Using original scheduled time, not adjusted
           origin,
           createdByAgentId,
           dedupKey: finalDedupKey,
@@ -100,7 +100,7 @@ export class ScheduledSmsService {
         id: scheduledSms.id,
         userId,
         followUpType,
-        scheduledFor: adjustedScheduledFor,
+        scheduledFor, // Logging original time
         origin,
         dedupKey: finalDedupKey
       });
