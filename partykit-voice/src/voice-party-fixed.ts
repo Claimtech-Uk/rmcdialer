@@ -1,7 +1,7 @@
 import type * as Party from "partykit/server";
 
-// Version: Twilio Clear Event Fix - Deploy: 2025-08-24-v11
-// FIXED: Added required clear event before audio playback + better logging
+// Version: Audio Chunking Fix - Deploy: 2025-08-24-v12
+// FIXED: Split audio into 20ms chunks for Twilio real-time streaming
 
 // μ-law to linear16 conversion table (ITU-T G.711 standard)
 const MULAW_DECODE_TABLE = new Int16Array([
@@ -383,7 +383,7 @@ export default class VoiceParty implements Party.Server {
   handleHumeMessage(message: any) {
     switch (message.type) {
       case 'audio_output':
-        // Convert WAV to μ-law and send to Twilio
+        // Convert WAV to μ-law and send to Twilio IN SMALL CHUNKS
         if (this.twilioWs && message.data) {
           try {
             // Send clear event first (REQUIRED by Twilio!)
@@ -398,21 +398,42 @@ export default class VoiceParty implements Party.Server {
             
             const convertedAudio = this.convertLinear16ToMulaw(message.data);
             
-            // Send the audio chunk
-            const mediaMessage = JSON.stringify({
-              event: 'media',
-              streamSid: this.streamSid,
-              media: {
-                payload: convertedAudio // μ-law audio for Twilio
-              }
-            });
+            // CRITICAL FIX: Split into 20ms chunks for real-time streaming
+            // Twilio expects ~160 samples per packet (20ms at 8kHz)
+            // 160 samples of μ-law = ~213 base64 characters
+            const CHUNK_SIZE = 213; // ~20ms of audio
+            const totalChunks = Math.ceil(convertedAudio.length / CHUNK_SIZE);
             
-            this.twilioWs.send(mediaMessage);
-            
-            // Log first few and then occasionally
+            // Log the chunking
             this.outputsSent++;
+            if (this.outputsSent <= 3) {
+              console.log(`🔊 Splitting audio #${this.outputsSent} (${convertedAudio.length} chars) into ${totalChunks} chunks`);
+            }
+            
+            // Send audio in small chunks
+            let chunksSent = 0;
+            for (let i = 0; i < convertedAudio.length; i += CHUNK_SIZE) {
+              const chunk = convertedAudio.substring(i, Math.min(i + CHUNK_SIZE, convertedAudio.length));
+              
+              const mediaMessage = JSON.stringify({
+                event: 'media',
+                streamSid: this.streamSid,
+                media: {
+                  payload: chunk // Small chunk of μ-law audio (20ms)
+                }
+              });
+              
+              this.twilioWs.send(mediaMessage);
+              chunksSent++;
+              
+              // Log progress for first audio
+              if (this.outputsSent === 1 && (chunksSent === 1 || chunksSent === 10 || chunksSent === totalChunks)) {
+                console.log(`  📦 Sent chunk ${chunksSent}/${totalChunks} (${chunk.length} chars)`);
+              }
+            }
+            
             if (this.outputsSent <= 3 || this.outputsSent % 10 === 0) {
-              console.log(`🔊 Sent audio chunk #${this.outputsSent} to Twilio (${convertedAudio.length} chars)`);
+              console.log(`✅ Audio #${this.outputsSent}: Sent ${chunksSent} chunks to Twilio`);
             }
           } catch (error) {
             console.error('❌ Error sending audio to Twilio:', error);
