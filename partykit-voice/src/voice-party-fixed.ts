@@ -1,7 +1,7 @@
 import type * as Party from "partykit/server";
 
-// Version: Downsampling Fix - Deploy: 2025-08-24-v15
-// FIXED: Downsample Hume's audio from 44100/24000 Hz to Twilio's 8000 Hz
+// Version: Sequential Queue Fix - Deploy: 2025-08-24-v17
+// FIXED: Process audio chunks sequentially to prevent race conditions
 
 // μ-law to linear16 conversion table (ITU-T G.711 standard)
 const MULAW_DECODE_TABLE = new Int16Array([
@@ -51,14 +51,50 @@ export default class VoiceParty implements Party.Server {
   outputsSent: number = 0;
   hasSentClear: boolean = false;
   
+  // CRITICAL FIX: Sequential audio queue to prevent race conditions
+  audioQueue: string[] = [];
+  isProcessingQueue: boolean = false;
+  isTwilioConnected: boolean = false;
+  
   constructor(public room: Party.Room) {}
+  
+  /**
+   * Process audio queue sequentially - NO RACE CONDITIONS!
+   */
+  async processAudioQueue() {
+    // Prevent multiple queue processors
+    if (this.isProcessingQueue) {
+      console.log('⚠️ Queue processor already running, skipping');
+      return;
+    }
+    
+    this.isProcessingQueue = true;
+    console.log(`🔄 Starting queue processing (${this.audioQueue.length} items)`);
+    
+    while (this.audioQueue.length > 0 && this.isTwilioConnected) {
+      const audioData = this.audioQueue.shift();
+      if (audioData) {
+        console.log(`📤 Processing audio chunk ${this.outputsSent + 1} from queue`);
+        await this.sendAudioToTwilio(audioData);  // AWAIT is critical!
+      }
+    }
+    
+    this.isProcessingQueue = false;
+    console.log('✅ Queue processing complete');
+  }
   
   async sendAudioToTwilio(audioData: string) {
     try {
+      // Check connection state first
+      if (!this.isTwilioConnected || !this.twilioWs) {
+        console.log('⚠️ Twilio disconnected, aborting audio send');
+        return;
+      }
+      
       // Send clear event first (REQUIRED by Twilio!)
       if (!this.hasSentClear) {
         console.log('📤 Sending clear event to Twilio (required before audio)');
-        this.twilioWs?.send(JSON.stringify({
+        this.twilioWs.send(JSON.stringify({
           event: 'clear',
           streamSid: this.streamSid
         }));
@@ -298,6 +334,7 @@ export default class VoiceParty implements Party.Server {
     
     // Store Twilio WebSocket connection
     this.twilioWs = conn;
+    this.isTwilioConnected = true;
     
     // Handle incoming messages from Twilio
     conn.addEventListener("message", async (evt) => {
@@ -313,6 +350,7 @@ export default class VoiceParty implements Party.Server {
     
     conn.addEventListener("close", () => {
       console.log(`🔌 Twilio disconnected for call ${this.callSid}`);
+      this.isTwilioConnected = false;
       this.cleanup();
     });
   }
@@ -370,6 +408,7 @@ export default class VoiceParty implements Party.Server {
         
       case 'stop':
         console.log(`🛑 Stream stopped: ${msg.streamSid}`);
+        this.isTwilioConnected = false;
         this.cleanup();
         break;
     }
@@ -482,11 +521,17 @@ export default class VoiceParty implements Party.Server {
   handleHumeMessage(message: any) {
     switch (message.type) {
       case 'audio_output':
-        // Convert WAV to μ-law and send to Twilio IN SMALL CHUNKS WITH PACING
+        // CRITICAL FIX: Queue audio instead of processing in parallel!
         if (this.twilioWs && message.data) {
-          // Use async function to handle pacing
-          this.sendAudioToTwilio(message.data).catch(error => {
-            console.error('❌ Error in sendAudioToTwilio:', error);
+          console.log(`📦 Received audio_output chunk #${this.audioQueue.length + 1} (${message.data.length} base64 chars)`);
+          
+          // Add to queue
+          this.audioQueue.push(message.data);
+          console.log(`📨 Queued audio chunk (${this.audioQueue.length} in queue)`);
+          
+          // Process queue sequentially (won't start new processor if one is running)
+          this.processAudioQueue().catch(error => {
+            console.error('❌ Error processing audio queue:', error);
           });
         } else {
           console.log('⚠️ No Twilio connection or data for audio_output');
@@ -494,15 +539,15 @@ export default class VoiceParty implements Party.Server {
         break;
         
       case 'user_interruption':
-        console.log('🎙️ User interrupted');
-        // TODO: Clear audio queue when interrupted
+        console.log('🎙️ User interrupted - clearing audio queue');
+        this.audioQueue = [];  // Clear pending audio
         break;
         
       case 'user_message':
         if (message.message?.content) {
           console.log('💬 User said:', message.message.content);
         }
-        // TODO: Clear audio queue on user message
+        this.audioQueue = [];  // Clear pending audio on new user message
         break;
         
       case 'assistant_message':
@@ -575,6 +620,11 @@ export default class VoiceParty implements Party.Server {
   cleanup() {
     console.log('🧹 Cleaning up connections...');
     
+    // Clear audio queue and stop processing
+    this.audioQueue = [];
+    this.isProcessingQueue = false;
+    this.isTwilioConnected = false;
+    
     if (this.humeWs) {
       this.humeWs.close();
       this.humeWs = null;
@@ -589,6 +639,6 @@ export default class VoiceParty implements Party.Server {
   }
   
   async onRequest(req: Party.Request) {
-    return new Response("Voice Party - Hume Docs Compliant (v7)", { status: 200 });
+    return new Response("Voice Party - Sequential Queue v17", { status: 200 });
   }
 }
