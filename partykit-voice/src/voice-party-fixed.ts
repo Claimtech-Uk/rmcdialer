@@ -1,7 +1,7 @@
 import type * as Party from "partykit/server";
 
-// Version: Audio Pacing Fix - Deploy: 2025-08-24-v13
-// FIXED: Added pacing delays to prevent overwhelming Twilio
+// Version: Downsampling Fix - Deploy: 2025-08-24-v15
+// FIXED: Downsample Hume's audio from 44100/24000 Hz to Twilio's 8000 Hz
 
 // μ-law to linear16 conversion table (ITU-T G.711 standard)
 const MULAW_DECODE_TABLE = new Int16Array([
@@ -159,7 +159,7 @@ export default class VoiceParty implements Party.Server {
 
   /**
    * Convert WAV file from Hume back to μ-law for Twilio
-   * IMPORTANT: Hume sends WAV files, not raw PCM!
+   * CRITICAL: Must downsample from Hume's rate to Twilio's 8000 Hz!
    * @param base64WavAudio - Base64 encoded WAV file from Hume
    * @returns Base64 encoded μ-law audio for Twilio
    */
@@ -172,17 +172,37 @@ export default class VoiceParty implements Party.Server {
         wavBytes[i] = binaryString.charCodeAt(i);
       }
 
-      // WAV files have headers - find the 'data' chunk
-      // Standard WAV header is 44 bytes for PCM, but let's parse it properly
+      // CRITICAL: Parse WAV header to get actual sample rate!
+      const dataView = new DataView(wavBytes.buffer);
+      
+      // WAV format check (offset 20-22: 1 = PCM)
+      const audioFormat = dataView.getUint16(20, true);
+      
+      // Number of channels (offset 22-24)
+      const channels = dataView.getUint16(22, true);
+      
+      // Sample rate (offset 24-28) - THIS IS KEY!
+      const sampleRate = dataView.getUint32(24, true);
+      
+      // Bits per sample (offset 34-36)
+      const bitsPerSample = dataView.getUint16(34, true);
+      
+      // Log WAV format on first audio output
+      if (this.outputsSent === 0) {
+        console.log(`📊 WAV Header: ${sampleRate}Hz, ${channels}ch, ${bitsPerSample}bit, format=${audioFormat}`);
+        if (sampleRate !== 8000) {
+          console.log(`⚠️ DOWNSAMPLING: ${sampleRate}Hz → 8000Hz for Twilio`);
+        }
+      }
+
+      // Find the 'data' chunk
       let dataOffset = 44; // Default for standard PCM WAV
       
       // Look for 'data' chunk (safer approach)
-      // 'data' in hex: 0x64 0x61 0x74 0x61
       for (let i = 36; i < wavBytes.length - 4; i++) {
         if (wavBytes[i] === 0x64 && wavBytes[i+1] === 0x61 && 
             wavBytes[i+2] === 0x74 && wavBytes[i+3] === 0x61) { // 'data'
-          dataOffset = i + 8; // Skip 'data' marker and size field (4+4 bytes)
-          console.log(`📦 Found WAV data chunk at offset ${dataOffset}`);
+          dataOffset = i + 8; // Skip 'data' marker and size field
           break;
         }
       }
@@ -190,12 +210,31 @@ export default class VoiceParty implements Party.Server {
       // Extract PCM data (skip WAV header)
       const pcmBytes = wavBytes.slice(dataOffset);
       
-      // Create a new buffer from the sliced bytes (fixes TypedArray issue)
+      // Create a new buffer from the sliced bytes
       const pcmBuffer = new ArrayBuffer(pcmBytes.length);
       new Uint8Array(pcmBuffer).set(pcmBytes);
       
       // Convert byte array to Int16Array (little-endian)
-      const pcmData = new Int16Array(pcmBuffer);
+      let pcmData = new Int16Array(pcmBuffer);
+      
+      // CRITICAL: Downsample if needed!
+      if (sampleRate !== 8000) {
+        const ratio = sampleRate / 8000;
+        const downsampledLength = Math.floor(pcmData.length / ratio);
+        const downsampled = new Int16Array(downsampledLength);
+        
+        // Simple downsampling (picks nearest sample)
+        for (let i = 0; i < downsampledLength; i++) {
+          const sourceIndex = Math.floor(i * ratio);
+          downsampled[i] = pcmData[sourceIndex];
+        }
+        
+        pcmData = downsampled;
+        
+        if (this.outputsSent === 0) {
+          console.log(`🔄 Downsampled: ${pcmBuffer.byteLength / 2} samples → ${pcmData.length} samples`);
+        }
+      }
       
       // Convert each linear16 sample to μ-law
       const mulawData = new Uint8Array(pcmData.length);
@@ -209,10 +248,9 @@ export default class VoiceParty implements Party.Server {
         binaryMulaw += String.fromCharCode(mulawData[i]);
       }
       
-      // Log first conversion and then occasionally
-      this.outputChunkCounter = (this.outputChunkCounter || 0) + 1;
-      if (this.outputChunkCounter === 1 || this.outputChunkCounter % 10 === 0) {
-        console.log(`🔊 WAV→μ-law #${this.outputChunkCounter}: ${wavBytes.length} bytes → ${mulawData.length} samples`);
+      // Log conversion details for first audio
+      if (this.outputsSent <= 1) {
+        console.log(`🔊 WAV→μ-law: ${wavBytes.length} bytes → ${mulawData.length} μ-law samples`);
       }
       
       return btoa(binaryMulaw);
