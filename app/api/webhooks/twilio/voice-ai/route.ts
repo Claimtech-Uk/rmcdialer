@@ -81,7 +81,6 @@ export async function POST(request: NextRequest) {
       <Parameter name="from" value="${from}"/>
     </Stream>
   </Start>
-  <Say voice="alice">Connecting you to the AI assistant.</Say>
   <Pause length="3600"/><!-- Keep call alive for 1 hour to allow streaming -->
 </Response>`
 
