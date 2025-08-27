@@ -86,6 +86,12 @@ export default class VoiceParty implements Party.Server {
   async sendAudioToTwilio(audioData: string) {
     try {
       // Check connection state first
+      
+      // Check we have a streamSid
+      if (!this.streamSid) {
+        console.log('⚠️ No streamSid yet, cannot send audio');
+        return;
+      }
       if (!this.isTwilioConnected || !this.twilioWs) {
         console.log('⚠️ Twilio disconnected, aborting audio send');
         return;
@@ -93,7 +99,7 @@ export default class VoiceParty implements Party.Server {
       
       // Send clear event first (REQUIRED by Twilio!)
       if (!this.hasSentClear) {
-        console.log('📤 Sending clear event to Twilio (required before audio)');
+        console.log(`📤 Sending clear event to Twilio for stream ${this.streamSid}`);
         this.twilioWs.send(JSON.stringify({
           event: 'clear',
           streamSid: this.streamSid
@@ -102,6 +108,12 @@ export default class VoiceParty implements Party.Server {
       }
       
       const convertedAudio = this.convertLinear16ToMulaw(audioData);
+      
+      // Check if conversion succeeded
+      if (!convertedAudio || convertedAudio.length === 0) {
+        console.error('❌ Audio conversion failed, skipping chunk');
+        return;
+      }
       
       // CRITICAL FIX: Split into 20ms chunks for real-time streaming
       // Twilio expects ~160 samples per packet (20ms at 8kHz)
@@ -292,7 +304,7 @@ export default class VoiceParty implements Party.Server {
       return btoa(binaryMulaw);
     } catch (error) {
       console.error('❌ WAV → μ-law conversion error:', error);
-      return base64WavAudio;
+      return ""; // Return empty on conversion failure
     }
   }
 
