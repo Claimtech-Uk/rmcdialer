@@ -86,14 +86,14 @@ export default class VoiceParty implements Party.Server {
   async sendAudioToTwilio(audioData: string) {
     try {
       // Check connection state first
+      if (!this.isTwilioConnected || !this.twilioWs) {
+        console.log('⚠️ Twilio disconnected, aborting audio send');
+        return;
+      }
       
       // Check we have a streamSid
       if (!this.streamSid) {
         console.log('⚠️ No streamSid yet, cannot send audio');
-        return;
-      }
-      if (!this.isTwilioConnected || !this.twilioWs) {
-        console.log('⚠️ Twilio disconnected, aborting audio send');
         return;
       }
       
@@ -107,55 +107,25 @@ export default class VoiceParty implements Party.Server {
         this.hasSentClear = true;
       }
       
-      const convertedAudio = this.convertLinear16ToMulaw(audioData);
+      // CRITICAL FIX: Send Hume's audio DIRECTLY to Twilio without conversion!
+      // Twilio Media Streams accepts PCM/WAV directly - NO μ-law conversion needed!
+      // Hume sends WAV format, which Twilio can handle directly.
       
-      // Check if conversion succeeded
-      if (!convertedAudio || convertedAudio.length === 0) {
-        console.error('❌ Audio conversion failed, skipping chunk');
-        return;
-      }
-      
-      // CRITICAL FIX: Split into 20ms chunks for real-time streaming
-      // Twilio expects ~160 samples per packet (20ms at 8kHz)
-      // 160 samples of μ-law = ~213 base64 characters
-      const CHUNK_SIZE = 213; // ~20ms of audio
-      const totalChunks = Math.ceil(convertedAudio.length / CHUNK_SIZE);
-      
-      // Log the chunking
       this.outputsSent++;
-      if (this.outputsSent <= 3 || this.outputsSent % 5 === 0) {
-        console.log(`🔊 Audio #${this.outputsSent}: ${convertedAudio.length} chars → ${totalChunks} chunks`);
-      }
+      console.log(`🔊 Audio #${this.outputsSent}: Sending ${audioData.length} chars directly to Twilio (NO CONVERSION)`);
       
-      // Send audio in small chunks WITH PACING
-      let chunksSent = 0;
-      for (let i = 0; i < convertedAudio.length; i += CHUNK_SIZE) {
-        const chunk = convertedAudio.substring(i, Math.min(i + CHUNK_SIZE, convertedAudio.length));
-        
-        const mediaMessage = JSON.stringify({
-          event: 'media',
-          streamSid: this.streamSid,
-          media: {
-            payload: chunk // Small chunk of μ-law audio (20ms)
-          }
-        });
-        
-        this.twilioWs?.send(mediaMessage);
-        chunksSent++;
-        
-        // PACING FIX: Add delay every 10 chunks (200ms of audio)
-        // This prevents overwhelming Twilio with too much audio at once
-        if (chunksSent % 10 === 0 && chunksSent < totalChunks) {
-          if (this.outputsSent <= 3) {
-            console.log(`  ⏸️ Pacing: sent ${chunksSent}/${totalChunks} chunks, pausing...`);
-          }
-          await new Promise(resolve => setTimeout(resolve, 50)); // 50ms pause
+      // Send the audio directly to Twilio - no conversion, no chunking
+      const mediaMessage = JSON.stringify({
+        event: 'media',
+        streamSid: this.streamSid,
+        media: {
+          payload: audioData // Send Hume's WAV data directly!
         }
-      }
+      });
       
-      if (this.outputsSent <= 3 || this.outputsSent % 5 === 0) {
-        console.log(`✅ Audio #${this.outputsSent}: Completed ${chunksSent} chunks`);
-      }
+      this.twilioWs.send(mediaMessage);
+      console.log(`✅ Audio #${this.outputsSent}: Sent directly to Twilio`);
+      
     } catch (error) {
       console.error('❌ Error sending audio to Twilio:', error);
       console.error('Error details:', error instanceof Error ? error.message : error);
