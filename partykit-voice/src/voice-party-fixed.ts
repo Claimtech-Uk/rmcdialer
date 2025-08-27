@@ -85,15 +85,17 @@ export default class VoiceParty implements Party.Server {
   
   async sendAudioToTwilio(audioData: string) {
     try {
-      // Check connection state first
+      // Always increment counter first for consistent logging
+      this.outputsSent++;
+      console.log(`🎯 Processing Audio #${this.outputsSent} (input: ${audioData.length} chars)`);
       
-      // Check we have a streamSid
+      // Check connection state first
       if (!this.streamSid) {
-        console.log('⚠️ No streamSid yet, cannot send audio');
+        console.log(`⚠️ Audio #${this.outputsSent}: No streamSid yet, cannot send audio`);
         return;
       }
       if (!this.isTwilioConnected || !this.twilioWs) {
-        console.log('⚠️ Twilio disconnected, aborting audio send');
+        console.log(`⚠️ Audio #${this.outputsSent}: Twilio disconnected, aborting`);
         return;
       }
       
@@ -107,57 +109,33 @@ export default class VoiceParty implements Party.Server {
         this.hasSentClear = true;
       }
       
+      // Convert Hume's WAV to μ-law
       const convertedAudio = this.convertLinear16ToMulaw(audioData);
+      console.log(`🔄 Audio #${this.outputsSent}: Conversion result = ${convertedAudio ? convertedAudio.length : 0} chars`);
       
       // Check if conversion succeeded
       if (!convertedAudio || convertedAudio.length === 0) {
-        console.error('❌ Audio conversion failed, skipping chunk');
+        console.error(`❌ Audio #${this.outputsSent}: Conversion failed or empty result`);
         return;
       }
       
-      // CRITICAL FIX: Split into 20ms chunks for real-time streaming
-      // Twilio expects ~160 samples per packet (20ms at 8kHz)
-      // 160 samples of μ-law = ~213 base64 characters
-      const CHUNK_SIZE = 213; // ~20ms of audio
-      const totalChunks = Math.ceil(convertedAudio.length / CHUNK_SIZE);
+      // According to Twilio docs, we can send the entire payload at once
+      // Twilio handles buffering internally
+      console.log(`📤 Audio #${this.outputsSent}: Sending ${convertedAudio.length} chars of μ-law to Twilio`);
       
-      // Log the chunking
-      this.outputsSent++;
-      if (this.outputsSent <= 3 || this.outputsSent % 5 === 0) {
-        console.log(`🔊 Audio #${this.outputsSent}: ${convertedAudio.length} chars → ${totalChunks} chunks`);
-      }
-      
-      // Send audio in small chunks WITH PACING
-      let chunksSent = 0;
-      for (let i = 0; i < convertedAudio.length; i += CHUNK_SIZE) {
-        const chunk = convertedAudio.substring(i, Math.min(i + CHUNK_SIZE, convertedAudio.length));
-        
-        const mediaMessage = JSON.stringify({
-          event: 'media',
-          streamSid: this.streamSid,
-          media: {
-            payload: chunk // Small chunk of μ-law audio (20ms)
-          }
-        });
-        
-        this.twilioWs?.send(mediaMessage);
-        chunksSent++;
-        
-        // PACING FIX: Add delay every 10 chunks (200ms of audio)
-        // This prevents overwhelming Twilio with too much audio at once
-        if (chunksSent % 10 === 0 && chunksSent < totalChunks) {
-          if (this.outputsSent <= 3) {
-            console.log(`  ⏸️ Pacing: sent ${chunksSent}/${totalChunks} chunks, pausing...`);
-          }
-          await new Promise(resolve => setTimeout(resolve, 50)); // 50ms pause
+      const mediaMessage = JSON.stringify({
+        event: 'media',
+        streamSid: this.streamSid,
+        media: {
+          payload: convertedAudio // Send all μ-law audio at once
         }
-      }
+      });
       
-      if (this.outputsSent <= 3 || this.outputsSent % 5 === 0) {
-        console.log(`✅ Audio #${this.outputsSent}: Completed ${chunksSent} chunks`);
-      }
+      this.twilioWs?.send(mediaMessage);
+      console.log(`✅ Audio #${this.outputsSent}: Sent to Twilio successfully`);
+      
     } catch (error) {
-      console.error('❌ Error sending audio to Twilio:', error);
+      console.error(`❌ Audio #${this.outputsSent}: Error sending to Twilio:`, error);
       console.error('Error details:', error instanceof Error ? error.message : error);
     }
   }
@@ -213,11 +191,22 @@ export default class VoiceParty implements Party.Server {
    */
   convertLinear16ToMulaw(base64WavAudio: string): string {
     try {
+      console.log(`🔧 Audio #${this.outputsSent}: Converting WAV (${base64WavAudio.length} chars)`);
+      
       // Decode base64 to binary
       const binaryString = atob(base64WavAudio);
       const wavBytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         wavBytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // Check if this is actually a WAV file
+      const isWav = wavBytes[0] === 0x52 && wavBytes[1] === 0x49 && 
+                    wavBytes[2] === 0x46 && wavBytes[3] === 0x46; // "RIFF"
+      
+      if (!isWav) {
+        console.error(`❌ Audio #${this.outputsSent}: Not a WAV file! First 4 bytes: [${wavBytes[0]},${wavBytes[1]},${wavBytes[2]},${wavBytes[3]}]`);
+        return "";
       }
 
       // CRITICAL: Parse WAV header to get actual sample rate!
@@ -235,12 +224,10 @@ export default class VoiceParty implements Party.Server {
       // Bits per sample (offset 34-36)
       const bitsPerSample = dataView.getUint16(34, true);
       
-      // Log WAV format on first audio output
-      if (this.outputsSent === 0) {
-        console.log(`📊 WAV Header: ${sampleRate}Hz, ${channels}ch, ${bitsPerSample}bit, format=${audioFormat}`);
-        if (sampleRate !== 8000) {
-          console.log(`⚠️ DOWNSAMPLING: ${sampleRate}Hz → 8000Hz for Twilio`);
-        }
+      // Always log WAV format for debugging
+      console.log(`📊 Audio #${this.outputsSent}: WAV Header: ${sampleRate}Hz, ${channels}ch, ${bitsPerSample}bit, format=${audioFormat}`);
+      if (sampleRate !== 8000) {
+        console.log(`⚠️ Audio #${this.outputsSent}: DOWNSAMPLING: ${sampleRate}Hz → 8000Hz for Twilio`);
       }
 
       // Find the 'data' chunk
@@ -278,10 +265,7 @@ export default class VoiceParty implements Party.Server {
         }
         
         pcmData = downsampled;
-        
-        if (this.outputsSent === 0) {
-          console.log(`🔄 Downsampled: ${pcmBuffer.byteLength / 2} samples → ${pcmData.length} samples`);
-        }
+        console.log(`🔄 Audio #${this.outputsSent}: Downsampled: ${pcmBuffer.byteLength / 2} samples → ${pcmData.length} samples`);
       }
       
       // Convert each linear16 sample to μ-law
@@ -296,14 +280,14 @@ export default class VoiceParty implements Party.Server {
         binaryMulaw += String.fromCharCode(mulawData[i]);
       }
       
-      // Log conversion details for first audio
-      if (this.outputsSent <= 1) {
-        console.log(`🔊 WAV→μ-law: ${wavBytes.length} bytes → ${mulawData.length} μ-law samples`);
-      }
+      // Always log conversion details
+      console.log(`🔊 Audio #${this.outputsSent}: WAV→μ-law: ${wavBytes.length} bytes → ${mulawData.length} μ-law samples`);
       
-      return btoa(binaryMulaw);
+      const result = btoa(binaryMulaw);
+      console.log(`✅ Audio #${this.outputsSent}: Converted to μ-law: ${result.length} chars`);
+      return result;
     } catch (error) {
-      console.error('❌ WAV → μ-law conversion error:', error);
+      console.error(`❌ Audio #${this.outputsSent}: WAV → μ-law conversion error:`, error);
       return ""; // Return empty on conversion failure
     }
   }
