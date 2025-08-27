@@ -252,6 +252,15 @@ export default class VoiceParty implements Party.Server {
       // Convert byte array to Int16Array (little-endian)
       let pcmData = new Int16Array(pcmBuffer);
       
+      // Validate PCM data
+      let maxValue = 0;
+      let minValue = 0;
+      for (let i = 0; i < Math.min(100, pcmData.length); i++) {
+        if (pcmData[i] > maxValue) maxValue = pcmData[i];
+        if (pcmData[i] < minValue) minValue = pcmData[i];
+      }
+      console.log(`📊 Audio #${this.outputsSent}: PCM range: [${minValue} to ${maxValue}] (first 100 samples)`);
+      
       // CRITICAL: Downsample if needed!
       if (sampleRate !== 8000) {
         const ratio = sampleRate / 8000;
@@ -270,8 +279,15 @@ export default class VoiceParty implements Party.Server {
       
       // Convert each linear16 sample to μ-law
       const mulawData = new Uint8Array(pcmData.length);
+      let nonZeroSamples = 0;
       for (let i = 0; i < pcmData.length; i++) {
         mulawData[i] = this.linear16ToMulawSample(pcmData[i]);
+        if (mulawData[i] !== 0 && mulawData[i] !== 0xFF) nonZeroSamples++;
+      }
+      
+      // Validate we have actual audio (not silence)
+      if (nonZeroSamples < 10) {
+        console.warn(`⚠️ Audio #${this.outputsSent}: Possible silence detected! Only ${nonZeroSamples} non-zero samples out of ${mulawData.length}`);
       }
 
       // Convert μ-law data to base64
@@ -300,11 +316,12 @@ export default class VoiceParty implements Party.Server {
     const MULAW_BIAS = 0x84;
     const MULAW_CLIP = 32635;
     
-    // Get sign bit
-    let sign = (sample >> 8) & 0x80;
-    
-    // Get magnitude
-    if (sign) sample = -sample;
+    // FIXED: Properly handle sign for 16-bit signed integers
+    let sign = 0;
+    if (sample < 0) {
+      sign = 0x80;
+      sample = -sample; // Get absolute value
+    }
     
     // Clip magnitude
     if (sample > MULAW_CLIP) sample = MULAW_CLIP;
