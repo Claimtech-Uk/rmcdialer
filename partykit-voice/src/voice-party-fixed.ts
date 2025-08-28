@@ -59,6 +59,36 @@ export default class VoiceParty implements Party.Server {
   constructor(public room: Party.Room) {}
   
   /**
+   * Generate a test tone to verify μ-law conversion
+   */
+  generateTestTone(): string {
+    const sampleRate = 8000;
+    const frequency = 440; // A4 note (440Hz)
+    const duration = 0.5; // 0.5 second
+    const samples = sampleRate * duration;
+    
+    const mulawData = new Uint8Array(samples);
+    for (let i = 0; i < samples; i++) {
+      // Generate sine wave
+      const t = i / sampleRate;
+      const sample = Math.sin(2 * Math.PI * frequency * t) * 16384; // Half volume
+      
+      // Convert to μ-law
+      mulawData[i] = this.linear16ToMulawSample(Math.floor(sample));
+    }
+    
+    // Convert to base64
+    let binary = '';
+    for (let i = 0; i < mulawData.length; i++) {
+      binary += String.fromCharCode(mulawData[i]);
+    }
+    
+    const result = btoa(binary);
+    console.log(`🎵 Generated test tone: 440Hz, 0.5s, ${result.length} chars`);
+    return result;
+  }
+  
+  /**
    * Process audio queue sequentially - NO RACE CONDITIONS!
    */
   async processAudioQueue() {
@@ -178,8 +208,8 @@ export default class VoiceParty implements Party.Server {
       
       return converted;
     } catch (error) {
-      console.error('❌ Audio conversion error:', error);
-      return base64MulawAudio; // Return original if conversion fails
+      console.error('❌ μ-law → linear16 conversion error:', error);
+      return ""; // NEVER send wrong format to Hume - return empty!
     }
   }
 
@@ -206,6 +236,14 @@ export default class VoiceParty implements Party.Server {
       
       if (!isWav) {
         console.error(`❌ Audio #${this.outputsSent}: Not a WAV file! First 4 bytes: [${wavBytes[0]},${wavBytes[1]},${wavBytes[2]},${wavBytes[3]}]`);
+        console.error(`First 20 chars of base64: ${base64WavAudio.substring(0, 20)}`);
+        return "";
+      }
+      
+      // Additional WAV validation
+      const wavSize = wavBytes.length;
+      if (wavSize < 44) {
+        console.error(`❌ Audio #${this.outputsSent}: WAV too small (${wavSize} bytes) - needs at least 44 for header`);
         return "";
       }
 
@@ -316,6 +354,9 @@ export default class VoiceParty implements Party.Server {
     const MULAW_BIAS = 0x84;
     const MULAW_CLIP = 32635;
     
+    // Ensure sample is in 16-bit range
+    sample = Math.max(-32768, Math.min(32767, sample));
+    
     // FIXED: Properly handle sign for 16-bit signed integers
     let sign = 0;
     if (sample < 0) {
@@ -336,10 +377,19 @@ export default class VoiceParty implements Party.Server {
     // Extract mantissa
     let mantissa = (sample >> (exponent + 3)) & 0x0F;
     
-    // Combine and invert
+    // Combine and invert (ITU-T G.711 standard)
     let mulawByte = ~(sign | (exponent << 4) | mantissa);
     
-    return mulawByte & 0xFF;
+    // Ensure result is valid 8-bit value
+    const result = mulawByte & 0xFF;
+    
+    // Validate result is in valid μ-law range
+    if (result < 0 || result > 255) {
+      console.error(`❌ Invalid μ-law value: ${result} from sample: ${sample}`);
+      return 0x7F; // Return silence
+    }
+    
+    return result;
   }
 
   async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
@@ -381,6 +431,24 @@ export default class VoiceParty implements Party.Server {
         this.streamSid = msg.start.streamSid;
         this.callSid = msg.start.callSid;
         
+        // TEST: Send a test tone first to verify μ-law is working
+        if (this.room.env.ENABLE_TEST_TONE === 'true') {
+          console.log('🧪 TEST MODE: Sending test tone to verify μ-law');
+          setTimeout(() => {
+            const testTone = this.generateTestTone();
+            if (this.twilioWs && this.streamSid) {
+              this.twilioWs.send(JSON.stringify({
+                event: 'media',
+                streamSid: this.streamSid,
+                media: {
+                  payload: testTone
+                }
+              }));
+              console.log('🎶 Test tone sent to Twilio');
+            }
+          }, 1000);
+        }
+        
         // Connect to Hume EVI using WebSocket API
         await this.connectToHume();
         break;
@@ -391,6 +459,12 @@ export default class VoiceParty implements Party.Server {
             try {
               // Convert μ-law to linear16 PCM (REQUIRED - μ-law not supported by Hume)
               const convertedAudio = this.convertMulawToLinear16(msg.media.payload);
+              
+              // Check conversion succeeded
+              if (!convertedAudio || convertedAudio.length === 0) {
+                console.error('⚠️ Skipping audio to Hume - conversion to linear16 failed');
+                return;
+              }
               
               // Send audio_input message - ONLY type and data fields per Hume spec
               const audioMessage = {
