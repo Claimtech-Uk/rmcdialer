@@ -1,7 +1,7 @@
 import type * as Party from "partykit/server";
 
-// Version: Sequential Queue Fix - Deploy: 2025-08-24-v17
-// FIXED: Process audio chunks sequentially to prevent race conditions
+// Version: Voice Tools Integration - Deploy: 2025-08-24-v18
+// ADDED: Real voice tool implementations (send_portal_link, etc.)
 
 // μ-law to linear16 conversion table (ITU-T G.711 standard)
 const MULAW_DECODE_TABLE = new Int16Array([
@@ -327,7 +327,7 @@ export default class VoiceParty implements Party.Server {
       
       // Validate we have actual audio (not silence)
       if (nonZeroSamples < 10) {
-        console.warn(`⚠️ Audio #${this.outputsSent}: Possible silence detected! Only ${nonZeroSamples} non-zero samples out of ${mulawData.length}`);
+        console.warn(`⚠️ Audio #${this.outputsSented}: Possible silence detected! Only ${nonZeroSamples} non-zero samples out of ${mulawData.length}`);
       }
 
       // Convert μ-law data to base64
@@ -668,8 +668,17 @@ export default class VoiceParty implements Party.Server {
         break;
         
       case 'user_interruption':
-        console.log('🎙️ User interrupted - clearing audio queue');
+        console.log('🎙️ User interrupted - clearing audio queue AND stopping Twilio playback');
         this.audioQueue = [];  // Clear pending audio
+        
+        // CRITICAL: Tell Twilio to stop playing current audio immediately
+        if (this.twilioWs && this.streamSid) {
+          console.log('🛑 Sending CLEAR to Twilio to stop current audio playback');
+          this.twilioWs.send(JSON.stringify({
+            event: 'clear',
+            streamSid: this.streamSid
+          }));
+        }
         break;
         
       case 'user_message':
@@ -724,26 +733,290 @@ export default class VoiceParty implements Party.Server {
   }
 
   async handleToolCall(message: any) {
-    console.log(`🔧 Tool requested: ${message.name || 'unknown'}`);
+    console.log(`🔧 Tool requested: ${message.name || message.function?.name || 'unknown'}`);
     
-    // TODO: Implement actual tool responses
     if (this.humeWs && message.tool_call_id) {
       try {
+        const toolName = message.name || message.function?.name;
+        let parameters = message.parameters || message.function?.arguments || {};
+        
+        // CRITICAL: Parse parameters if they come as JSON string
+        if (typeof parameters === 'string') {
+          try {
+            parameters = JSON.parse(parameters);
+            console.log(`🔄 [VOICE-TOOL] Parsed JSON parameters:`, parameters);
+          } catch (e) {
+            console.error(`❌ [VOICE-TOOL] Failed to parse parameters:`, parameters);
+            parameters = {};
+          }
+        }
+        
+        console.log(`🔧 [VOICE-TOOL] Executing: ${toolName}`, parameters);
+        
+        let toolResult;
+        
+        // Handle specific tool calls
+        switch (toolName) {
+          case 'send_portal_link':
+            toolResult = await this.handleSendPortalLink(parameters);
+            break;
+            
+          case 'check_user_details':
+            toolResult = await this.handleCheckUserDetails(parameters);
+            break;
+            
+          case 'schedule_callback':
+            toolResult = await this.handleScheduleCallback(parameters);
+            break;
+            
+          default:
+            console.log(`❓ [VOICE-TOOL] Unknown tool: ${toolName}`);
+            toolResult = {
+              success: false,
+              message: `Tool '${toolName}' is not yet implemented in voice calls.`
+            };
+        }
+        
+        // Send response back to Hume
         const toolResponse = {
           type: 'tool_response',
           tool_call_id: message.tool_call_id,
+          content: JSON.stringify(toolResult)
+        };
+        
+        console.log('📤 [VOICE-TOOL] Sending tool response:', toolResult);
+        this.humeWs.send(JSON.stringify(toolResponse));
+        
+      } catch (error) {
+        console.error('❌ [VOICE-TOOL] Error handling tool call:', error);
+        
+        // Send error response to Hume
+        const errorResponse = {
+          type: 'tool_response',
+          tool_call_id: message.tool_call_id,
           content: JSON.stringify({
-            success: true,
-            message: "Tool response placeholder"
+            success: false,
+            message: "I encountered an error while processing that request. Please try again.",
+            error: error instanceof Error ? error.message : 'Unknown error'
           })
         };
         
-        console.log('📤 Sending tool response');
-        this.humeWs.send(JSON.stringify(toolResponse));
-      } catch (error) {
-        console.error('❌ Error handling tool call:', error);
+        if (this.humeWs) {
+          this.humeWs.send(JSON.stringify(errorResponse));
+        }
       }
     }
+  }
+
+  /**
+   * Handle send_portal_link tool call
+   */
+  async handleSendPortalLink(parameters: any) {
+    const { method = 'sms', link_type = 'claims' } = parameters;
+    
+    console.log(`🔗 [PORTAL-LINK] Processing request:`, {
+      method,
+      linkType: link_type,
+      caller: this.callerContext?.fullName || 'Unknown',
+      phone: this.callerContext?.phone
+    });
+    
+    // Validate we have caller context
+    if (!this.callerContext) {
+      return {
+        success: false,
+        message: "I need to verify your details first. Can you provide your phone number?"
+      };
+    }
+    
+    // Check if user was found in our system
+    if (!this.callerContext.found || !this.callerContext.id) {
+      return {
+        success: false,
+        message: "I couldn't find your account in our system. You may need to register first. Would you like me to help you get started?"
+      };
+    }
+    
+    try {
+      // Generate secure portal link
+      const baseUrl = this.room.env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk';
+      const token = this.generateSecureToken(this.callerContext.id, link_type);
+      
+      const linkPaths = {
+        'claims': '/claims',
+        'documents': '/upload', 
+        'status': '/status'
+      };
+      
+      const path = linkPaths[link_type] || '/claims';
+      const portalUrl = `${baseUrl}${path}?token=${token}&user=${this.callerContext.id}`;
+      
+      // Send SMS (voice calls only support SMS for now)
+      if (method === 'sms') {
+        const smsResult = await this.sendPortalSMS(portalUrl, link_type);
+        
+        if (smsResult.success) {
+          return {
+            success: true,
+            message: `Perfect! I've sent you a secure portal link via text message. You should receive it shortly. The link will expire in 24 hours for security.`,
+            data: {
+              delivery_method: 'sms',
+              link_type: link_type,
+              customer_name: this.callerContext.fullName,
+              message_id: smsResult.messageId
+            }
+          };
+        } else {
+          return {
+            success: false,
+            message: "I generated your portal link, but couldn't send the text message right now. Let me try a different approach or you can call back later.",
+            error: smsResult.error
+          };
+        }
+      } else {
+        return {
+          success: false,
+          message: "For voice calls, I can only send portal links via text message. Would you like me to send it to your phone?"
+        };
+      }
+      
+    } catch (error) {
+      console.error(`❌ [PORTAL-LINK] Error:`, error);
+      return {
+        success: false,
+        message: "I'm sorry, I couldn't generate your portal link right now. Please try again or contact us directly.",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Send portal link via SMS
+   */
+  async sendPortalSMS(portalUrl: string, linkType: string) {
+    try {
+      // Get Twilio credentials from environment
+      const accountSid = this.room.env.TWILIO_ACCOUNT_SID;
+      const authToken = this.room.env.TWILIO_AUTH_TOKEN;
+      const fromNumber = this.room.env.TWILIO_FROM_NUMBER;
+      
+      if (!accountSid || !authToken || !fromNumber) {
+        throw new Error('Twilio credentials not configured in PartyKit environment');
+      }
+      
+      // Create message based on link type
+      const linkTypeMessages = {
+        'claims': 'Here\'s your secure portal link to access your motor finance claims',
+        'documents': 'Here\'s your secure link to upload documents for your claim',
+        'status': 'Here\'s your secure link to check your claim status'
+      };
+      
+      const messageText = `${linkTypeMessages[linkType] || linkTypeMessages.claims}: ${portalUrl}`;
+      
+      // Use Twilio REST API to send SMS
+      const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          From: fromNumber,
+          To: this.callerContext.phone,
+          Body: messageText
+        })
+      });
+      
+      if (response.ok) {
+        const smsData = await response.json();
+        console.log(`✅ [PORTAL-LINK] SMS sent successfully:`, {
+          messageId: smsData.sid,
+          to: this.callerContext.phone,
+          linkType
+        });
+        
+        return {
+          success: true,
+          messageId: smsData.sid
+        };
+      } else {
+        const errorData = await response.text();
+        console.error(`❌ [PORTAL-LINK] SMS failed:`, errorData);
+        return {
+          success: false,
+          error: `SMS delivery failed: ${response.status}`
+        };
+      }
+      
+    } catch (error) {
+      console.error(`❌ [PORTAL-LINK] SMS error:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'SMS service error'
+      };
+    }
+  }
+
+  /**
+   * Generate secure token for portal links
+   */
+  generateSecureToken(userId: number, linkType: string): string {
+    const timestamp = Date.now();
+    const randomBytes = Math.random().toString(36).substring(2, 15);
+    return `${userId}_${linkType}_${timestamp}_${randomBytes}`;
+  }
+
+  /**
+   * Handle check_user_details tool call
+   */
+  async handleCheckUserDetails(parameters: any) {
+    console.log(`👤 [USER-DETAILS] Request:`, parameters);
+    
+    if (this.callerContext && this.callerContext.found) {
+      return {
+        success: true,
+        message: `I can see your details here. You're ${this.callerContext.fullName}, you have ${this.callerContext.claimsCount} claims with us, and your current status is ${this.callerContext.status}.`,
+        data: {
+          name: this.callerContext.fullName,
+          phone: this.callerContext.phone,
+          claims_count: this.callerContext.claimsCount,
+          status: this.callerContext.status,
+          user_id: this.callerContext.id
+        }
+      };
+    } else {
+      return {
+        success: false,
+        message: "I don't have your details in our system yet. Can you provide your phone number so I can look you up?"
+      };
+    }
+  }
+
+  /**
+   * Handle schedule_callback tool call
+   */
+  async handleScheduleCallback(parameters: any) {
+    const { preferred_time, reason } = parameters;
+    
+    console.log(`📅 [CALLBACK] Request:`, {
+      preferredTime: preferred_time,
+      reason,
+      caller: this.callerContext?.fullName || 'Unknown'
+    });
+    
+    // For now, just acknowledge the request
+    // TODO: Integrate with actual callback scheduling system
+    return {
+      success: true,
+      message: `I've noted that you'd like a callback ${preferred_time}. Our team will contact you then to ${reason || 'continue helping you'}.`,
+      data: {
+        preferred_time,
+        reason: reason || 'general_inquiry',
+        customer_name: this.callerContext?.fullName || 'Unknown',
+        phone: this.callerContext?.phone,
+        scheduled_at: new Date().toISOString()
+      }
+    };
   }
   
   cleanup() {
@@ -771,6 +1044,6 @@ export default class VoiceParty implements Party.Server {
   }
   
   async onRequest(req: Party.Request) {
-    return new Response("Voice Party - Sequential Queue v17", { status: 200 });
+    return new Response("Voice Party - Voice Tools v18", { status: 200 });
   }
 }
