@@ -50,8 +50,9 @@ export async function POST(request: NextRequest) {
     const streamToken = process.env.VOICE_STREAM_TOKEN || 'set-a-random-dev-token'
     
     // Generate TwiML response to connect to our WebSocket service
+    // Using <Connect><Stream> for BIDIRECTIONAL audio (both send and receive)
     // The WebSocket service will handle the actual Hume EVI connection
-    console.log(`🎙️ [AI-VOICE] Generating TwiML for WebSocket bridge`)
+    console.log(`🎙️ [AI-VOICE] Generating TwiML for bidirectional WebSocket bridge`)
     
     // Log which service we're using
     const useOpenAI = process.env.USE_OPENAI_VOICE === 'true'
@@ -73,19 +74,18 @@ export async function POST(request: NextRequest) {
     
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Start>
+  <Connect>
     <Stream url="${wsUrl}">
       <Parameter name="env" value="${environmentName}"/>
       <Parameter name="auth" value="${streamToken}"/>
       <Parameter name="callSid" value="${callSid}"/>
       <Parameter name="from" value="${from}"/>
     </Stream>
-  </Start>
-  <Pause length="3600"/><!-- Keep call alive for 1 hour to allow streaming -->
+  </Connect>
 </Response>`
 
-    console.log(`🎙️ [AI-VOICE] Generated TwiML for call ${callSid}`)
-    console.log(`📄 [AI-VOICE] TwiML Response:`)
+    console.log(`🎙️ [AI-VOICE] Generated bidirectional TwiML for call ${callSid}`)
+    console.log(`📄 [AI-VOICE] TwiML Response (using <Connect> for bidirectional audio):`)
     console.log(twiml)
     console.log(`🔗 [AI-VOICE] Stream Parameters:`, {
       url: wsUrl,

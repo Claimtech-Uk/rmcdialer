@@ -120,6 +120,7 @@ export default class VoiceParty implements Party.Server {
       console.log(`🎯 Processing Audio #${this.outputsSent} (input: ${audioData.length} chars)`);
       
       // Check connection state first
+      // Note: This requires BIDIRECTIONAL streams (<Connect><Stream> in TwiML)
       if (!this.streamSid) {
         console.log(`⚠️ Audio #${this.outputsSent}: No streamSid yet, cannot send audio`);
         return;
