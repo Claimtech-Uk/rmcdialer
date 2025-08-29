@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTwilioClient } from '@/modules/twilio-voice/services/twilio-client'
+import { performEnhancedCallerLookup } from '@/modules/twilio-voice/services/caller-lookup.service'
 
 // CRITICAL: This endpoint is for AI voice ONLY
 // Protected by middleware when ENABLE_AI_VOICE_AGENT=false
@@ -27,6 +28,26 @@ export async function POST(request: NextRequest) {
       to,
       direction
     })
+
+    // Look up caller information for personalized experience
+    console.log(`🔍 [AI-VOICE] Looking up caller information for: ${from}`)
+    let callerInfo = null
+    try {
+      callerInfo = await performEnhancedCallerLookup(from)
+      if (callerInfo && callerInfo.user) {
+        console.log(`✅ [AI-VOICE] Found caller:`, {
+          name: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
+          id: callerInfo.user.id,
+          status: callerInfo.user.status,
+          claimsCount: callerInfo.claims?.length || 0
+        })
+      } else {
+        console.log(`❓ [AI-VOICE] No caller found for: ${from}`)
+      }
+    } catch (error) {
+      console.error(`❌ [AI-VOICE] Error looking up caller:`, error)
+      // Continue without caller info - don't fail the call
+    }
     
     // Double-check feature flag (middleware should have blocked already)
     if (process.env.ENABLE_AI_VOICE_AGENT !== 'true') {
@@ -72,6 +93,35 @@ export async function POST(request: NextRequest) {
     console.log(`🎙️ [AI-VOICE] Environment: ${environmentName}`)
     console.log(`🎙️ [AI-VOICE] Stream Token: ${streamToken ? 'SET' : 'NOT SET'} (${streamToken?.substring(0, 10)}...)`)
     
+    // Prepare caller context for AI agent
+    const callerContext = (callerInfo && callerInfo.user) ? {
+      found: true,
+      id: callerInfo.user.id,
+      firstName: callerInfo.user.first_name,
+      lastName: callerInfo.user.last_name,
+      fullName: `${callerInfo.user.first_name || ''} ${callerInfo.user.last_name || ''}`.trim(),
+      status: callerInfo.user.status,
+      phone: from,
+      email: callerInfo.user.email_address,
+      claims: callerInfo.claims?.map(claim => ({
+        id: claim.id,
+        lender: claim.lender,
+        status: claim.status,
+        estimatedValue: claim.estimatedValue
+      })) || [],
+      claimsCount: callerInfo.claims?.length || 0,
+      priorityScore: callerInfo.priorityScore || 0
+    } : {
+      found: false,
+      phone: from,
+      firstName: null,
+      lastName: null,
+      fullName: null
+    }
+
+    // Encode caller context as base64 to safely pass through TwiML
+    const callerContextEncoded = Buffer.from(JSON.stringify(callerContext)).toString('base64')
+
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
@@ -80,6 +130,7 @@ export async function POST(request: NextRequest) {
       <Parameter name="auth" value="${streamToken}"/>
       <Parameter name="callSid" value="${callSid}"/>
       <Parameter name="from" value="${from}"/>
+      <Parameter name="callerContext" value="${callerContextEncoded}"/>
     </Stream>
   </Connect>
 </Response>`
@@ -92,8 +143,20 @@ export async function POST(request: NextRequest) {
       env: environmentName,
       auth: streamToken?.substring(0, 10) + '...',
       callSid,
-      from
+      from,
+      callerFound: (callerInfo && callerInfo.user) ? `${callerInfo.user.first_name} ${callerInfo.user.last_name}` : 'Unknown',
+      claimsCount: callerInfo?.claims?.length || 0
     })
+    
+    if (callerInfo && callerInfo.user) {
+      console.log(`👤 [AI-VOICE] Caller Context:`, {
+        name: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
+        status: callerInfo.user.status,
+        claimsCount: callerInfo.claims?.length || 0,
+        priorityScore: callerInfo.priorityScore || 0,
+        hasEmail: !!callerInfo.user.email_address
+      })
+    }
     
     return new NextResponse(twiml, {
       headers: {

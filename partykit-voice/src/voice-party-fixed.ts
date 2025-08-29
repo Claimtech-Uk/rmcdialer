@@ -44,6 +44,7 @@ export default class VoiceParty implements Party.Server {
   humeWs: WebSocket | null = null;
   streamSid: string | null = null;
   callSid: string | null = null;
+  callerContext: any = null;
   isSessionReady: boolean = false;
   sessionReadyLogged: boolean = false;
   audioChunkCounter: number = 0;
@@ -432,6 +433,28 @@ export default class VoiceParty implements Party.Server {
         this.streamSid = msg.start.streamSid;
         this.callSid = msg.start.callSid;
         
+        // Extract caller context from Twilio parameters
+        if (msg.start.customParameters?.callerContext) {
+          try {
+            const callerContextEncoded = msg.start.customParameters.callerContext;
+            const callerContextJson = Buffer.from(callerContextEncoded, 'base64').toString('utf-8');
+            this.callerContext = JSON.parse(callerContextJson);
+            
+            console.log(`👤 [VOICE-CONTEXT] Caller Context Received:`, {
+              found: this.callerContext.found,
+              name: this.callerContext.fullName || 'Unknown',
+              claimsCount: this.callerContext.claimsCount || 0,
+              status: this.callerContext.status || 'unknown'
+            });
+          } catch (error) {
+            console.error(`❌ [VOICE-CONTEXT] Error parsing caller context:`, error);
+            this.callerContext = { found: false, phone: msg.start.customParameters?.from || 'unknown' };
+          }
+        } else {
+          console.log(`❓ [VOICE-CONTEXT] No caller context provided`);
+          this.callerContext = { found: false, phone: msg.start.customParameters?.from || 'unknown' };
+        }
+        
         // TEST: Send a test tone first to verify μ-law is working
         if (this.room.env.ENABLE_TEST_TONE === 'true') {
           console.log('🧪 TEST MODE: Sending test tone to verify μ-law');
@@ -558,6 +581,24 @@ export default class VoiceParty implements Party.Server {
         console.log('📤 Sending session_settings (Hume spec compliant):', JSON.stringify(initMessage));
         if (this.humeWs) {
           this.humeWs.send(JSON.stringify(initMessage));
+        }
+        
+        // Send caller context to Hume for personalized conversation
+        if (this.callerContext && this.humeWs) {
+          console.log('👤 [VOICE-CONTEXT] Sending caller context to Hume...');
+          
+          const contextMessage = this.callerContext.found ? 
+            `Hello, I'm speaking with ${this.callerContext.fullName}. They have ${this.callerContext.claimsCount} claims with us and their current status is ${this.callerContext.status}. Their phone number is ${this.callerContext.phone}.` :
+            `Hello, I'm speaking with someone calling from ${this.callerContext.phone}. I don't have their details in our system yet.`;
+          
+          // Send as a system message to set context
+          const systemContextMessage = {
+            type: 'user_input',
+            text: `SYSTEM CONTEXT: ${contextMessage}. Please greet the caller appropriately and help them with their motor finance claim inquiry.`
+          };
+          
+          console.log('📤 [VOICE-CONTEXT] Context message:', systemContextMessage.text);
+          this.humeWs.send(JSON.stringify(systemContextMessage));
         }
         
         // Note about telephony limitations
@@ -717,6 +758,9 @@ export default class VoiceParty implements Party.Server {
       this.humeWs.close();
       this.humeWs = null;
     }
+    
+    // Clear caller context
+    this.callerContext = null;
     
     this.isSessionReady = false;
     this.sessionReadyLogged = false;
