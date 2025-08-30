@@ -363,6 +363,77 @@ export async function GET(request: NextRequest) {
     }
   }
   
+  if (testType === 'sms-creds') {
+    try {
+      console.log('🧪 [TEST-SMS-CREDS] Testing Twilio credentials...')
+      
+      const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim()
+      const authToken = process.env.TWILIO_AUTH_TOKEN?.trim()
+      const fromNumber = process.env.TWILIO_FROM_NUMBER?.trim()
+      
+      const credsResult = {
+        success: !!(accountSid && authToken && fromNumber),
+        accountSid: accountSid ? accountSid.substring(0, 10) + '...' : 'Missing',
+        authToken: authToken ? 'Present (' + authToken.length + ' chars)' : 'Missing',
+        fromNumber: fromNumber || 'Missing',
+        allPresent: !!(accountSid && authToken && fromNumber)
+      }
+      
+      console.log(`✅ [TEST-SMS-CREDS] Credentials check:`, credsResult)
+      
+      return NextResponse.json({
+        success: true,
+        test: 'sms_credentials',
+        ...credsResult
+      })
+      
+    } catch (error: any) {
+      console.error('❌ [TEST-SMS-CREDS] Credentials check failed:', error)
+      return NextResponse.json({
+        success: false,
+        test: 'sms_credentials',
+        error: error?.message || 'Unknown error'
+      })
+    }
+  }
+  
+  if (testType === 'portal') {
+    try {
+      console.log('🧪 [TEST-PORTAL] Testing portal link generation...')
+      
+      const userId = 2064  // James Campbell's ID
+      const linkType = 'claims'
+      const baseUrl = process.env.MAIN_APP_URL || 'https://dev.solvosolutions.co.uk'
+      
+      // Generate token (mock PartyKit logic)
+      const token = `${linkType}_${userId}_${Date.now()}_${Math.random().toString(36).substring(7)}`
+      const linkPaths = { claims: '/claims', documents: '/documents', status: '/status' }
+      const portalPath = linkPaths[linkType] || '/claims'
+      const portalUrl = `${baseUrl}${portalPath}?token=${token}`
+      
+      console.log(`✅ [TEST-PORTAL] Portal link generated successfully`)
+      
+      return NextResponse.json({
+        success: true,
+        test: 'portal_link_generation',
+        userId: userId,
+        linkType: linkType,
+        baseUrl: baseUrl,
+        portalPath: portalPath,
+        fullUrl: portalUrl.substring(0, 80) + '...',
+        tokenLength: token.length
+      })
+      
+    } catch (error: any) {
+      console.error('❌ [TEST-PORTAL] Portal generation failed:', error)
+      return NextResponse.json({
+        success: false,
+        test: 'portal_link_generation',
+        error: error?.message || 'Unknown error'
+      })
+    }
+  }
+  
   return NextResponse.json({
     status: 'AI Voice User Lookup Endpoint',
     enabled: isAIVoiceEnabled || environmentName === 'staging-development',
@@ -374,7 +445,10 @@ export async function GET(request: NextRequest) {
       anyData: '?test=any-data', 
       phoneSearch: '?test=phone',
       claimsSearch: '?test=claims',
-      vehiclePackages: '?test=vehicles'
+      vehiclePackages: '?test=vehicles',
+      smsCredentials: '?test=sms-creds',
+      portalLink: '?test=portal',
+      sendSms: '?test=send-sms'
     }
   })
 }
