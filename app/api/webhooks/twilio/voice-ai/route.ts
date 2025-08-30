@@ -32,16 +32,18 @@ export async function POST(request: NextRequest) {
     console.log(`🔍 [AI-VOICE] Looking up caller information for: ${from}`)
     let callerInfo = null
     try {
-      // Dynamic import to avoid breaking webhook if database unavailable
-      const { performEnhancedCallerLookup } = await import('@/modules/twilio-voice/services/caller-lookup.service')
-      callerInfo = await performEnhancedCallerLookup(from)
+      // Dynamic import AI-specific lookup service (separate from main voice system)
+      const { performAICallerLookup } = await import('@/modules/ai-voice-agent/services/ai-caller-lookup.service')
+      callerInfo = await performAICallerLookup(from)
       
       if (callerInfo && callerInfo.user) {
         console.log(`✅ [AI-VOICE] Found caller:`, {
           name: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
           id: Number(callerInfo.user.id), // Convert BigInt to Number
           status: callerInfo.user.status,
-          claimsCount: callerInfo.claims?.length || 0
+          hasIdOnFile: !!callerInfo.user.current_user_id_document_id,
+          claimsCount: callerInfo.claims?.length || 0,
+          totalVehicles: callerInfo.claims?.reduce((sum, claim) => sum + (claim.vehiclePackages?.length || 0), 0) || 0
         })
       } else {
         console.log(`❓ [AI-VOICE] No caller found for: ${from}`)
@@ -118,8 +120,7 @@ export async function POST(request: NextRequest) {
           model: vp.vehicle_model,
           dealership: vp.dealership_name,
           monthlyPayment: vp.monthly_payment ? Number(vp.monthly_payment) : null
-        })) || [],
-        estimatedValue: claim.estimatedValue ? Number(claim.estimatedValue) : null // Convert BigInt to Number
+        })) || []
       })) || [],
       claimsCount: callerInfo.claims?.length || 0,
       totalVehiclePackages: callerInfo.claims?.reduce((sum, claim) => sum + (claim.vehiclePackages?.length || 0), 0) || 0,

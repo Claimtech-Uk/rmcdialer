@@ -36,7 +36,6 @@ export async function performEnhancedCallerLookup(phoneNumber: string): Promise<
         phone_number: true,
         email_address: true,
         status: true,
-        current_user_id_document_id: true,  // Check if ID is on file
         created_at: true,
         last_login: true
       }
@@ -51,7 +50,7 @@ export async function performEnhancedCallerLookup(phoneNumber: string): Promise<
 
     // Get user's claims and call history
     const [claims, callHistory] = await Promise.all([
-      // Get active claims with vehicle packages
+      // Get active claims
       replicaDb.claim.findMany({
         where: {
           user_id: user.id,
@@ -65,19 +64,7 @@ export async function performEnhancedCallerLookup(phoneNumber: string): Promise<
           status: true,
           lender: true,
           created_at: true,
-          updated_at: true,
-          // Include vehicle packages for each claim
-          vehiclePackages: {
-            select: {
-              id: true,
-              vehicle_registration: true,
-              vehicle_make: true,
-              vehicle_model: true,
-              dealership_name: true,
-              monthly_payment: true,
-              status: true
-            }
-          }
+          updated_at: true
         },
         take: 5,
         orderBy: {
@@ -125,9 +112,7 @@ export async function performEnhancedCallerLookup(phoneNumber: string): Promise<
       callerName: result.user ? `${result.user.first_name} ${result.user.last_name}` : 'Unknown',
       userId: user.id,
       phone: user.phone_number,
-      hasIdOnFile: !!user.current_user_id_document_id,
       claimsCount: claims.length,
-      totalVehiclePackages: claims.reduce((sum, claim) => sum + (claim.vehiclePackages?.length || 0), 0),
       priorityScore
     });
 
