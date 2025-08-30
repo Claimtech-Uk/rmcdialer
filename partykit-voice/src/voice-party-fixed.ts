@@ -327,7 +327,7 @@ export default class VoiceParty implements Party.Server {
       
       // Validate we have actual audio (not silence)
       if (nonZeroSamples < 10) {
-        console.warn(`⚠️ Audio #${this.outputsSented}: Possible silence detected! Only ${nonZeroSamples} non-zero samples out of ${mulawData.length}`);
+        console.warn(`⚠️ Audio #${this.outputsSent}: Possible silence detected! Only ${nonZeroSamples} non-zero samples out of ${mulawData.length}`);
       }
 
       // Convert μ-law data to base64
@@ -446,7 +446,7 @@ export default class VoiceParty implements Party.Server {
               hasIdOnFile: this.callerContext.hasIdOnFile || false,
               claimsCount: this.callerContext.claimsCount || 0,
               totalVehicles: this.callerContext.totalVehiclePackages || 0,
-              lenders: [...new Set(this.callerContext.claims?.map(c => c.lender).filter(Boolean))] || [],
+              lenders: this.callerContext.claims ? [...new Set(this.callerContext.claims.map((c: any) => c.lender).filter(Boolean))] : [],
               status: this.callerContext.status || 'unknown'
             });
           } catch (error) {
@@ -605,7 +605,7 @@ export default class VoiceParty implements Party.Server {
               contextMessage += `They have ${this.callerContext.claimsCount} claim(s) with us`;
               
               // Add lender details if available
-              const lenders = [...new Set(this.callerContext.claims?.map(c => c.lender).filter(Boolean))];
+              const lenders = this.callerContext.claims ? [...new Set(this.callerContext.claims.map((c: any) => c.lender).filter(Boolean))] : [];
               if (lenders.length > 0) {
                 contextMessage += ` with ${lenders.join(', ')}`;
               }
@@ -843,12 +843,13 @@ export default class VoiceParty implements Party.Server {
   /**
    * Handle send_portal_link tool call
    * AI Voice specific: Uses clean message format "Access your portal here: [link]"
+   * SMS only - no email option
    */
   async handleSendPortalLink(parameters: any) {
-    const { method = 'sms', link_type = 'claims' } = parameters;
+    const { link_type = 'claims' } = parameters;  // No method needed - always SMS
     
     console.log(`🔗 [PORTAL-LINK] Processing request:`, {
-      method,
+      method: 'sms',  // Always SMS for voice calls
       linkType: link_type,
       caller: this.callerContext?.fullName || 'Unknown',
       phone: this.callerContext?.phone
@@ -875,41 +876,34 @@ export default class VoiceParty implements Party.Server {
       const baseUrl = this.room.env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk';
       const token = this.generateSecureToken(this.callerContext.id, link_type);
       
-      const linkPaths = {
+      const linkPaths: Record<string, string> = {
         'claims': '/claims',
         'documents': '/upload', 
         'status': '/status'
       };
       
-      const path = linkPaths[link_type] || '/claims';
+      const path = linkPaths[link_type as string] || '/claims';
       const portalUrl = `${baseUrl}${path}?token=${token}&user=${this.callerContext.id}`;
       
-      // Send SMS (voice calls only support SMS for now)
-      if (method === 'sms') {
-        const smsResult = await this.sendPortalSMS(portalUrl, link_type);
-        
-        if (smsResult.success) {
-          return {
-            success: true,
-            message: `Perfect! I've sent you a secure portal link via text message. You should receive it shortly. The link will expire in 24 hours for security.`,
-            data: {
-              delivery_method: 'sms',
-              link_type: link_type,
-              customer_name: this.callerContext.fullName,
-              message_id: smsResult.messageId
-            }
-          };
-        } else {
-          return {
-            success: false,
-            message: "I generated your portal link, but couldn't send the text message right now. Let me try a different approach or you can call back later.",
-            error: smsResult.error
-          };
-        }
+      // Send SMS - voice calls always use SMS
+      const smsResult = await this.sendPortalSMS(portalUrl, link_type);
+      
+      if (smsResult.success) {
+        return {
+          success: true,
+          message: `Perfect! I've sent you a secure portal link via text message. You should receive it shortly. The link will expire in 24 hours for security.`,
+          data: {
+            delivery_method: 'sms',
+            link_type: link_type,
+            customer_name: this.callerContext.fullName,
+            message_id: smsResult.messageId
+          }
+        };
       } else {
         return {
           success: false,
-          message: "For voice calls, I can only send portal links via text message. Would you like me to send it to your phone?"
+          message: "I generated your portal link, but couldn't send the text message right now. Let me try a different approach or you can call back later.",
+          error: smsResult.error
         };
       }
       
@@ -951,14 +945,14 @@ export default class VoiceParty implements Party.Server {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
-          From: fromNumber,
-          To: this.callerContext.phone,
+          From: fromNumber as string,
+          To: this.callerContext.phone as string,
           Body: messageText
         })
       });
       
       if (response.ok) {
-        const smsData = await response.json();
+        const smsData: any = await response.json();
         console.log(`✅ [AI-VOICE-PORTAL] SMS sent successfully:`, {
           messageId: smsData.sid,
           to: this.callerContext.phone,
@@ -1022,7 +1016,7 @@ export default class VoiceParty implements Party.Server {
           
           // Add specific lender and vehicle details
           if (this.callerContext.claims && this.callerContext.claims.length > 0) {
-            const claimSummaries = this.callerContext.claims.map(claim => {
+            const claimSummaries = this.callerContext.claims.map((claim: any) => {
               let summary = claim.lender || 'a lender';
               if (claim.vehiclePackagesCount > 0) {
                 summary += ` (${claim.vehiclePackagesCount} vehicle${claim.vehiclePackagesCount > 1 ? 's' : ''})`;
@@ -1046,7 +1040,7 @@ export default class VoiceParty implements Party.Server {
             has_id_on_file: this.callerContext.hasIdOnFile,
             claims_count: this.callerContext.claimsCount,
             total_vehicles: this.callerContext.totalVehiclePackages || 0,
-            claims: this.callerContext.claims?.map(c => ({
+            claims: this.callerContext.claims?.map((c: any) => ({
               lender: c.lender,
               status: c.status,
               vehicles_count: c.vehiclePackagesCount || 0
