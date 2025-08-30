@@ -23,12 +23,10 @@ async function testSMSPortal() {
   try {
     console.log('🔗 STEP 1: Generating portal link...');
     
-    // This is what PartyKit does to generate the link
-    const baseUrl = 'https://dev.solvosolutions.co.uk';
-    const token = generateTestToken(userId, linkType);  // Mock token generation
-    const linkPaths = { claims: '/claims', documents: '/documents', status: '/status' };
-    const portalPath = linkPaths[linkType] || '/claims';
-    const portalUrl = `${baseUrl}${portalPath}?token=${token}`;
+    // Use CORRECT main app URL and AI magic link format  
+    const baseUrl = 'https://claim.resolvemyclaim.co.uk';  // Main app, not dialer
+    const token = Buffer.from(userId.toString()).toString('base64');  // AI magic link format
+    const portalUrl = `${baseUrl}/claims?mlid=${token}`;  // Correct AI format
     
     console.log(`✅ Portal URL generated: ${portalUrl.substring(0, 60)}...`);
     
@@ -124,12 +122,8 @@ async function testSMSPortal() {
   console.log('🧪 SMS PORTAL TEST COMPLETE');
 }
 
-// Mock token generation (matches PartyKit logic)
-function generateTestToken(userId, linkType) {
-  const timestamp = Date.now();
-  const randomSuffix = Math.random().toString(36).substring(7);
-  return `${linkType}_${userId}_${timestamp}_${randomSuffix}`;
-}
+// Note: Using AI magic link format (base64 encoded user ID) 
+// This matches the proven working AI magic link generator
 
 // Run the test
 testSMSPortal().catch(console.error);

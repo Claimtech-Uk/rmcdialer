@@ -403,13 +403,11 @@ export async function GET(request: NextRequest) {
       
       const userId = 2064  // James Campbell's ID
       const linkType = 'claims'
-      const baseUrl = process.env.MAIN_APP_URL || 'https://dev.solvosolutions.co.uk'
+      const baseUrl = process.env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk'  // Main app, not dialer
       
-      // Generate token (mock PartyKit logic)
-      const token = `${linkType}_${userId}_${Date.now()}_${Math.random().toString(36).substring(7)}`
-      const linkPaths = { claims: '/claims', documents: '/documents', status: '/status' }
-      const portalPath = linkPaths[linkType] || '/claims'
-      const portalUrl = `${baseUrl}${portalPath}?token=${token}`
+      // Use AI magic link format (base64 encoded user ID)
+      const token = Buffer.from(userId.toString()).toString('base64')
+      const portalUrl = `${baseUrl}/claims?mlid=${token}`  // Correct AI magic link format
       
       console.log(`✅ [TEST-PORTAL] Portal link generated successfully`)
       
@@ -419,8 +417,8 @@ export async function GET(request: NextRequest) {
         userId: userId,
         linkType: linkType,
         baseUrl: baseUrl,
-        portalPath: portalPath,
-        fullUrl: portalUrl.substring(0, 80) + '...',
+        format: 'AI magic link (mlid + base64)',
+        fullUrl: portalUrl,
         tokenLength: token.length
       })
       

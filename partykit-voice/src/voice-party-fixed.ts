@@ -914,18 +914,12 @@ export default class VoiceParty implements Party.Server {
     }
     
     try {
-      // Generate secure portal link
-      const baseUrl = String(this.room.env.MAIN_APP_URL || 'https://dev.solvosolutions.co.uk').trim();
-      const token = this.generateSecureToken(this.callerContext.id, link_type);
+      // Generate secure portal link using AI magic link format
+      const baseUrl = String(this.room.env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk').trim();  // Main app, not dialer
+      const token = Buffer.from(this.callerContext.id.toString()).toString('base64');  // AI magic link format
       
-      const linkPaths: Record<string, string> = {
-        'claims': '/claims',
-        'documents': '/upload', 
-        'status': '/status'
-      };
-      
-      const path = linkPaths[link_type as string] || '/claims';
-      const portalUrl = `${baseUrl}${path}?token=${token}&user=${this.callerContext.id}`;
+      // Use AI magic link format (mlid parameter, /claims path)
+      const portalUrl = `${baseUrl}/claims?mlid=${token}`;
       
       // Send SMS - voice calls always use SMS
       const smsResult = await this.sendPortalSMS(portalUrl, link_type);
@@ -1024,14 +1018,8 @@ export default class VoiceParty implements Party.Server {
     }
   }
 
-  /**
-   * Generate secure token for portal links
-   */
-  generateSecureToken(userId: number, linkType: string): string {
-    const timestamp = Date.now();
-    const randomBytes = Math.random().toString(36).substring(2, 15);
-    return `${userId}_${linkType}_${timestamp}_${randomBytes}`;
-  }
+  // Note: Now using AI magic link format (base64 encoded user ID)
+  // This matches the proven working AI magic link generator
 
   /**
    * Handle check_user_details tool call

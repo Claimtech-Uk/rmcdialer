@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     
     console.log(`📱 [AI-VOICE-SMS] Using Twilio from: ${fromNumber}`)
     
-    // Create the exact message format that PartyKit uses
+    // Create the exact message format that PartyKit uses (simplified for AI voice)
     const messageText = `Access your portal here: ${portalUrl}`
     console.log(`💬 [AI-VOICE-SMS] Message: ${messageText.substring(0, 50)}...`)
     
