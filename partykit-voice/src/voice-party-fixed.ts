@@ -842,6 +842,7 @@ export default class VoiceParty implements Party.Server {
 
   /**
    * Handle send_portal_link tool call
+   * AI Voice specific: Uses clean message format "Access your portal here: [link]"
    */
   async handleSendPortalLink(parameters: any) {
     const { method = 'sms', link_type = 'claims' } = parameters;
@@ -923,7 +924,8 @@ export default class VoiceParty implements Party.Server {
   }
 
   /**
-   * Send portal link via SMS
+   * Send portal link via SMS - AI Voice Specific
+   * Uses clean, simple message format: "Access your portal here: [link]"
    */
   async sendPortalSMS(portalUrl: string, linkType: string) {
     try {
@@ -936,14 +938,10 @@ export default class VoiceParty implements Party.Server {
         throw new Error('Twilio credentials not configured in PartyKit environment');
       }
       
-      // Create message based on link type
-      const linkTypeMessages = {
-        'claims': 'Here\'s your secure portal link to access your motor finance claims',
-        'documents': 'Here\'s your secure link to upload documents for your claim',
-        'status': 'Here\'s your secure link to check your claim status'
-      };
+      // AI Voice specific: Clean, simple message format
+      const messageText = `Access your portal here: ${portalUrl}`;
       
-      const messageText = `${linkTypeMessages[linkType] || linkTypeMessages.claims}: ${portalUrl}`;
+      console.log(`📱 [AI-VOICE-PORTAL] Sending portal link (${linkType}) to ${this.callerContext.phone}`);
       
       // Use Twilio REST API to send SMS
       const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
@@ -961,10 +959,11 @@ export default class VoiceParty implements Party.Server {
       
       if (response.ok) {
         const smsData = await response.json();
-        console.log(`✅ [PORTAL-LINK] SMS sent successfully:`, {
+        console.log(`✅ [AI-VOICE-PORTAL] SMS sent successfully:`, {
           messageId: smsData.sid,
           to: this.callerContext.phone,
-          linkType
+          linkType,
+          message: 'Clean format used'
         });
         
         return {
@@ -973,7 +972,7 @@ export default class VoiceParty implements Party.Server {
         };
       } else {
         const errorData = await response.text();
-        console.error(`❌ [PORTAL-LINK] SMS failed:`, errorData);
+        console.error(`❌ [AI-VOICE-PORTAL] SMS failed:`, errorData);
         return {
           success: false,
           error: `SMS delivery failed: ${response.status}`
@@ -981,7 +980,7 @@ export default class VoiceParty implements Party.Server {
       }
       
     } catch (error) {
-      console.error(`❌ [PORTAL-LINK] SMS error:`, error);
+      console.error(`❌ [AI-VOICE-PORTAL] SMS error:`, error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'SMS service error'
