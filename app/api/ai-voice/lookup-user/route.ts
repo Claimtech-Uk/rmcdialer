@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     // Use the existing AI caller lookup service
     const callerInfo = await performAICallerLookup(phone)
     
-    if (callerInfo && callerInfo.user) {
+    if (callerInfo && callerInfo.user && callerInfo.lookupSuccess) {
       const response = {
         found: true,
         fullName: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
@@ -63,9 +63,21 @@ export async function POST(request: NextRequest) {
     } else {
       console.log(`❌ [AI-VOICE-LOOKUP] User not found for phone: ${phone}`)
       
+      // Check if there was an error vs user simply not found
+      if (callerInfo && callerInfo.error) {
+        console.error(`🚨 [AI-VOICE-LOOKUP] Database error: ${callerInfo.error}`)
+        return NextResponse.json({
+          found: false,
+          phone: phone,
+          error: callerInfo.error,
+          debug: 'Database query failed'
+        })
+      }
+      
       return NextResponse.json({
         found: false,
-        phone: phone
+        phone: phone,
+        debug: 'User genuinely not found'
       })
     }
   } catch (error) {

@@ -36,6 +36,7 @@ export interface AICallerInfo {
   }>;
   priorityScore: number;
   lookupSuccess: boolean;
+  error?: string;  // Add error field for debugging
 }
 
 /**
@@ -160,9 +161,22 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
 
     return result;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ [AI Voice] Enhanced caller lookup failed:', error);
-    return null;
+    console.error('❌ [AI Voice] Error details:', {
+      message: error?.message || 'Unknown error',
+      stack: error?.stack || 'No stack trace',
+      phoneNumber,
+      normalizedNumbers: normalizePhoneNumber(phoneNumber)
+    });
+    return {
+      user: null,
+      claims: [],
+      callHistory: [],
+      priorityScore: 0,
+      lookupSuccess: false,
+      error: error?.message || 'Unknown error'  // Return error for debugging
+    };
   }
 }
 
@@ -197,8 +211,8 @@ export async function performAIQuickLookup(phoneNumber: string): Promise<{found:
       hasId: !!user.current_user_id_document_id
     };
 
-  } catch (error) {
-    console.error('❌ [AI Voice] Quick lookup failed:', error);
+  } catch (error: any) {
+    console.error('❌ [AI Voice] Quick lookup failed:', error?.message || error);
     return null;
   }
 }
