@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     // Use the same Twilio approach as PartyKit
     const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim()
     const authToken = process.env.TWILIO_AUTH_TOKEN?.trim() 
-    const fromNumber = process.env.TWILIO_FROM_NUMBER?.trim()
+    const fromNumber = process.env.TWILIO_PHONE_NUMBER?.trim()  // Use same variable as working SMS service
     
     if (!accountSid || !authToken || !fromNumber) {
       console.error('❌ [AI-VOICE-SMS] Missing Twilio credentials')

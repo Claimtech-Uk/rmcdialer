@@ -369,7 +369,7 @@ export async function GET(request: NextRequest) {
       
       const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim()
       const authToken = process.env.TWILIO_AUTH_TOKEN?.trim()
-      const fromNumber = process.env.TWILIO_FROM_NUMBER?.trim()
+      const fromNumber = process.env.TWILIO_PHONE_NUMBER?.trim()  // Use same variable as working SMS service
       
       const credsResult = {
         success: !!(accountSid && authToken && fromNumber),

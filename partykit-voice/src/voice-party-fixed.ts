@@ -968,7 +968,7 @@ export default class VoiceParty implements Party.Server {
       // Get Twilio credentials from environment (trim whitespace)
       const accountSid = String(this.room.env.TWILIO_ACCOUNT_SID || '').trim();
       const authToken = String(this.room.env.TWILIO_AUTH_TOKEN || '').trim();
-      const fromNumber = String(this.room.env.TWILIO_FROM_NUMBER || '').trim();
+      const fromNumber = String(this.room.env.TWILIO_PHONE_NUMBER || '').trim();  // Use same variable as working SMS service
       
       if (!accountSid || !authToken || !fromNumber) {
         throw new Error('Twilio credentials not configured in PartyKit environment');

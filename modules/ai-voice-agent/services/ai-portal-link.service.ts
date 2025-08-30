@@ -30,7 +30,7 @@ export class AIVoicePortalService {
     this.baseUrl = env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk';
     this.twilioAccountSid = env.TWILIO_ACCOUNT_SID;
     this.twilioAuthToken = env.TWILIO_AUTH_TOKEN;
-    this.fromNumber = env.TWILIO_FROM_NUMBER;
+    this.fromNumber = env.TWILIO_PHONE_NUMBER;  // Use same variable as working SMS service
   }
 
   /**
