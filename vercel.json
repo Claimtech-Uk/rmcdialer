@@ -1,134 +1,19 @@
 {
-  "version": 2,
-  "buildCommand": "npm run vercel-build",
-  "outputDirectory": ".next",
-  "installCommand": "npm ci",
-  "framework": "nextjs",
-  "functions": {
-    "app/api/**": {
-      "maxDuration": 60,
-      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
-    },
-    "app/api/cron/**": {
-      "maxDuration": 300,
-      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
-    },
-    "app/api/webhooks/**": {
-      "maxDuration": 180,
-      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
-    },
-    "app/api/transcription-async/queue/**": {
-      "maxDuration": 5,
-      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
-    },
-    "app/api/transcription-async/status/**": {
-      "maxDuration": 5,
-      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
-    },
-    "app/api/transcription-async/download/**": {
-      "maxDuration": 10,
-      "includeFiles": "node_modules/.prisma/client/**\nprisma/generated/mysql-client/**"
-    }
-  },
-  "crons": [
-
-    {
-      "path": "/api/cron/queue-level-check",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/signature-conversion-cleanup",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/smart-new-users-discovery",
-      "schedule": "5 * * * *"
-    },
-    {
-      "path": "/api/cron/outstanding-requirements-conversion-cleanup",
-      "schedule": "10 * * * *"
-    },
-    {
-      "path": "/api/cron/discover-new-requirements",
-      "schedule": "15 * * * *"
-    },
-    {
-      "path": "/api/cron/scoring-maintenance",
-      "schedule": "20 * * * *"
-    },
-    {
-      "path": "/api/cron/conversion-agent-attribution",
-      "schedule": "25 * * * *"
-    },
-    {
-      "path": "/api/cron/populate-separated-queues",
-      "schedule": "30 * * * *"
-    },
-    {
-      "path": "/api/cron/daily-cleanup",
-      "schedule": "0 2 * * *"
-    },
-
-    {
-      "path": "/api/cron/session-cleanup",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/heartbeat-cleanup",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/queue-cleanup",
-      "schedule": "*/2 * * * *"
-    }
-    ,
-    {
-      "path": "/api/cron/sms-followups",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/process-sms-batches",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/weekly-score-aging",
-      "schedule": "1 0 * * *"
-    },
-    {
-      "path": "/api/cron/process-transcriptions",
-      "schedule": "*/1 * * * *"
-    }
-  ],
-  "git": {
-    "deploymentEnabled": {
-      "main": true
-    }
-  },
   "github": {
-    "autoAlias": false,
-    "autoJobCancelation": true
+    "silent": true
   },
-  "rewrites": [
-    {
-      "source": "/api/webhooks/:path*",
-      "destination": "/api/webhooks/:path*"
+  "functions": {
+    "app/api/ai-voice/**/*.ts": {
+      "maxDuration": 30
     }
-  ],
+  },
   "headers": [
     {
-      "source": "/api/(.*)",
+      "source": "/api/ai-voice/(.*)",
       "headers": [
         {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
+          "key": "X-Robots-Tag",
+          "value": "noindex"
         }
       ]
     }
