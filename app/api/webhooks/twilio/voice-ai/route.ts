@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       if (callerInfo && callerInfo.user) {
         console.log(`✅ [AI-VOICE] Found caller:`, {
           name: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
-          id: callerInfo.user.id,
+          id: Number(callerInfo.user.id), // Convert BigInt to Number
           status: callerInfo.user.status,
           claimsCount: callerInfo.claims?.length || 0
         })
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     // Prepare caller context for AI agent (GRACEFUL FALLBACK)
     const callerContext = (callerInfo && callerInfo.user) ? {
       found: true,
-      id: callerInfo.user.id,
+      id: Number(callerInfo.user.id), // Convert BigInt to Number
       firstName: callerInfo.user.first_name,
       lastName: callerInfo.user.last_name,
       fullName: `${callerInfo.user.first_name || ''} ${callerInfo.user.last_name || ''}`.trim(),
@@ -107,10 +107,10 @@ export async function POST(request: NextRequest) {
       phone: from,
       email: callerInfo.user.email_address,
       claims: callerInfo.claims?.map(claim => ({
-        id: claim.id,
+        id: Number(claim.id), // Convert BigInt to Number
         lender: claim.lender,
         status: claim.status,
-        estimatedValue: claim.estimatedValue
+        estimatedValue: claim.estimatedValue ? Number(claim.estimatedValue) : null // Convert BigInt to Number
       })) || [],
       claimsCount: callerInfo.claims?.length || 0,
       priorityScore: callerInfo.priorityScore || 0
