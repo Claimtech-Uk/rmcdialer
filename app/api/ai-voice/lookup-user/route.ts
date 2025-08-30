@@ -2,14 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
+    // Check for API token (bypass auth for PartyKit)
+    const authHeader = request.headers.get('authorization')
+    const apiToken = process.env.AI_VOICE_API_TOKEN
+    
+    // Allow requests with valid token OR from staging-development
+    const isAuthorized = (authHeader === `Bearer ${apiToken}`) || 
+                        (process.env.ENVIRONMENT_NAME === 'staging-development')
+    
     // Check feature flag directly from environment
     const isAIVoiceEnabled = process.env.ENABLE_AI_VOICE_AGENT === 'true'
     const environmentName = process.env.ENVIRONMENT_NAME || 'unknown'
     
     // Allow in dev/staging environments or when explicitly enabled
-    if (!isAIVoiceEnabled && environmentName !== 'staging-development') {
+    if (!isAIVoiceEnabled && environmentName !== 'staging-development' && !isAuthorized) {
       return NextResponse.json(
-        { error: 'AI Voice agent disabled', environment: environmentName },
+        { error: 'AI Voice agent disabled or unauthorized', environment: environmentName },
         { status: 403 }
       )
     }

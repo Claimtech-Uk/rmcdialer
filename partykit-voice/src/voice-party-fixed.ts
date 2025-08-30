@@ -1060,11 +1060,20 @@ export default class VoiceParty implements Party.Server {
       
       console.log(`📡 [USER-DETAILS] Calling API: ${lookupUrl}`);
       
+      // Add authorization if we have a token
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      
+      // Use the AI Voice API token if available
+      const apiToken = String(this.room.env.AI_VOICE_API_TOKEN || '').trim();
+      if (apiToken) {
+        headers['Authorization'] = `Bearer ${apiToken}`;
+      }
+      
       const response = await fetch(lookupUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers,
         body: JSON.stringify({ phone: phoneNumber })
       });
       
