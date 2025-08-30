@@ -443,7 +443,10 @@ export default class VoiceParty implements Party.Server {
             console.log(`👤 [VOICE-CONTEXT] Caller Context Received:`, {
               found: this.callerContext.found,
               name: this.callerContext.fullName || 'Unknown',
+              hasIdOnFile: this.callerContext.hasIdOnFile || false,
               claimsCount: this.callerContext.claimsCount || 0,
+              totalVehicles: this.callerContext.totalVehiclePackages || 0,
+              lenders: [...new Set(this.callerContext.claims?.map(c => c.lender).filter(Boolean))] || [],
               status: this.callerContext.status || 'unknown'
             });
           } catch (error) {
@@ -587,9 +590,38 @@ export default class VoiceParty implements Party.Server {
         if (this.callerContext && this.humeWs) {
           console.log('👤 [VOICE-CONTEXT] Sending caller context to Hume...');
           
-          const contextMessage = this.callerContext.found ? 
-            `Hello, I'm speaking with ${this.callerContext.fullName}. They're calling from ${this.callerContext.phone}. They have ${this.callerContext.claimsCount} claims with us and their current status is ${this.callerContext.status}.` :
-            `Hello, I'm speaking with someone calling from ${this.callerContext.phone}. They're not yet in our system.`;
+          // Build detailed context message with enriched data
+          let contextMessage = '';
+          if (this.callerContext.found) {
+            contextMessage = `Hello, I'm speaking with ${this.callerContext.fullName}. They're calling from ${this.callerContext.phone}. `;
+            
+            // Add ID document status
+            contextMessage += this.callerContext.hasIdOnFile ? 
+              `They have their ID document on file. ` : 
+              `They haven't provided ID documents yet. `;
+            
+            // Add claims information
+            if (this.callerContext.claimsCount > 0) {
+              contextMessage += `They have ${this.callerContext.claimsCount} claim(s) with us`;
+              
+              // Add lender details if available
+              const lenders = [...new Set(this.callerContext.claims?.map(c => c.lender).filter(Boolean))];
+              if (lenders.length > 0) {
+                contextMessage += ` with ${lenders.join(', ')}`;
+              }
+              
+              // Add vehicle packages info
+              if (this.callerContext.totalVehiclePackages > 0) {
+                contextMessage += `, covering ${this.callerContext.totalVehiclePackages} vehicle(s)`;
+              }
+              
+              contextMessage += `. Their current status is ${this.callerContext.status}.`;
+            } else {
+              contextMessage += `They don't have any claims yet. Their status is ${this.callerContext.status}.`;
+            }
+          } else {
+            contextMessage = `Hello, I'm speaking with someone calling from ${this.callerContext.phone}. They're not yet in our system.`;
+          }
           
           // Send as a system message to set context - IMPORTANT: NO need to ask for phone!
           const systemContextMessage = {
@@ -977,13 +1009,49 @@ export default class VoiceParty implements Party.Server {
     // ALWAYS use the phone number from the call context - we already have it!
     if (this.callerContext) {
       if (this.callerContext.found) {
+        // Build detailed response with enriched data
+        let detailsMessage = `I have your details here. You're ${this.callerContext.fullName}`;
+        
+        // Add ID status
+        if (!this.callerContext.hasIdOnFile) {
+          detailsMessage += `. I notice you haven't uploaded your ID documents yet`;
+        }
+        
+        // Add claims details
+        if (this.callerContext.claimsCount > 0) {
+          detailsMessage += `. You have ${this.callerContext.claimsCount} claim(s) with us`;
+          
+          // Add specific lender and vehicle details
+          if (this.callerContext.claims && this.callerContext.claims.length > 0) {
+            const claimSummaries = this.callerContext.claims.map(claim => {
+              let summary = claim.lender || 'a lender';
+              if (claim.vehiclePackagesCount > 0) {
+                summary += ` (${claim.vehiclePackagesCount} vehicle${claim.vehiclePackagesCount > 1 ? 's' : ''})`;
+              }
+              return summary;
+            });
+            detailsMessage += ` with ${claimSummaries.join(', ')}`;
+          }
+          
+          detailsMessage += `. Your current status is ${this.callerContext.status}.`;
+        } else {
+          detailsMessage += `, but you don't have any claims submitted yet. Would you like to start one?`;
+        }
+        
         return {
           success: true,
-          message: `I have your details here. You're ${this.callerContext.fullName}, you have ${this.callerContext.claimsCount} claims with us, and your current status is ${this.callerContext.status}.`,
+          message: detailsMessage,
           data: {
             name: this.callerContext.fullName,
             phone: this.callerContext.phone,
+            has_id_on_file: this.callerContext.hasIdOnFile,
             claims_count: this.callerContext.claimsCount,
+            total_vehicles: this.callerContext.totalVehiclePackages || 0,
+            claims: this.callerContext.claims?.map(c => ({
+              lender: c.lender,
+              status: c.status,
+              vehicles_count: c.vehiclePackagesCount || 0
+            })) || [],
             status: this.callerContext.status,
             user_id: this.callerContext.id
           }

@@ -104,19 +104,30 @@ export async function POST(request: NextRequest) {
       lastName: callerInfo.user.last_name,
       fullName: `${callerInfo.user.first_name || ''} ${callerInfo.user.last_name || ''}`.trim(),
       status: callerInfo.user.status,
+      hasIdOnFile: !!callerInfo.user.current_user_id_document_id,  // Check if ID document is on file
       phone: from,
       email: callerInfo.user.email_address,
       claims: callerInfo.claims?.map(claim => ({
         id: Number(claim.id), // Convert BigInt to Number
         lender: claim.lender,
         status: claim.status,
+        vehiclePackagesCount: claim.vehiclePackages?.length || 0,  // Number of vehicles in this claim
+        vehiclePackages: claim.vehiclePackages?.map(vp => ({
+          registration: vp.vehicle_registration,
+          make: vp.vehicle_make,
+          model: vp.vehicle_model,
+          dealership: vp.dealership_name,
+          monthlyPayment: vp.monthly_payment ? Number(vp.monthly_payment) : null
+        })) || [],
         estimatedValue: claim.estimatedValue ? Number(claim.estimatedValue) : null // Convert BigInt to Number
       })) || [],
       claimsCount: callerInfo.claims?.length || 0,
+      totalVehiclePackages: callerInfo.claims?.reduce((sum, claim) => sum + (claim.vehiclePackages?.length || 0), 0) || 0,
       priorityScore: callerInfo.priorityScore || 0
     } : {
       found: false,
       phone: from,
+      hasIdOnFile: false,
       firstName: null,
       lastName: null,
       fullName: null
