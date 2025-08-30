@@ -915,7 +915,7 @@ export default class VoiceParty implements Party.Server {
     
     try {
       // Generate secure portal link
-      const baseUrl = this.room.env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk';
+      const baseUrl = String(this.room.env.MAIN_APP_URL || 'https://dev.solvosolutions.co.uk').trim();
       const token = this.generateSecureToken(this.callerContext.id, link_type);
       
       const linkPaths: Record<string, string> = {
@@ -965,10 +965,10 @@ export default class VoiceParty implements Party.Server {
    */
   async sendPortalSMS(portalUrl: string, linkType: string) {
     try {
-      // Get Twilio credentials from environment
-      const accountSid = this.room.env.TWILIO_ACCOUNT_SID;
-      const authToken = this.room.env.TWILIO_AUTH_TOKEN;
-      const fromNumber = this.room.env.TWILIO_FROM_NUMBER;
+      // Get Twilio credentials from environment (trim whitespace)
+      const accountSid = String(this.room.env.TWILIO_ACCOUNT_SID || '').trim();
+      const authToken = String(this.room.env.TWILIO_AUTH_TOKEN || '').trim();
+      const fromNumber = String(this.room.env.TWILIO_FROM_NUMBER || '').trim();
       
       if (!accountSid || !authToken || !fromNumber) {
         throw new Error('Twilio credentials not configured in PartyKit environment');
@@ -1055,7 +1055,7 @@ export default class VoiceParty implements Party.Server {
     
     try {
       // Make API call to your backend to look up the user
-      const apiUrl = this.room.env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk';
+      const apiUrl = String(this.room.env.MAIN_APP_URL || 'https://dev.solvosolutions.co.uk').trim();
       const lookupUrl = `${apiUrl}/api/ai-voice/lookup-user`;
       
       console.log(`📡 [USER-DETAILS] Calling API: ${lookupUrl}`);
