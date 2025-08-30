@@ -1,0 +1,1211 @@
+# RMC Dialler - Comprehensive Project Rules & Architecture Guide
+
+## 🏗️ **SYSTEM ARCHITECTURE**
+
+### **Domain Architecture & Deployment Strategy**
+```
+🏭 PRODUCTION DIALER:  dialler.solvosolutions.co.uk
+   ├─ Deployment:       Manual only (NO automatic deployment)
+   ├─ Voice System:     /api/webhooks/twilio/voice (battle-tested)
+   ├─ Agent Dashboard:  /queue, /calls, /sms (live operations)
+   ├─ Features:         ENABLE_AI_VOICE_AGENT=false (HARD BLOCK)
+   ├─ Database:         Real production data (PostgreSQL + MySQL replica)
+   ├─ Phone Numbers:    Production Twilio numbers for real customers
+   ├─ Safety:           Middleware blocks all experimental AI features
+   └─ Purpose:          Live customer operations, zero downtime required
+
+🧪 STAGING DIALER:     dev.solvosolutions.co.uk  
+   ├─ Deployment:       Automatic via Vercel on main branch push
+   ├─ AI Voice Agent:   /api/webhooks/twilio/voice-ai (experimental)
+   ├─ AI SMS Services:  /api/ai-voice/send-portal-sms (testing)
+   ├─ AI User Lookup:   /api/ai-voice/lookup-user (development)
+   ├─ Features:         ENABLE_AI_VOICE_AGENT=true (testing enabled)
+   ├─ Database:         REAL production data (same as production!)
+   ├─ Phone Numbers:    Separate test numbers (+447727656195)
+   ├─ Safety:           APPROVED_TEST_NUMBERS limits SMS to test numbers only
+   └─ Purpose:          Safe testing with real data, approved communications only
+
+🌐 MAIN CLIENT APP:    claim.resolvemyclaim.co.uk  
+   ├─ Portal Access:    /claims?mlid={token}
+   ├─ Document Upload:  /upload
+   ├─ Claim Status:     /status
+   ├─ Public Pages:     Landing, signup, etc.
+   └─ Purpose:          Customer-facing portal and claim management
+
+🔌 PARTYKIT BRIDGE:    rmc-voice-bridge.jamesclaimtechio.partykit.dev
+   ├─ Environment:      Development only (staging-development)
+   ├─ Function:         WebSocket bridge (Twilio ↔ Hume EVI)
+   └─ Safety:           Environment validation, dev phone numbers only
+```
+
+### **Environment & Deployment Strategy**
+```
+🏭 PRODUCTION SAFETY:
+   ├─ Domain:           dialler.solvosolutions.co.uk
+   ├─ Deployment:       Manual control (prevent accidental AI deployment)
+   ├─ Feature Flags:    ENABLE_AI_VOICE_AGENT=false (middleware enforced)
+   ├─ Database:         Real production PostgreSQL + MySQL replica
+   ├─ Communications:   Real customer phone numbers
+   ├─ TwiML Apps:       Production Twilio configuration
+   └─ Middleware:       Blocks ALL /api/ai-voice/* and /api/webhooks/twilio/voice-ai
+
+🧪 STAGING/DEVELOPMENT:
+   ├─ Domain:           dev.solvosolutions.co.uk
+   ├─ Deployment:       Automatic Vercel deployment on main branch
+   ├─ Feature Flags:    ENABLE_AI_VOICE_AGENT=true (testing enabled)
+   ├─ Database:         SAME real production data (for accurate testing)
+   ├─ Communications:   APPROVED_TEST_NUMBERS only (safety restriction)
+   ├─ TwiML Apps:       Separate development Twilio configuration  
+   ├─ Phone Numbers:    Test numbers (+447727656195) isolated from production
+   └─ Environment:      ENVIRONMENT_NAME=staging-development (required)
+
+🎯 SAFETY MECHANISM:
+   ├─ Real Data:        Both environments use production database
+   ├─ Communication Control: APPROVED_TEST_NUMBERS blocks customer contact
+   ├─ Feature Separation: Middleware prevents AI features in production
+   ├─ Resource Isolation: Separate TwiML apps and phone numbers
+   └─ Manual Deployment: Production requires explicit manual deployment
+```
+
+---
+
+## 📡 **DOMAIN DEPLOYMENT STRATEGY**
+
+### **Production Dialer Domain: dialler.solvosolutions.co.uk**
+```
+🏭 PRODUCTION CHARACTERISTICS:
+├─ Deployment Method:    Manual deployment only (NO automatic builds)
+├─ Purpose:              Live customer operations, zero downtime
+├─ Database Access:      Real production PostgreSQL + MySQL replica
+├─ Phone Numbers:        Real customer phone numbers (+447488879172)
+├─ TwiML Configuration:  Production TwiML App SID for voice routing
+├─ Feature Flags:        ENABLE_AI_VOICE_AGENT=false (hard blocked)
+├─ Middleware Protection: Blocks all /api/ai-voice/* endpoints
+├─ Agent Access:         Live agents handling real customer calls
+└─ Safety Level:         Maximum - real customer impact
+
+🚫 AI FEATURE BLOCKS:
+├─ /api/webhooks/twilio/voice-ai    → 403 Forbidden
+├─ /api/ai-voice/*                  → 403 Forbidden  
+├─ AI voice tool calls              → Disabled
+└─ Experimental features            → Blocked by middleware
+```
+
+### **Staging Dialer Domain: dev.solvosolutions.co.uk**
+```
+🧪 STAGING CHARACTERISTICS:
+├─ Deployment Method:    Automatic Vercel deployment on main branch push
+├─ Purpose:              Safe testing with real data, approved communications
+├─ Database Access:      SAME real production data (for accuracy)
+├─ Phone Numbers:        Test numbers only (+447727656195)
+├─ TwiML Configuration:  Development TwiML App SID (isolated)
+├─ Feature Flags:        ENABLE_AI_VOICE_AGENT=true (testing enabled)
+├─ Environment Variable: ENVIRONMENT_NAME=staging-development
+├─ Communication Safety: APPROVED_TEST_NUMBERS variable enforcement
+└─ Safety Level:         Controlled - real data, limited communications
+
+✅ AI FEATURES ENABLED:
+├─ /api/webhooks/twilio/voice-ai    → AI voice webhook active
+├─ /api/ai-voice/lookup-user        → Real user data lookup
+├─ /api/ai-voice/send-portal-sms    → SMS to approved numbers only
+├─ AI voice tool calls              → Functional for testing
+└─ Experimental features            → Safe testing environment
+```
+
+### **Communication Safety Controls**
+```typescript
+// APPROVED_TEST_NUMBERS Environment Variable (Critical Safety)
+// Prevents AI features from contacting real customers in staging
+
+const approvedNumbers = process.env.APPROVED_TEST_NUMBERS?.split(',') || []
+const isApprovedNumber = approvedNumbers.includes(phoneNumber)
+
+if (process.env.ENVIRONMENT_NAME === 'staging-development') {
+  if (!isApprovedNumber) {
+    console.log(`🚫 SMS blocked - not in approved test numbers: ${phoneNumber}`)
+    return { success: false, error: 'Communication limited to test numbers' }
+  }
+}
+
+// Typical approved test numbers:
+// +447738585850 (James Campbell - test user)
+// +447727656195 (Development phone line)
+// +447723495560 (AI SMS test number)
+```
+
+### **Vercel Environment Variable Separation**
+```bash
+# Production Dialer (dialler.solvosolutions.co.uk)
+TWILIO_PHONE_NUMBER=+447488879172        # Real customer line
+TWILIO_TWIML_APP_SID=production_app_sid  # Production TwiML routing
+ENABLE_AI_VOICE_AGENT=false              # Hard block AI features
+APPROVED_TEST_NUMBERS=""                 # Empty (no test restrictions)
+
+# Staging Dialer (dev.solvosolutions.co.uk)  
+TWILIO_PHONE_NUMBER=+447727656195        # Test line only
+TWILIO_TWIML_APP_SID=development_app_sid # Dev TwiML routing (isolated)
+ENABLE_AI_VOICE_AGENT=true               # AI testing enabled
+APPROVED_TEST_NUMBERS="+447738585850,+447727656195,+447723495560"
+ENVIRONMENT_NAME=staging-development     # Required for AI features
+```
+
+### **Middleware Feature Separation**
+```typescript
+// Production Safety Middleware (automatic enforcement)
+export function middleware(request: NextRequest) {
+  const environmentName = process.env.ENVIRONMENT_NAME || ''
+  const isDevelopment = environmentName === 'staging-development'
+  
+  // Block AI voice endpoints in production
+  const isAIVoiceEndpoint = request.nextUrl.pathname.startsWith('/api/ai-voice/') || 
+                            request.nextUrl.pathname.startsWith('/api/webhooks/twilio/voice-ai')
+  
+  if (isAIVoiceEndpoint && !isDevelopment) {
+    console.log('🚫 AI Voice blocked in production environment')
+    return NextResponse.json({ 
+      error: 'AI Voice agent disabled',
+      mode: 'production-safety',
+      domain: request.headers.get('host')
+    }, { status: 403 })
+  }
+  
+  // Block cron jobs in development (prevent interference)
+  if (isDevelopment && request.nextUrl.pathname.startsWith('/api/cron/')) {
+    return NextResponse.json({
+      error: 'Cron jobs disabled in development', 
+      mode: 'development-safety'
+    }, { status: 503 })
+  }
+}
+```
+
+---
+
+## 🗄️ **DATABASE ARCHITECTURE**
+
+### **Dual Database Strategy**
+```typescript
+// PostgreSQL (Primary) - Operational data
+DATABASE_URL         → Call sessions, agents, queues, callbacks
+REPLICA_DATABASE_URL → MySQL replica (user/claims from main app)
+
+// Usage Patterns:
+import { prisma } from '@/lib/db'           // PostgreSQL operations
+import { replicaDb } from '@/lib/mysql'    // User/claims lookup (read-only)
+```
+
+### **CRITICAL: Database Connection Rules**
+```typescript
+// ✅ CORRECT: Dynamic imports for MySQL replica (prevents Vercel Prisma engine errors)
+const { replicaDb } = await import('@/lib/mysql')
+const user = await replicaDb.user.findFirst({ ... })
+
+// ❌ AVOID: Static imports cause Prisma engine runtime errors on Vercel  
+import { replicaDb } from '@/lib/mysql'  // Fails on serverless
+```
+
+### **User Data Location**
+```sql
+-- Users & Claims: MySQL replica database (replicaDb)
+SELECT * FROM users WHERE phone_number = '+447738585850'  
+SELECT * FROM claims WHERE user_id = 2064
+SELECT * FROM claim_vehicle_packages WHERE claim_id = 4715
+
+-- Call Operations: PostgreSQL database (prisma)
+SELECT * FROM call_sessions WHERE "userId" = 2064
+SELECT * FROM callbacks WHERE "userId" = 2064
+```
+
+---
+
+## 🔐 **AUTHENTICATION & SECURITY**
+
+### **Feature Flag Security**
+```typescript
+// PRODUCTION SAFETY: AI features blocked by default
+ENABLE_AI_VOICE_AGENT=false  // Hard block in production
+ENVIRONMENT_NAME=staging-development  // Required for AI voice
+
+// Middleware automatically blocks AI endpoints when disabled
+if (request.nextUrl.pathname.startsWith('/api/ai-voice/')) {
+  if (!FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT) {
+    return NextResponse.json({ error: 'AI Voice agent disabled' }, { status: 403 })
+  }
+}
+```
+
+### **Authentication Patterns**
+```typescript
+// Webhook Authentication Bypass
+const isWebhookPath = request.nextUrl.pathname.startsWith('/api/webhooks/twilio/')
+if (isWebhookPath) {
+  return NextResponse.next()  // Bypass auth for Twilio webhooks
+}
+
+// Agent Authentication (JWT + Cookie)
+const token = request.cookies.get('auth-token')?.value ||
+              request.headers.get('authorization')?.replace('Bearer ', '')
+
+// External Service Auth (PartyKit ↔ Vercel)
+const headers = { 'x-vercel-protection-bypass': 'devtwiliobypass2024secureaivoice' }
+```
+
+### **Production Debug Protection**
+```typescript
+// Debug endpoints blocked in production without token
+if (isDebugPath && process.env.NODE_ENV === 'production') {
+  const debugToken = request.headers.get('x-debug-token')
+  if (!debugToken || debugToken !== process.env.DEBUG_ACCESS_TOKEN) {
+    return NextResponse.json({ error: 'Debug endpoints disabled' }, { status: 403 })
+  }
+}
+```
+
+---
+
+## 🎯 **AI SYSTEM ARCHITECTURE**
+
+### **AI Voice Agent (Experimental)**
+```
+Call Flow:
+Twilio → PartyKit → Hume EVI → AI Tools → Database/SMS
+   ↓         ↓           ↓         ↓         ↓
+Phone → WebSocket → Voice AI → Actions → Results
+
+Separation Rules:
+✅ NEW routes: /api/webhooks/twilio/voice-ai, /api/ai-voice/*
+❌ NEVER modify: /api/webhooks/twilio/voice (existing production)
+```
+
+### **AI SMS Agent (Production)**
+```
+SMS Flow:  
+Twilio → Webhook → AI Processing → Database → Response
+   ↓        ↓           ↓            ↓        ↓
+SMS → Next.js API → OpenAI → User Lookup → SMS Reply
+
+Features:
+✅ Batch processing (15-second windows)
+✅ Spillover collection (45-second lookback)
+✅ Portal link cooldowns (60 minutes)
+```
+
+### **AI Tool Definitions**
+```typescript
+// Hume AI Voice Tools (Context-based)
+check_user_details()     // Uses caller phone from context
+send_portal_link()       // SMS only, no method parameter
+
+// Tool Response Format:
+{
+  "success": true,
+  "message": "I have your details here. You're James Campbell...",
+  "data": { "user_found": true, "claims_count": 1, ... }
+}
+```
+
+---
+
+## 📱 **TWILIO INTEGRATION PATTERNS**
+
+### **Phone Number Environment Variables**
+```bash
+# Consistent across all services
+TWILIO_PHONE_NUMBER  # ✅ Standard variable name
+TWILIO_ACCOUNT_SID   # ✅ Account identifier  
+TWILIO_AUTH_TOKEN    # ✅ API authentication
+
+# Environment-specific numbers:
+Production: +447488879172  # Real customer line
+Dev/Test:   +447727656195  # AI voice testing line
+```
+
+### **TwiML Generation Patterns**
+```xml
+<!-- Existing Voice (Production) -->
+<Response>
+  <Dial><Client>agent_123</Client></Dial>
+</Response>
+
+<!-- AI Voice (Development) -->
+<Response>
+  <Connect>
+    <Stream url="wss://rmc-voice-bridge...">
+      <Parameter name="callerContext" value="{base64_context}"/>
+    </Stream>
+  </Connect>
+</Response>
+```
+
+### **CRITICAL: Phone Number Normalization**
+```typescript
+// Standard phone patterns for UK numbers (5 variants)
+const searchPatterns = [
+  phoneNumber,                    // '+447738585850'
+  cleanPhone,                     // '447738585850'
+  `+44${cleanPhone.substring(1)}`, // '+447738585850' 
+  `0${cleanPhone.substring(2)}`,   // '07738585850'
+  `44${cleanPhone.substring(1)}`,  // '447738585850'
+]
+
+// Database query pattern (NO is_enabled filter)
+const user = await replicaDb.user.findFirst({
+  where: { phone_number: { in: searchPatterns } }
+  // NOTE: No is_enabled: true filter - matches working services
+})
+```
+
+---
+
+## 🏗️ **MODULE ORGANIZATION PATTERNS**
+
+### **Standard Module Structure**
+```
+modules/{domain}/
+├── index.ts                  # Public exports only
+├── types/{domain}.types.ts   # TypeScript interfaces
+├── services/
+│   ├── {domain}.service.ts   # Main business logic
+│   └── {specific}.service.ts # Specialized services
+├── components/               # UI components (if needed)
+├── utils/                    # Domain-specific utilities
+└── docs/                     # Module documentation
+```
+
+### **Service Class Pattern**
+```typescript
+export class DomainService {
+  private dependencies: DomainServiceDependencies
+  
+  constructor(deps: DomainServiceDependencies) {
+    this.dependencies = deps
+  }
+  
+  async primaryMethod(params: MethodParams): Promise<MethodResult> {
+    try {
+      // Business logic
+      return { success: true, data: result }
+    } catch (error) {
+      this.dependencies.logger.error('Method failed', { error })
+      throw new Error('User-friendly error message')
+    }
+  }
+}
+```
+
+### **Import Conventions**
+```typescript
+// ✅ External libraries
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+
+// ✅ Internal utilities (absolute paths)
+import { prisma } from '@/lib/db'
+import { logger } from '@/modules/core'
+
+// ✅ Module services
+import { UserService } from '@/modules/users'
+
+// ✅ CRITICAL: Dynamic imports for MySQL Prisma (prevents Vercel errors)
+const { replicaDb } = await import('@/lib/mysql')
+
+// ✅ Types
+import type { CallerInfo } from '../types/twilio-voice.types'
+```
+
+---
+
+## 📦 **API PATTERNS & CONVENTIONS**
+
+### **Standard API Response Format**
+```typescript
+// Success Response
+{
+  "success": true,
+  "data": { ... },           // Main response data
+  "message": "Operation completed",
+  "timestamp": "2025-01-30T10:30:00Z"
+}
+
+// Error Response  
+{
+  "success": false,
+  "error": "User-friendly error message",
+  "details": "Technical details for debugging",
+  "code": "ERROR_CODE",
+  "timestamp": "2025-01-30T10:30:00Z"
+}
+```
+
+### **Error Handling Pattern**
+```typescript
+export async function POST(request: NextRequest) {
+  try {
+    // 1. Feature flag check
+    if (!FEATURE_FLAGS.ENABLE_FEATURE) {
+      return NextResponse.json({ error: 'Feature disabled' }, { status: 403 })
+    }
+    
+    // 2. Input validation
+    const { data } = await request.json()
+    const validation = schema.safeParse(data)
+    if (!validation.success) {
+      return NextResponse.json({ 
+        error: 'Invalid input', 
+        details: validation.error.issues 
+      }, { status: 400 })
+    }
+    
+    // 3. Business logic
+    const result = await service.doWork(validation.data)
+    
+    // 4. Success response
+    return NextResponse.json({ success: true, data: result })
+    
+  } catch (error: any) {
+    // 5. Error logging & response
+    console.error('API error:', error)
+    return NextResponse.json({
+      error: 'Internal server error',
+      message: error?.message || 'Unknown error'
+    }, { status: 500 })
+  }
+}
+```
+
+---
+
+## 🔧 **DEPLOYMENT & BUILD PATTERNS**
+
+### **Build Scripts**
+```bash
+# Vercel (Production/Preview)
+vercel-build: "npm run db:generate:all && next build"
+
+# AWS Amplify (Development) 
+aws:build: "npm run db:generate:all && next build"
+
+# Local Development
+dev: "next dev"
+
+# Database Management
+db:generate:all: "npm run db:generate && npm run db:generate:replica"
+```
+
+### **Environment Variables by Platform**
+```bash
+# Vercel (Production)
+ENABLE_AI_VOICE_AGENT=false     # Hard block
+DATABASE_URL=postgres://prod...
+TWILIO_PHONE_NUMBER=+447488879172
+
+# Vercel (Development/Preview)  
+ENABLE_AI_VOICE_AGENT=true      # Allow testing
+ENVIRONMENT_NAME=staging-development
+TWILIO_PHONE_NUMBER=+447727656195
+
+# PartyKit (WebSocket Bridge)
+HUME_API_KEY=hume_key
+TWILIO_PHONE_NUMBER=+447727656195
+MAIN_APP_URL=https://claim.resolvemyclaim.co.uk
+```
+
+### **CRITICAL: Binary Targets (Prisma)**
+```typescript
+// Essential for Vercel serverless compatibility
+binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x"]
+
+// Force regeneration on Vercel (prevents engine not found errors)
+vercel-build: "npm run db:generate:all && next build"  // Always regenerate
+```
+
+---
+
+## 🛡️ **PRODUCTION SAFETY RULES**
+
+### **AI Voice Agent Boundaries**
+```typescript
+// NEVER MODIFY EXISTING (UNTOUCHABLE)
+/api/webhooks/twilio/voice/     # Production voice system
+/modules/twilio-voice/          # Core voice services  
+/hooks/useGlobalCall.ts         # Call management
+/components/*Voice*             # Existing voice components
+
+// AI VOICE ONLY (Feature Gated)
+/api/webhooks/twilio/voice-ai/  # AI voice webhook
+/api/ai-voice/                  # AI voice APIs
+/modules/ai-voice-agent/        # AI voice services
+/components/AIVoice*            # AI voice components
+```
+
+### **Environment-Based Restrictions**
+```typescript
+// Development Safety (middleware enforced)
+if (environmentName.endsWith('-development')) {
+  // ✅ Block cron jobs (prevent production interference)
+  // ✅ Block non-test SMS numbers  
+  // ✅ Block production database operations
+}
+
+// Feature Flag Safety
+if (!FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT) {
+  // ✅ Block all /api/ai-voice/* endpoints
+  // ✅ Block /api/webhooks/twilio/voice-ai 
+  // ✅ Return 403 with production-safety mode
+}
+```
+
+### **Database Protection**
+```typescript
+// Separate AI voice tracking (no foreign keys to existing system)
+AIVoiceSession  # New table, isolated from CallSession
+CallSession     # Existing, never modified by AI voice
+CallOutcome     # Existing, authoritative for outcomes
+```
+
+---
+
+## 🔀 **IMPORT & DEPENDENCY PATTERNS**
+
+### **Static vs Dynamic Imports**
+```typescript
+// ✅ Static imports (reliable on all platforms)
+import { prisma } from '@/lib/db'           # PostgreSQL
+import { logger } from '@/modules/core'     # Utilities
+import { UserService } from '@/modules/users'
+
+// ✅ CRITICAL: Dynamic imports (required for problematic dependencies)
+const { replicaDb } = await import('@/lib/mysql')     # MySQL Prisma
+const { performAICallerLookup } = await import('@/modules/ai-voice-agent/services/ai-caller-lookup.service')
+
+// When to use dynamic imports:
+// - MySQL Prisma client (Vercel runtime compatibility)
+// - AI voice services (feature separation)
+// - Large optional dependencies
+```
+
+### **Service Dependency Injection**
+```typescript
+// Standard pattern for testable services
+interface ServiceDependencies {
+  logger: LoggerService
+  prisma: PrismaClient
+  redis?: RedisClient
+}
+
+export class BusinessService {
+  constructor(private deps: ServiceDependencies) {}
+  
+  async doWork(): Promise<Result> {
+    try {
+      // Use this.deps.prisma, this.deps.logger, etc.
+    } catch (error) {
+      this.deps.logger.error('Operation failed', { error })
+      throw error
+    }
+  }
+}
+```
+
+---
+
+## 📞 **PHONE NUMBER & USER LOOKUP PATTERNS**
+
+### **CRITICAL: Phone Number Handling**
+```typescript
+// Standard UK phone normalization (5 variants) - PROVEN WORKING
+function normalizePhoneNumber(phoneNumber: string): string[] {
+  const cleanPhone = phoneNumber.replace(/\D/g, '')
+  return [
+    phoneNumber,                    // '+447738585850' (original)
+    cleanPhone,                     // '447738585850' (digits only)
+    `+44${cleanPhone.substring(1)}`, // '+447738585850' (UK international)
+    `0${cleanPhone.substring(2)}`,   // '07738585850' (UK domestic)
+    `44${cleanPhone.substring(1)}`,  // '447738585850' (no plus)
+  ]
+}
+
+// CRITICAL: Database query pattern (NO is_enabled filter)
+const user = await replicaDb.user.findFirst({
+  where: {
+    phone_number: { in: searchPatterns }
+    // NOTE: No is_enabled filter (matches working services)
+  }
+})
+```
+
+### **User Lookup Service Pattern**
+```typescript
+// Working pattern used throughout app
+export async function lookupUserByPhone(phoneNumber: string) {
+  const { replicaDb } = await import('@/lib/mysql')  // Dynamic import!
+  
+  const searchPatterns = normalizePhoneNumber(phoneNumber)
+  const user = await replicaDb.user.findFirst({
+    where: { phone_number: { in: searchPatterns } },
+    select: { id: true, first_name: true, last_name: true, phone_number: true }
+  })
+  
+  return user ? {
+    found: true,
+    id: Number(user.id),  // Convert BigInt for JSON
+    name: `${user.first_name} ${user.last_name}`,
+    phone: user.phone_number
+  } : { found: false }
+}
+```
+
+---
+
+## 🔗 **MAGIC LINK PATTERNS**
+
+### **AI Magic Link Format (Standard)**
+```typescript
+// ✅ CORRECT: AI magic link generation
+const token = Buffer.from(userId.toString()).toString('base64')
+const url = `https://claim.resolvemyclaim.co.uk/claims?mlid=${token}`
+
+// Example: User 2064 → mlid=MjA2NA==
+// Validated and working across AI systems
+
+// ❌ AVOID: Custom token formats
+const token = `${linkType}_${userId}_${timestamp}_${random}`  // Legacy format
+```
+
+### **Portal Link Architecture**
+```typescript
+// Link Generation: On dialer app (dev.solvosolutions.co.uk)
+// Link Destination: Main app (claim.resolvemyclaim.co.uk)
+
+const portalUrl = `https://claim.resolvemyclaim.co.uk/claims?mlid=${base64Token}`
+const smsApiUrl = `https://dev.solvosolutions.co.uk/api/ai-voice/send-portal-sms`
+
+// SMS Message Format (Simplified for AI Voice)
+"Access your portal here: {portalUrl}"
+```
+
+---
+
+## 🎨 **CODE STYLE & CONVENTIONS**
+
+### **Naming Conventions**
+```typescript
+// Files: kebab-case
+user-lookup.service.ts
+ai-voice-agent.types.ts
+
+// Classes: PascalCase
+export class UserLookupService
+
+// Functions: camelCase  
+export async function performCallerLookup()
+
+// Constants: SCREAMING_SNAKE_CASE
+const FEATURE_FLAGS = { ENABLE_AI_VOICE_AGENT: true }
+
+// Database fields: snake_case (follows database schema)
+{ phone_number: string, is_enabled: boolean }
+```
+
+### **Logging Patterns**
+```typescript
+// Standard logging with context
+console.log(`✅ [SERVICE] Operation successful:`, { 
+  userId, 
+  action: 'lookup',
+  timing: Date.now() - startTime 
+})
+
+console.error(`❌ [SERVICE] Operation failed:`, {
+  userId,
+  error: error.message,
+  stack: error.stack
+})
+
+// AI-specific tags for filtering
+console.log('AI SMS | ✅ Response generated')
+console.log('🎙️ [AI-VOICE] User found')
+```
+
+### **Error Boundaries**
+```typescript
+// Service level error handling
+try {
+  const result = await businessLogic()
+  return { success: true, data: result }
+} catch (error: any) {
+  logger.error('Business operation failed', { error, context })
+  return { 
+    success: false, 
+    error: 'User-friendly message',
+    details: error?.message  // Technical details for debugging
+  }
+}
+```
+
+---
+
+## ⚙️ **FEATURE FLAG MANAGEMENT**
+
+### **Feature Flag Hierarchy**
+```typescript
+// Global feature control
+export const FEATURE_FLAGS = {
+  ENABLE_AI_VOICE_AGENT: process.env.ENABLE_AI_VOICE_AGENT === 'true',
+  ENABLE_AI_SMS_AGENT: process.env.ENABLE_AI_SMS_AGENT !== 'false',  // Default enabled
+  ENABLE_CALL_RECORDING: process.env.ENABLE_CALL_RECORDING === 'true'
+}
+
+// Environment-based overrides
+const environmentName = process.env.ENVIRONMENT_NAME || ''
+const isDevelopment = environmentName.endsWith('-development')
+
+// Usage in components/services
+if (!FEATURE_FLAGS.ENABLE_AI_VOICE_AGENT) {
+  return null  // or redirect/error
+}
+```
+
+### **Environment-Specific Features**
+```bash
+# Production (Vercel)
+ENABLE_AI_VOICE_AGENT=false       # Hard disabled
+ENABLE_AI_SMS_AGENT=true          # Production ready
+ENVIRONMENT_NAME=production       
+
+# Development (AWS Amplify)  
+ENABLE_AI_VOICE_AGENT=true        # Testing enabled
+ENABLE_AI_SMS_AGENT=true          # Full testing
+ENVIRONMENT_NAME=staging-development
+```
+
+---
+
+## 🚨 **ERROR HANDLING & RESILIENCE**
+
+### **Circuit Breaker Pattern**
+```typescript
+// Database queries with circuit breaker
+const result = await databaseCircuitBreaker.execute(
+  async () => await replicaDb.user.findMany(query),
+  'userLookup'
+)
+```
+
+### **Graceful Degradation**
+```typescript
+// Fallback patterns for external services
+try {
+  const aiResponse = await openai.chat.completions.create(...)
+  return aiResponse.choices[0].message.content
+} catch (error) {
+  console.error('OpenAI API failed, using fallback:', error)
+  return "I understand your question. How can I help you with your motor finance claim?"
+}
+```
+
+### **Retry Logic**
+```typescript
+// Standard retry pattern with exponential backoff
+let lastError: Error | null = null
+for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  try {
+    return await operation()
+  } catch (error) {
+    lastError = error
+    if (attempt < maxRetries) {
+      await sleep(Math.pow(2, attempt) * 1000)  // Exponential backoff
+    }
+  }
+}
+throw lastError
+```
+
+---
+
+## 🔍 **TESTING & DEBUGGING PATTERNS**
+
+### **Step-by-Step Testing Strategy**
+```typescript
+// API testing pattern (proven effective)
+export async function GET() {
+  const testType = url.searchParams.get('test')
+  
+  if (testType === 'basic') {
+    // Test 1: Basic connectivity
+    const userCount = await replicaDb.user.count()
+    return NextResponse.json({ success: true, userCount })
+  }
+  
+  if (testType === 'specific') {
+    // Test 2: Specific functionality
+    const user = await replicaDb.user.findFirst({ where: { phone_number: '+447738585850' } })
+    return NextResponse.json({ found: !!user, user })
+  }
+  
+  // Default: Show available test options
+  return NextResponse.json({
+    status: 'Test Endpoint',
+    testOptions: { 
+      basic: '?test=basic',
+      specific: '?test=specific'
+    }
+  })
+}
+```
+
+### **Debug Endpoint Protection**
+```typescript
+// Development debug endpoints
+if (request.nextUrl.pathname.startsWith('/api/test-')) {
+  if (process.env.NODE_ENV === 'production') {
+    const debugToken = request.headers.get('x-debug-token')
+    if (!debugToken || debugToken !== process.env.DEBUG_ACCESS_TOKEN) {
+      return NextResponse.json({ error: 'Debug disabled' }, { status: 403 })
+    }
+  }
+}
+```
+
+---
+
+## 📚 **EXTERNAL SERVICE INTEGRATION**
+
+### **Vercel Protection Bypass**
+```typescript
+// Standard bypass for external services (PartyKit, webhooks)
+const apiUrl = `${baseUrl}/api/endpoint?x-vercel-protection-bypass=devtwiliobypass2024secureaivoice`
+
+// Applies to:
+// - PartyKit → Vercel API calls
+// - External service → Vercel webhooks  
+// - Development/testing environments
+```
+
+### **PartyKit Service Pattern**
+```typescript
+// WebSocket service with environment validation
+export default class ServiceParty implements Party.Server {
+  onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+    // Environment validation
+    const env = ctx.request.url.searchParams.get('env')
+    if (env !== 'staging-development') {
+      conn.close(1008, 'Environment not allowed')
+      return
+    }
+  }
+  
+  onMessage(message: string, sender: Party.Connection) {
+    // Message routing logic
+  }
+}
+```
+
+### **Hume AI Integration**
+```typescript
+// Voice AI configuration
+const humeClient = new HumeClient({
+  apiKey: process.env.HUME_API_KEY,
+  secretKey: process.env.HUME_SECRET_KEY
+})
+
+// Tool call handling
+const toolResponse = {
+  type: 'tool_response',
+  tool_call_id: message.tool_call_id,
+  content: JSON.stringify({
+    success: true,
+    message: 'Human-readable response for voice',
+    data: { structured_data: 'for_logging' }
+  })
+}
+```
+
+---
+
+## 🎯 **AI AGENT SPECIFIC RULES**
+
+### **AI SMS Agent (Production Ready)**
+```typescript
+// Batch processing (prevents duplicate responses)
+// Groups messages in 15-second windows
+// Processes oldest batch + collects newer batches (spillover)
+// Single comprehensive response per conversation burst
+
+// Portal link cooldown (60 minutes)
+// Consent-first prompts (ask permission before sending links)
+// Adaptive CTAs (don't repeat when AI naturally asks questions)
+```
+
+### **AI Voice Agent (Development Only)**
+```typescript
+// Environment restrictions
+if (process.env.ENVIRONMENT_NAME !== 'staging-development') {
+  return NextResponse.json({ error: 'AI Voice disabled' }, { status: 403 })
+}
+
+// Separate Twilio resources
+// Dev phone number: +447727656195
+// Separate TwiML App for voice-ai webhook
+// Never share resources with production voice system
+
+// Tool definitions (no phone parameter needed)
+check_user_details()     // Uses call context
+send_portal_link()       // SMS only, no method choice
+```
+
+---
+
+## 🔧 **CRITICAL PATTERNS TO FOLLOW**
+
+### **BigInt Handling (Database)**
+```typescript
+// Always convert for JSON serialization
+const result = {
+  ...user,
+  id: Number(user.id),  // Convert BigInt to number
+  claimsCount: claims.length
+}
+
+// Claims mapping
+const convertedClaims = claims.map(claim => ({
+  ...claim,
+  id: Number(claim.id),     // Convert BigInt
+  user_id: Number(claim.user_id)  // Convert BigInt
+}))
+```
+
+### **Phone Number Storage vs Display**
+```typescript
+// Database: Store in E.164 format
+phone_number: "+447738585850"
+
+// Display: Convert to UK domestic format  
+const displayNumber = phoneNumber.replace('+44', '0')  // "07738585850"
+
+// Search: Use all normalized variants (5 patterns)
+const searchPatterns = normalizePhoneNumber(phoneNumber)
+```
+
+### **Service Response Patterns**
+```typescript
+// Consistent service response interface
+interface ServiceResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+  details?: any
+}
+
+// Usage
+const result = await service.performAction(params)
+if (!result.success) {
+  throw new Error(result.error || 'Operation failed')
+}
+return result.data
+```
+
+---
+
+## 💡 **PERFORMANCE & OPTIMIZATION**
+
+### **Database Query Optimization**
+```typescript
+// Use appropriate indexes
+@@index([status, priorityScore, createdAt])
+@@index([phoneNumber, processed, createdAt])
+
+// Limit query results
+.take(100)  // Prevent large result sets
+.select({ id: true, name: true })  // Only required fields
+
+// Use replica for read operations
+const users = await replicaDb.user.findMany(...)  // Read from replica
+const session = await prisma.callSession.create(...)  // Write to primary
+```
+
+### **Connection Management**
+```typescript
+// Connection pooling settings
+connection_limit: '40'           // High concurrency
+pool_timeout: '60'              // 60 second pool timeout  
+connect_timeout: '20'           // 20 second initial connection
+mysql_query_timeout: '45'       // 45 second query timeout
+```
+
+### **Redis Caching Strategy**
+```typescript
+// Minimize Upstash costs
+// Use index sets instead of frequent SCAN operations
+// Manual refresh only, no auto-refresh timers
+const blockedUsers = await redis.smembers('sms:halt:index')
+
+// Cache user lookups during calls (avoid repeated database hits)
+```
+
+---
+
+## 🚀 **DEPLOYMENT CHECKLIST**
+
+### **Deployment Safety Procedures**
+
+#### **Staging Deployment (dev.solvosolutions.co.uk)**
+```bash
+# Automatic deployment on main branch push
+1. Push to main branch
+2. Vercel automatically builds and deploys
+3. Test with approved numbers only
+4. Monitor logs: npx vercel logs --since 10m
+5. Verify AI features work in isolation
+
+# Pre-deployment checklist:
+- [ ] APPROVED_TEST_NUMBERS configured with test numbers only
+- [ ] ENVIRONMENT_NAME=staging-development set
+- [ ] ENABLE_AI_VOICE_AGENT=true in staging environment only
+- [ ] Separate TwiML App SID configured for dev phone numbers
+- [ ] Database connection tests passing with dynamic imports
+```
+
+#### **Production Deployment (dialler.solvosolutions.co.uk)**
+```bash
+# Manual deployment only (NO automatic builds)
+1. Full testing completed in staging environment
+2. Code review completed with security checklist
+3. Manual verification of production feature flags
+4. Explicit manual deployment command
+5. Post-deployment verification of AI blocks
+
+# Pre-production checklist:
+- [ ] ENABLE_AI_VOICE_AGENT=false verified in production
+- [ ] All AI endpoints return 403 in production
+- [ ] Existing voice system unaffected
+- [ ] Production TwiML Apps unchanged
+- [ ] Real customer phone numbers preserved
+- [ ] Manual deployment process followed
+```
+
+### **Emergency Rollback Procedures**
+
+#### **AI Voice Rollback (Immediate)**
+```bash
+# If AI voice causes issues in staging:
+1. Set ENABLE_AI_VOICE_AGENT=false in staging environment
+2. Trigger redeploy (middleware blocks all AI endpoints)
+3. PartyKit deployment can continue (isolated service)
+4. Existing voice system completely unaffected
+
+# If production accidentally gets AI code:
+1. Manual deployment of known good version
+2. Verify ENABLE_AI_VOICE_AGENT=false in production
+3. Check middleware is blocking AI endpoints
+4. Monitor existing voice system continues normally
+```
+
+#### **Database Rollback (If Needed)**
+```bash
+# Both staging and production use same database
+# No rollback needed - AI voice uses separate tables
+# AIVoiceSession table isolated from CallSession/CallOutcome
+# Worst case: DROP TABLE AIVoiceSession (no impact on existing system)
+```
+
+---
+
+## ⚠️ **CRITICAL WARNINGS**
+
+### **❌ Never Do These**
+1. **Modify existing voice webhook** (`/api/webhooks/twilio/voice`)
+2. **Use static imports for MySQL Prisma** (causes engine errors)
+3. **Test AI voice with production phone numbers**
+4. **Add foreign keys between old/new voice systems** 
+5. **Deploy AI voice with `ENABLE_AI_VOICE_AGENT=true` in production**
+6. **Use `is_enabled: true` filter in phone lookups** (excludes valid users)
+7. **Mix `TWILIO_FROM_NUMBER` and `TWILIO_PHONE_NUMBER`** (use PHONE_NUMBER)
+8. **Use custom magic link formats** (use AI magic link: mlid + base64)
+9. **Enable automatic deployment on production dialer domain**
+10. **Send SMS/calls to non-approved numbers in staging**
+11. **Mix production and development TwiML App SIDs**
+12. **Test AI features on dialler.solvosolutions.co.uk domain**
+
+### **✅ Always Do These**
+1. **Use dynamic imports for MySQL replica** (`const { replicaDb } = await import(...)`)
+2. **Convert BigInt to Number** before JSON serialization
+3. **Use Vercel protection bypass** for external service calls
+4. **Test step-by-step** (connection → data → specific queries)
+5. **Use feature flags** for experimental features
+6. **Follow phone number normalization** (5 variants pattern)
+7. **Use consistent environment variable names** across services
+8. **Use AI magic link format** (base64 user ID with mlid parameter)
+9. **Separate domains** (dialer for APIs, main app for portals)
+10. **Test AI features on dev.solvosolutions.co.uk only**
+11. **Use manual deployment for production dialer domain**
+12. **Check APPROVED_TEST_NUMBERS for staging communications**
+13. **Verify environment variables per domain** (separate TwiML apps)
+
+---
+
+## 🏁 **QUICK REFERENCE**
+
+### **Key Files & Patterns**
+```
+middleware.ts                    # Auth, feature flags, webhook bypass
+lib/mysql.ts                    # MySQL replica connection (dynamic import!)
+modules/{domain}/services/      # Business logic services  
+app/api/{feature}/             # API endpoints
+prisma/schema.prisma           # PostgreSQL schema
+prisma/replica.prisma          # MySQL replica schema
+```
+
+### **Environment Variables (Critical)**
+```bash
+# Feature Control
+ENABLE_AI_VOICE_AGENT=true/false
+ENVIRONMENT_NAME=staging-development
+
+# Database
+DATABASE_URL=postgresql://...        # Primary (PostgreSQL)
+REPLICA_DATABASE_URL=mysql://...     # Replica (MySQL)
+
+# Twilio (Consistent naming)
+TWILIO_PHONE_NUMBER=+447727656195    # Use this, not TWILIO_FROM_NUMBER
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+
+# Apps
+MAIN_APP_URL=https://claim.resolvemyclaim.co.uk    # Client portal
+```
+
+### **Quick Commands**
+```bash
+# Database
+npm run db:generate:all         # Regenerate both Prisma clients
+npm run db:studio:replica       # View MySQL replica data
+
+# AI Voice Testing (STAGING ONLY)
+cd partykit-voice && npx partykit tail    # Monitor WebSocket logs
+cd partykit-voice && npx partykit deploy  # Deploy voice bridge
+
+# Deployment
+git push origin main           # Auto-deploy to dev.solvosolutions.co.uk
+# Production deployment: Manual process only for dialler.solvosolutions.co.uk
+
+# Testing AI Features (Staging Domain Only)
+curl "https://dev.solvosolutions.co.uk/api/ai-voice/lookup-user?test=phone&x-vercel-protection-bypass=devtwiliobypass2024secureaivoice"
+curl "https://dev.solvosolutions.co.uk/api/ai-voice/lookup-user?test=sms-creds&x-vercel-protection-bypass=devtwiliobypass2024secureaivoice"
+
+# Verify Production Safety
+curl "https://dialler.solvosolutions.co.uk/api/ai-voice/lookup-user" 
+# Should return: 403 Forbidden (AI Voice agent disabled)
+
+# Monitor Approved Numbers Enforcement
+curl -X POST "https://dev.solvosolutions.co.uk/api/ai-voice/send-portal-sms?x-vercel-protection-bypass=devtwiliobypass2024secureaivoice" \
+  -H "Authorization: Bearer ai-voice-token-..." \
+  -d '{"phoneNumber": "+447999999999", "portalUrl": "...", "linkType": "claims"}'
+# Should return: Communication limited to test numbers
+```
+
+---
+
+**Remember**: This is a **dual-database, multi-environment, feature-flagged system** with **strict production safety controls**. The AI voice agent is **experimental and completely isolated** from the **battle-tested production voice system**.
+
+**Golden Rule**: When in doubt → **Feature flags OFF, dynamic imports for MySQL, test step-by-step, separate AI resources, use proven patterns**.
