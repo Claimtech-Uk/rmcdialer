@@ -1056,9 +1056,9 @@ export default class VoiceParty implements Party.Server {
     try {
       // Make API call to your backend to look up the user
       const apiUrl = String(this.room.env.MAIN_APP_URL || 'https://dev.solvosolutions.co.uk').trim();
-      const lookupUrl = `${apiUrl}/api/ai-voice/lookup-user`;
+      const lookupUrl = `${apiUrl}/api/ai-voice/lookup-user?x-vercel-protection-bypass=devtwiliobypass2024secureaivoice`;
       
-      console.log(`📡 [USER-DETAILS] Calling API: ${lookupUrl}`);
+      console.log(`📡 [USER-DETAILS] Calling API with Vercel bypass: ${lookupUrl}`);
       
       // Add authorization if we have a token
       const headers: Record<string, string> = {

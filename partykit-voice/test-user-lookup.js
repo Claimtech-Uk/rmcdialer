@@ -14,7 +14,7 @@ async function testUserLookup() {
   
   // The API URL that PartyKit uses (from environment)
   const MAIN_APP_URL = 'https://dev.solvosolutions.co.uk';
-  const lookupUrl = `${MAIN_APP_URL}/api/ai-voice/lookup-user`;
+  const lookupUrl = `${MAIN_APP_URL}/api/ai-voice/lookup-user?x-vercel-protection-bypass=devtwiliobypass2024secureaivoice`;
   
   console.log(`📞 Phone Number: ${phoneNumber}`);
   console.log(`🌐 API Endpoint: ${lookupUrl}`);
