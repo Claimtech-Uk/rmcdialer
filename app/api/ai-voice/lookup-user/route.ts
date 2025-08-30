@@ -90,15 +90,82 @@ export async function POST(request: NextRequest) {
 }
 
 // GET method for testing
-export async function GET() {
+export async function GET(request: NextRequest) {
   const isAIVoiceEnabled = process.env.ENABLE_AI_VOICE_AGENT === 'true'
   const environmentName = process.env.ENVIRONMENT_NAME || 'unknown'
+  
+  // Check for test parameter
+  const url = new URL(request.url)
+  const testType = url.searchParams.get('test')
+  
+  if (testType === 'basic') {
+    try {
+      console.log('🧪 [TEST-BASIC] Testing replica DB connection...')
+      const { replicaDb } = await import('@/lib/mysql')
+      const userCount = await replicaDb.user.count()
+      console.log(`✅ [TEST-BASIC] Connected! Total users: ${userCount}`)
+      
+      return NextResponse.json({
+        success: true,
+        test: 'basic_connection',
+        userCount: userCount,
+        environment: environmentName
+      })
+    } catch (error: any) {
+      console.error('❌ [TEST-BASIC] Connection failed:', error)
+      return NextResponse.json({
+        success: false,
+        test: 'basic_connection',
+        error: error?.message || 'Unknown error'
+      })
+    }
+  }
+  
+  if (testType === 'any-data') {
+    try {
+      console.log('🧪 [TEST-DATA] Getting any user data...')
+      const { replicaDb } = await import('@/lib/mysql')
+      const users = await replicaDb.user.findMany({
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          phone_number: true
+        },
+        take: 5
+      })
+      
+      console.log(`✅ [TEST-DATA] Retrieved ${users.length} users`)
+      
+      return NextResponse.json({
+        success: true,
+        test: 'get_any_data',
+        userCount: users.length,
+        sampleUsers: users.map(u => ({
+          id: Number(u.id),
+          name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+          phone: u.phone_number
+        }))
+      })
+    } catch (error: any) {
+      console.error('❌ [TEST-DATA] Get data failed:', error)
+      return NextResponse.json({
+        success: false,
+        test: 'get_any_data',
+        error: error?.message || 'Unknown error'
+      })
+    }
+  }
   
   return NextResponse.json({
     status: 'AI Voice User Lookup Endpoint',
     enabled: isAIVoiceEnabled || environmentName === 'staging-development',
     environment: environmentName,
     method: 'POST',
-    required: { phone: 'string' }
+    required: { phone: 'string' },
+    testOptions: {
+      basicConnection: '?test=basic',
+      anyData: '?test=any-data'
+    }
   })
 }
