@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
     if (callerInfo && callerInfo.user && callerInfo.lookupSuccess) {
       const response = {
         found: true,
+        userId: callerInfo.user.id,  // Add user ID for portal link generation
         fullName: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
         status: callerInfo.user.status,
         hasIdOnFile: !!callerInfo.user.current_user_id_document_id,

@@ -32,8 +32,8 @@ async function testSMSPortal() {
     
     console.log('\n📱 STEP 2: Sending SMS (as PartyKit would)...');
     
-    // This simulates the exact API call PartyKit makes
-    const smsApiUrl = `${baseUrl}/api/ai-voice/send-portal-sms?x-vercel-protection-bypass=devtwiliobypass2024secureaivoice`;
+    // SMS API is on the dialer app, but portal links point to main app
+    const smsApiUrl = `https://dev.solvosolutions.co.uk/api/ai-voice/send-portal-sms?x-vercel-protection-bypass=devtwiliobypass2024secureaivoice`;
     
     console.log(`📡 SMS API URL: ${smsApiUrl}`);
     

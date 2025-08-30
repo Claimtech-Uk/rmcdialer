@@ -885,7 +885,7 @@ export default class VoiceParty implements Party.Server {
   /**
    * Handle send_portal_link tool call
    * AI Voice specific: Uses clean message format "Access your portal here: [link]"
-   * SMS only - no email option
+   * SMS only - no email option - MAKES FRESH USER LOOKUP like check_user_details
    */
   async handleSendPortalLink(parameters: any) {
     const { link_type = 'claims' } = parameters;  // No method needed - always SMS
@@ -893,20 +893,62 @@ export default class VoiceParty implements Party.Server {
     console.log(`🔗 [PORTAL-LINK] Processing request:`, {
       method: 'sms',  // Always SMS for voice calls
       linkType: link_type,
-      caller: this.callerContext?.fullName || 'Unknown',
       phone: this.callerContext?.phone
     });
     
-    // Validate we have caller context
-    if (!this.callerContext) {
+    // Get phone number from call context
+    const phoneNumber = this.callerContext?.phone || parameters.phone_number;
+    
+    if (!phoneNumber || phoneNumber === 'unknown') {
       return {
         success: false,
-        message: "I need to verify your details first. Can you provide your phone number?"
+        message: "I need to verify your phone number first. Could you tell me the number you're calling from?"
       };
     }
     
-    // Check if user was found in our system
-    if (!this.callerContext.found || !this.callerContext.id) {
+    console.log(`🔗 [PORTAL-LINK] Making fresh user lookup for: ${phoneNumber}`);
+    
+    // MAKE FRESH API CALL (same pattern as check_user_details)
+    let userData: any;
+    try {
+      const apiUrl = String(this.room.env.MAIN_APP_URL || 'https://dev.solvosolutions.co.uk').trim();
+      const lookupUrl = `${apiUrl}/api/ai-voice/lookup-user?x-vercel-protection-bypass=devtwiliobypass2024secureaivoice`;
+      
+      console.log(`📡 [PORTAL-LINK] Calling user lookup API: ${lookupUrl}`);
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      
+      const apiToken = String(this.room.env.AI_VOICE_API_TOKEN || '').trim();
+      if (apiToken) {
+        headers['Authorization'] = `Bearer ${apiToken}`;
+      }
+      
+      const response = await fetch(lookupUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ phone: phoneNumber })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`User lookup API failed: ${response.status} ${response.statusText}`);
+      }
+      
+      userData = await response.json();
+      console.log(`📦 [PORTAL-LINK] User lookup result:`, userData);
+      
+    } catch (error) {
+      console.error('❌ [PORTAL-LINK] User lookup failed:', error);
+      return {
+        success: false,
+        message: "I'm having trouble looking up your account right now. Please try again in a moment.",
+        error: error instanceof Error ? error.message : 'User lookup failed'
+      };
+    }
+    
+    // Check if user was found
+    if (!userData.found) {
       return {
         success: false,
         message: "I couldn't find your account in our system. You may need to register first. Would you like me to help you get started?"
@@ -914,24 +956,32 @@ export default class VoiceParty implements Party.Server {
     }
     
     try {
-      // Generate secure portal link using AI magic link format
+      // Generate secure portal link using AI magic link format with FRESH user data
       const baseUrl = String(this.room.env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk').trim();  // Main app, not dialer
-      const token = Buffer.from(this.callerContext.id.toString()).toString('base64');  // AI magic link format
+      
+      // Extract user ID from fresh lookup data (not old caller context)
+      const userId = userData.userId;  // Use user ID from fresh API response
+      console.log(`🔗 [PORTAL-LINK] Using user ID from fresh lookup: ${userId} (${userData.fullName})`);
+      
+      const token = Buffer.from(userId.toString()).toString('base64');  // AI magic link format
+      console.log(`🔗 [PORTAL-LINK] Generated token: ${token}`);
       
       // Use AI magic link format (mlid parameter, /claims path)
       const portalUrl = `${baseUrl}/claims?mlid=${token}`;
+      console.log(`🔗 [PORTAL-LINK] Portal URL: ${portalUrl}`);
       
-      // Send SMS - voice calls always use SMS
-      const smsResult = await this.sendPortalSMS(portalUrl, link_type);
+      // Send SMS using the phone number from fresh lookup
+      const smsResult = await this.sendPortalSMSToNumber(portalUrl, link_type, phoneNumber);
       
       if (smsResult.success) {
         return {
           success: true,
-          message: `Perfect! I've sent you a secure portal link via text message. You should receive it shortly. The link will expire in 24 hours for security.`,
+          message: `Perfect! I've sent your ${link_type} portal link to ${phoneNumber.replace('+44', '0')}. You should receive it shortly.`,
           data: {
             delivery_method: 'sms',
             link_type: link_type,
-            customer_name: this.callerContext.fullName,
+            customer_name: userData.fullName,
+            phone: phoneNumber,
             message_id: smsResult.messageId
           }
         };
@@ -1020,6 +1070,72 @@ export default class VoiceParty implements Party.Server {
 
   // Note: Now using AI magic link format (base64 encoded user ID)
   // This matches the proven working AI magic link generator
+
+  /**
+   * Send portal link via SMS to specific phone number - AI Voice Specific
+   * Uses clean, simple message format: "Access your portal here: [link]"
+   */
+  async sendPortalSMSToNumber(portalUrl: string, linkType: string, phoneNumber: string) {
+    try {
+      // Get Twilio credentials from environment (trim whitespace)
+      const accountSid = String(this.room.env.TWILIO_ACCOUNT_SID || '').trim();
+      const authToken = String(this.room.env.TWILIO_AUTH_TOKEN || '').trim();
+      const fromNumber = String(this.room.env.TWILIO_PHONE_NUMBER || '').trim();  // Use same variable as working SMS service
+      
+      if (!accountSid || !authToken || !fromNumber) {
+        throw new Error('Twilio credentials not configured in PartyKit environment');
+      }
+      
+      // AI Voice specific: Clean, simple message format
+      const messageText = `Access your portal here: ${portalUrl}`;
+      
+      console.log(`📱 [AI-VOICE-PORTAL] Sending portal link (${linkType}) to ${phoneNumber}`);
+      console.log(`💬 [AI-VOICE-PORTAL] Message: ${messageText.substring(0, 50)}...`);
+      
+      // Use Twilio REST API to send SMS
+      const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          From: fromNumber as string,
+          To: phoneNumber as string,
+          Body: messageText
+        })
+      });
+      
+      if (response.ok) {
+        const smsData: any = await response.json();
+        console.log(`✅ [AI-VOICE-PORTAL] SMS sent successfully:`, {
+          messageId: smsData.sid,
+          to: phoneNumber,
+          linkType,
+          message: 'Clean format used'
+        });
+        
+        return {
+          success: true,
+          messageId: smsData.sid
+        };
+      } else {
+        const errorData = await response.text();
+        console.error(`❌ [AI-VOICE-PORTAL] SMS failed:`, errorData);
+        return {
+          success: false,
+          error: `SMS delivery failed: ${response.status}`
+        };
+      }
+      
+    } catch (error) {
+      console.error(`❌ [AI-VOICE-PORTAL] SMS error:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'SMS service error'
+      };
+    }
+  }
 
   /**
    * Handle check_user_details tool call
