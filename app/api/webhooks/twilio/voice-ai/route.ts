@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTwilioClient } from '@/modules/twilio-voice/services/twilio-client'
-import { performEnhancedCallerLookup } from '@/modules/twilio-voice/services/caller-lookup.service'
 
 // CRITICAL: This endpoint is for AI voice ONLY
 // Protected by middleware when ENABLE_AI_VOICE_AGENT=false
@@ -29,11 +28,14 @@ export async function POST(request: NextRequest) {
       direction
     })
 
-    // Look up caller information for personalized experience
+    // Look up caller information for personalized experience (OPTIONAL)
     console.log(`🔍 [AI-VOICE] Looking up caller information for: ${from}`)
     let callerInfo = null
     try {
+      // Dynamic import to avoid breaking webhook if database unavailable
+      const { performEnhancedCallerLookup } = await import('@/modules/twilio-voice/services/caller-lookup.service')
       callerInfo = await performEnhancedCallerLookup(from)
+      
       if (callerInfo && callerInfo.user) {
         console.log(`✅ [AI-VOICE] Found caller:`, {
           name: `${callerInfo.user.first_name} ${callerInfo.user.last_name}`,
@@ -45,7 +47,8 @@ export async function POST(request: NextRequest) {
         console.log(`❓ [AI-VOICE] No caller found for: ${from}`)
       }
     } catch (error) {
-      console.error(`❌ [AI-VOICE] Error looking up caller:`, error)
+      console.error(`❌ [AI-VOICE] Error looking up caller (non-blocking):`, error)
+      console.log(`🔄 [AI-VOICE] Continuing without caller context`)
       // Continue without caller info - don't fail the call
     }
     
@@ -93,7 +96,7 @@ export async function POST(request: NextRequest) {
     console.log(`🎙️ [AI-VOICE] Environment: ${environmentName}`)
     console.log(`🎙️ [AI-VOICE] Stream Token: ${streamToken ? 'SET' : 'NOT SET'} (${streamToken?.substring(0, 10)}...)`)
     
-    // Prepare caller context for AI agent
+    // Prepare caller context for AI agent (GRACEFUL FALLBACK)
     const callerContext = (callerInfo && callerInfo.user) ? {
       found: true,
       id: callerInfo.user.id,
