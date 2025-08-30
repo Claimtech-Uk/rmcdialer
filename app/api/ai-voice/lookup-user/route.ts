@@ -157,6 +157,104 @@ export async function GET(request: NextRequest) {
     }
   }
   
+  if (testType === 'phone') {
+    try {
+      const phoneToTest = '+447738585850'
+      console.log(`🧪 [TEST-PHONE] Testing specific phone: ${phoneToTest}`)
+      
+      const { replicaDb } = await import('@/lib/mysql')
+      
+      // Use EXACT working patterns from Voice DB service
+      const cleanPhone = phoneToTest.replace(/\D/g, '')
+      const searchPatterns = [
+        phoneToTest,                    // '+447738585850'
+        cleanPhone,                     // '447738585850'
+        `+44${cleanPhone.substring(1)}`, // '+447738585850' 
+        `0${cleanPhone.substring(2)}`,   // '07738585850'
+        `44${cleanPhone.substring(1)}`,  // '447738585850'
+      ]
+      
+      console.log(`🧪 [TEST-PHONE] Using patterns: ${searchPatterns.join(', ')}`)
+      
+      // Test the combined query (same as our AI lookup)
+      const userCombined = await replicaDb.user.findFirst({
+        where: {
+          phone_number: {
+            in: searchPatterns
+          }
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          phone_number: true,
+          status: true,
+          is_enabled: true
+        }
+      })
+      
+      // Also test individual patterns
+      const individualResults = []
+      for (const pattern of searchPatterns) {
+        try {
+          const user = await replicaDb.user.findFirst({
+            where: { phone_number: pattern },
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              phone_number: true,
+              is_enabled: true
+            }
+          })
+          individualResults.push({
+            pattern: pattern,
+            found: !!user,
+            user: user ? {
+              id: Number(user.id),
+              name: `${user.first_name} ${user.last_name}`,
+              phone: user.phone_number,
+              isEnabled: user.is_enabled
+            } : null
+          })
+        } catch (err: any) {
+          individualResults.push({
+            pattern: pattern,
+            found: false,
+            error: err?.message
+          })
+        }
+      }
+      
+      return NextResponse.json({
+        success: true,
+        test: 'phone_number_search',
+        targetPhone: phoneToTest,
+        patterns: searchPatterns,
+        combinedQuery: {
+          found: !!userCombined,
+          user: userCombined ? {
+            id: Number(userCombined.id),
+            name: `${userCombined.first_name} ${userCombined.last_name}`,
+            phone: userCombined.phone_number,
+            status: userCombined.status,
+            isEnabled: userCombined.is_enabled
+          } : null
+        },
+        individualResults: individualResults,
+        foundAny: individualResults.some(r => r.found)
+      })
+      
+    } catch (error: any) {
+      console.error('❌ [TEST-PHONE] Phone search failed:', error)
+      return NextResponse.json({
+        success: false,
+        test: 'phone_number_search',
+        error: error?.message || 'Unknown error'
+      })
+    }
+  }
+  
   return NextResponse.json({
     status: 'AI Voice User Lookup Endpoint',
     enabled: isAIVoiceEnabled || environmentName === 'staging-development',
@@ -165,7 +263,8 @@ export async function GET(request: NextRequest) {
     required: { phone: 'string' },
     testOptions: {
       basicConnection: '?test=basic',
-      anyData: '?test=any-data'
+      anyData: '?test=any-data',
+      phoneSearch: '?test=phone'
     }
   })
 }
