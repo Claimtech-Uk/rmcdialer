@@ -588,13 +588,13 @@ export default class VoiceParty implements Party.Server {
           console.log('👤 [VOICE-CONTEXT] Sending caller context to Hume...');
           
           const contextMessage = this.callerContext.found ? 
-            `Hello, I'm speaking with ${this.callerContext.fullName}. They have ${this.callerContext.claimsCount} claims with us and their current status is ${this.callerContext.status}. Their phone number is ${this.callerContext.phone}.` :
-            `Hello, I'm speaking with someone calling from ${this.callerContext.phone}. I don't have their details in our system yet.`;
+            `Hello, I'm speaking with ${this.callerContext.fullName}. They're calling from ${this.callerContext.phone}. They have ${this.callerContext.claimsCount} claims with us and their current status is ${this.callerContext.status}.` :
+            `Hello, I'm speaking with someone calling from ${this.callerContext.phone}. They're not yet in our system.`;
           
-          // Send as a system message to set context
+          // Send as a system message to set context - IMPORTANT: NO need to ask for phone!
           const systemContextMessage = {
             type: 'user_input',
-            text: `SYSTEM CONTEXT: ${contextMessage}. Please greet the caller appropriately and help them with their motor finance claim inquiry.`
+            text: `SYSTEM CONTEXT: ${contextMessage} You already have their phone number from the call - NEVER ask for it. When they ask to check their details, use the check_user_details function WITHOUT asking for their phone number first. Greet them appropriately and help with their motor finance claim inquiry.`
           };
           
           console.log('📤 [VOICE-CONTEXT] Context message:', systemContextMessage.text);
@@ -968,28 +968,46 @@ export default class VoiceParty implements Party.Server {
 
   /**
    * Handle check_user_details tool call
+   * NOTE: Automatically uses caller's phone from context - no need to ask!
    */
   async handleCheckUserDetails(parameters: any) {
     console.log(`👤 [USER-DETAILS] Request:`, parameters);
+    console.log(`👤 [USER-DETAILS] Using caller context phone: ${this.callerContext?.phone}`);
     
-    if (this.callerContext && this.callerContext.found) {
-      return {
-        success: true,
-        message: `I can see your details here. You're ${this.callerContext.fullName}, you have ${this.callerContext.claimsCount} claims with us, and your current status is ${this.callerContext.status}.`,
-        data: {
-          name: this.callerContext.fullName,
-          phone: this.callerContext.phone,
-          claims_count: this.callerContext.claimsCount,
-          status: this.callerContext.status,
-          user_id: this.callerContext.id
-        }
-      };
-    } else {
-      return {
-        success: false,
-        message: "I don't have your details in our system yet. Can you provide your phone number so I can look you up?"
-      };
+    // ALWAYS use the phone number from the call context - we already have it!
+    if (this.callerContext) {
+      if (this.callerContext.found) {
+        return {
+          success: true,
+          message: `I have your details here. You're ${this.callerContext.fullName}, you have ${this.callerContext.claimsCount} claims with us, and your current status is ${this.callerContext.status}.`,
+          data: {
+            name: this.callerContext.fullName,
+            phone: this.callerContext.phone,
+            claims_count: this.callerContext.claimsCount,
+            status: this.callerContext.status,
+            user_id: this.callerContext.id
+          }
+        };
+      } else {
+        // User not found but we still have their phone from the call
+        return {
+          success: true,
+          message: `I can see you're calling from ${this.callerContext.phone.replace('+44', '0')}. I don't have an account with that number in our system yet. Would you like me to help you get registered for a motor finance claim?`,
+          data: {
+            phone: this.callerContext.phone,
+            user_found: false,
+            action_needed: 'registration'
+          }
+        };
+      }
     }
+    
+    // This should never happen as we always have context from the call
+    return {
+      success: false,
+      message: "I'm having trouble accessing your call information. Let me reconnect.",
+      error: "No caller context available"
+    };
   }
 
   /**
