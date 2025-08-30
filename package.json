@@ -13,7 +13,7 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "postinstall": "npm run db:generate:all",
-    "vercel-build": "npm run db:generate:all:skip-if-exists && next build",
+    "vercel-build": "npm run db:generate:all && next build",
     "aws:build": "npm run db:generate:all && next build",
     "aws:deploy:cron": "chmod +x aws/cli/deploy-cron-jobs.sh && ./aws/cli/deploy-cron-jobs.sh",
     "aws:logs:live": "aws logs tail /aws/lambda/rmc-dialler-cron-handler --follow --format short",
