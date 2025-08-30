@@ -80,16 +80,10 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
     // Search for user with enhanced fields for AI
     const user = await replicaDb.user.findFirst({
       where: {
-        AND: [
-          {
-            phone_number: {
-              in: normalizedNumbers
-            }
-          },
-          {
-            is_enabled: true
-          }
-        ]
+        phone_number: {
+          in: normalizedNumbers
+        }
+        // Removed is_enabled filter to match working voice services
       },
       select: {
         id: true,
@@ -97,7 +91,8 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
         last_name: true,
         phone_number: true,
         status: true,
-        current_user_id_document_id: true  // ID document check
+        current_user_id_document_id: true,  // ID document check
+        is_enabled: true  // Add for debugging
       }
     });
 
@@ -107,6 +102,7 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
     }
 
     console.log(`✅ [AI Voice] User found: ${user.first_name} ${user.last_name} (ID: ${user.id})`);
+    console.log(`📋 [AI Voice] User is_enabled: ${user.is_enabled}, status: ${user.status}`);
 
     // Get claims data for AI context (simplified)
     const claims = await replicaDb.claim.findMany({
@@ -179,16 +175,10 @@ export async function performAIQuickLookup(phoneNumber: string): Promise<{found:
     
     const user = await replicaDb.user.findFirst({
       where: {
-        AND: [
-          {
-            phone_number: {
-              in: normalizedNumbers
-            }
-          },
-          {
-            is_enabled: true
-          }
-        ]
+        phone_number: {
+          in: normalizedNumbers
+        }
+        // Removed is_enabled filter to match working voice services
       },
       select: {
         first_name: true,
