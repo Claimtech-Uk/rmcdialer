@@ -57,6 +57,10 @@ export default class VoiceParty implements Party.Server {
   isProcessingQueue: boolean = false;
   isTwilioConnected: boolean = false;
   
+  // Interruption handling
+  isInterrupted: boolean = false;  // Stop audio processing on interruption
+  markCounter: number = 0;  // For mark events
+  
   constructor(public room: Party.Room) {}
   
   /**
@@ -102,11 +106,18 @@ export default class VoiceParty implements Party.Server {
     this.isProcessingQueue = true;
     console.log(`🔄 Starting queue processing (${this.audioQueue.length} items)`);
     
-    while (this.audioQueue.length > 0 && this.isTwilioConnected) {
+    // CHECK INTERRUPTION FLAG IN LOOP
+    while (this.audioQueue.length > 0 && this.isTwilioConnected && !this.isInterrupted) {
       const audioData = this.audioQueue.shift();
       if (audioData) {
         console.log(`📤 Processing audio chunk ${this.outputsSent + 1} from queue`);
         await this.sendAudioToTwilio(audioData);  // AWAIT is critical!
+        
+        // CHECK AGAIN AFTER SENDING
+        if (this.isInterrupted) {
+          console.log('🛑 Stopping queue processing due to interruption');
+          break;
+        }
       }
     }
     
@@ -682,6 +693,12 @@ export default class VoiceParty implements Party.Server {
   handleHumeMessage(message: any) {
     switch (message.type) {
       case 'audio_output':
+        // CHECK IF INTERRUPTED BEFORE QUEUING
+        if (this.isInterrupted) {
+          console.log('⏸️ Ignoring audio output - user interrupted');
+          break;
+        }
+        
         // CRITICAL FIX: Queue audio instead of processing in parallel!
         if (this.twilioWs && message.data) {
           console.log(`📦 Received audio_output chunk #${this.audioQueue.length + 1} (${message.data.length} base64 chars)`);
@@ -700,17 +717,42 @@ export default class VoiceParty implements Party.Server {
         break;
         
       case 'user_interruption':
-        console.log('🎙️ User interrupted - clearing audio queue AND stopping Twilio playback');
-        this.audioQueue = [];  // Clear pending audio
+        console.log('🎙️ User interrupted - IMMEDIATE STOP');
         
-        // CRITICAL: Tell Twilio to stop playing current audio immediately
+        // 1. Set flag to stop processing
+        this.isInterrupted = true;
+        
+        // 2. Clear the queue
+        const queuedCount = this.audioQueue.length;
+        this.audioQueue = [];
+        console.log(`🗑️ Cleared ${queuedCount} queued audio chunks`);
+        
+        // 3. Send MULTIPLE stop signals to Twilio
         if (this.twilioWs && this.streamSid) {
-          console.log('🛑 Sending CLEAR to Twilio to stop current audio playback');
+          // Send clear event
+          console.log('🛑 Sending CLEAR to Twilio');
           this.twilioWs.send(JSON.stringify({
             event: 'clear',
             streamSid: this.streamSid
           }));
+          
+          // Send mark event to flush buffer
+          this.markCounter++;
+          const markName = `interrupt_${this.markCounter}`;
+          console.log(`📍 Sending MARK event: ${markName}`);
+          this.twilioWs.send(JSON.stringify({
+            event: 'mark',
+            streamSid: this.streamSid,
+            mark: { name: markName }
+          }));
         }
+        
+        // 4. Reset flag after short delay
+        setTimeout(() => {
+          console.log('🔄 Resetting interruption flag');
+          this.isInterrupted = false;
+        }, 200);
+        
         break;
         
       case 'user_message':
@@ -997,26 +1039,58 @@ export default class VoiceParty implements Party.Server {
    */
   async handleCheckUserDetails(parameters: any) {
     console.log(`👤 [USER-DETAILS] Request:`, parameters);
-    console.log(`👤 [USER-DETAILS] Using caller context phone: ${this.callerContext?.phone}`);
     
-    // ALWAYS use the phone number from the call context - we already have it!
-    if (this.callerContext) {
-      if (this.callerContext.found) {
-        // Build detailed response with enriched data
-        let detailsMessage = `I have your details here. You're ${this.callerContext.fullName}`;
+    // Get the phone number from the call context (or parameters as fallback)
+    const phoneNumber = this.callerContext?.phone || parameters.phone_number;
+    
+    if (!phoneNumber || phoneNumber === 'unknown') {
+      return {
+        success: false,
+        message: "I don't have your phone number from this call. Could you tell me the number you're calling from?",
+        error: "No phone number available"
+      };
+    }
+    
+    console.log(`👤 [USER-DETAILS] Looking up user with phone: ${phoneNumber}`);
+    
+    try {
+      // Make API call to your backend to look up the user
+      const apiUrl = this.room.env.MAIN_APP_URL || 'https://claim.resolvemyclaim.co.uk';
+      const lookupUrl = `${apiUrl}/api/ai-voice/lookup-user`;
+      
+      console.log(`📡 [USER-DETAILS] Calling API: ${lookupUrl}`);
+      
+      const response = await fetch(lookupUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ phone: phoneNumber })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const userData: any = await response.json();
+      console.log(`📦 [USER-DETAILS] API Response:`, userData);
+      
+      if (userData.found) {
+        // Build detailed response with the fetched data
+        let detailsMessage = `I have your details here. You're ${userData.fullName}`;
         
         // Add ID status
-        if (!this.callerContext.hasIdOnFile) {
+        if (!userData.hasIdOnFile) {
           detailsMessage += `. I notice you haven't uploaded your ID documents yet`;
         }
         
         // Add claims details
-        if (this.callerContext.claimsCount > 0) {
-          detailsMessage += `. You have ${this.callerContext.claimsCount} claim(s) with us`;
+        if (userData.claimsCount > 0) {
+          detailsMessage += `. You have ${userData.claimsCount} claim${userData.claimsCount > 1 ? 's' : ''} with us`;
           
           // Add specific lender and vehicle details
-          if (this.callerContext.claims && this.callerContext.claims.length > 0) {
-            const claimSummaries = this.callerContext.claims.map((claim: any) => {
+          if (userData.claims && userData.claims.length > 0) {
+            const claimSummaries = userData.claims.map((claim: any) => {
               let summary = claim.lender || 'a lender';
               if (claim.vehiclePackagesCount > 0) {
                 summary += ` (${claim.vehiclePackagesCount} vehicle${claim.vehiclePackagesCount > 1 ? 's' : ''})`;
@@ -1026,7 +1100,7 @@ export default class VoiceParty implements Party.Server {
             detailsMessage += ` with ${claimSummaries.join(', ')}`;
           }
           
-          detailsMessage += `. Your current status is ${this.callerContext.status}.`;
+          detailsMessage += `. Your current status is ${userData.status}.`;
         } else {
           detailsMessage += `, but you don't have any claims submitted yet. Would you like to start one?`;
         }
@@ -1034,41 +1108,31 @@ export default class VoiceParty implements Party.Server {
         return {
           success: true,
           message: detailsMessage,
-          data: {
-            name: this.callerContext.fullName,
-            phone: this.callerContext.phone,
-            has_id_on_file: this.callerContext.hasIdOnFile,
-            claims_count: this.callerContext.claimsCount,
-            total_vehicles: this.callerContext.totalVehiclePackages || 0,
-            claims: this.callerContext.claims?.map((c: any) => ({
-              lender: c.lender,
-              status: c.status,
-              vehicles_count: c.vehiclePackagesCount || 0
-            })) || [],
-            status: this.callerContext.status,
-            user_id: this.callerContext.id
-          }
+          data: userData
         };
       } else {
-        // User not found but we still have their phone from the call
+        // User not found
         return {
           success: true,
-          message: `I can see you're calling from ${this.callerContext.phone.replace('+44', '0')}. I don't have an account with that number in our system yet. Would you like me to help you get registered for a motor finance claim?`,
+          message: `I can see you're calling from ${phoneNumber.replace('+44', '0')}. I don't have an account with that number in our system yet. Would you like me to help you get registered for a motor finance claim?`,
           data: {
-            phone: this.callerContext.phone,
+            phone: phoneNumber,
             user_found: false,
             action_needed: 'registration'
           }
         };
       }
+      
+    } catch (error) {
+      console.error('❌ [USER-DETAILS] API call failed:', error);
+      
+      // Fallback to basic message on error
+      return {
+        success: false,
+        message: "I'm having trouble looking up your details right now. Please bear with me for a moment.",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
     }
-    
-    // This should never happen as we always have context from the call
-    return {
-      success: false,
-      message: "I'm having trouble accessing your call information. Let me reconnect.",
-      error: "No caller context available"
-    };
   }
 
   /**
@@ -1105,6 +1169,10 @@ export default class VoiceParty implements Party.Server {
     this.audioQueue = [];
     this.isProcessingQueue = false;
     this.isTwilioConnected = false;
+    
+    // Reset interruption state
+    this.isInterrupted = false;
+    this.markCounter = 0;
     
     if (this.humeWs) {
       this.humeWs.close();

@@ -26,7 +26,14 @@ export async function POST(request: NextRequest) {
       from,
       to,
       direction
-    })
+    });
+    console.log(`🔍 [AI-VOICE] Phone number format analysis:`, {
+      originalFrom: from,
+      length: from.length,
+      startsWithPlus: from.startsWith('+'),
+      digitsOnly: from.replace(/\D/g, ''),
+      firstThreeDigits: from.replace(/\D/g, '').substring(0, 3)
+    });
 
     // Look up caller information for personalized experience (OPTIONAL)
     console.log(`🔍 [AI-VOICE] Looking up caller information for: ${from}`)
@@ -108,19 +115,12 @@ export async function POST(request: NextRequest) {
       status: callerInfo.user.status,
       hasIdOnFile: !!callerInfo.user.current_user_id_document_id,  // Check if ID document is on file
       phone: from,
-      email: callerInfo.user.email_address,
       claims: callerInfo.claims?.map(claim => ({
         id: Number(claim.id), // Convert BigInt to Number
         lender: claim.lender,
         status: claim.status,
         vehiclePackagesCount: claim.vehiclePackages?.length || 0,  // Number of vehicles in this claim
-        vehiclePackages: claim.vehiclePackages?.map(vp => ({
-          registration: vp.vehicle_registration,
-          make: vp.vehicle_make,
-          model: vp.vehicle_model,
-          dealership: vp.dealership_name,
-          monthlyPayment: vp.monthly_payment ? Number(vp.monthly_payment) : null
-        })) || []
+        vehicleStatuses: claim.vehiclePackages?.map(vp => vp.status) || []  // Just the statuses
       })) || [],
       claimsCount: callerInfo.claims?.length || 0,
       totalVehiclePackages: callerInfo.claims?.reduce((sum, claim) => sum + (claim.vehiclePackages?.length || 0), 0) || 0,
@@ -135,7 +135,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Encode caller context as base64 to safely pass through TwiML
-    const callerContextEncoded = Buffer.from(JSON.stringify(callerContext)).toString('base64')
+    console.log(`🎙️ [AI-VOICE] About to serialize caller context:`, {
+      found: callerContext.found,
+      name: callerContext.found ? callerContext.fullName : 'Not found',
+      claimsCount: callerContext.found ? callerContext.claimsCount : 0
+    });
+    
+    let callerContextEncoded: string;
+    try {
+      callerContextEncoded = Buffer.from(JSON.stringify(callerContext)).toString('base64');
+      console.log(`✅ [AI-VOICE] Caller context serialized successfully`);
+    } catch (serializationError) {
+      console.error('❌ [AI-VOICE] Caller context serialization failed:', serializationError);
+      // Fallback to basic context to prevent crash
+      const fallbackContext = {
+        found: false,
+        phone: from,
+        error: 'Serialization failed'
+      };
+      callerContextEncoded = Buffer.from(JSON.stringify(fallbackContext)).toString('base64');
+    }
 
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

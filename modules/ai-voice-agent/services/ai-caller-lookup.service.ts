@@ -17,26 +17,14 @@ export interface AICallerInfo {
     first_name: string | null;
     last_name: string | null;
     phone_number: string | null;
-    email_address: string | null;
     status: string | null;
     current_user_id_document_id: string | null;
-    created_at: Date | null;
-    last_login: Date | null;
   } | null;
   claims: Array<{
     id: number;
-    type: string | null;
     status: string | null;
     lender: string | null;
-    created_at: Date | null;
-    updated_at: Date | null;
     vehiclePackages: Array<{
-      id: string;
-      vehicle_registration: string | null;
-      vehicle_make: string | null;
-      vehicle_model: string | null;
-      dealership_name: string | null;
-      monthly_payment: any;
       status: string | null;
     }>;
   }>;
@@ -108,11 +96,8 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
         first_name: true,
         last_name: true,
         phone_number: true,
-        email_address: true,
         status: true,
-        current_user_id_document_id: true,  // ID document check
-        created_at: true,
-        last_login: true
+        current_user_id_document_id: true  // ID document check
       }
     });
 
@@ -123,10 +108,8 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
 
     console.log(`✅ [AI Voice] User found: ${user.first_name} ${user.last_name} (ID: ${user.id})`);
 
-    // Get comprehensive data for AI context
-    const [claims, callHistory] = await Promise.all([
-      // Get all claims with vehicle packages (AI needs full context)
-      replicaDb.claim.findMany({
+    // Get claims data for AI context (simplified)
+    const claims = await replicaDb.claim.findMany({
         where: {
           user_id: user.id,
           status: {
@@ -135,20 +118,11 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
         },
         select: {
           id: true,
-          type: true,
           status: true,
           lender: true,
-          created_at: true,
-          updated_at: true,
-          // Include vehicle packages for detailed conversations
+          // Just vehicle status - useful for users
           vehiclePackages: {
             select: {
-              id: true,
-              vehicle_registration: true,
-              vehicle_make: true,
-              vehicle_model: true,
-              dealership_name: true,
-              monthly_payment: true,
               status: true
             }
           }
@@ -156,37 +130,16 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
         orderBy: {
           created_at: 'desc'
         }
-      }),
+      });
 
-      // Get recent call history from PostgreSQL
-      prisma.callSession.findMany({
-        where: {
-          userId: user.id
-        },
-        select: {
-          id: true,
-          status: true,
-          direction: true,
-          startedAt: true
-        },
-        take: 10, // AI needs more history for context
-        orderBy: {
-          startedAt: 'desc'
-        }
-      })
-    ]);
+    // Calculate AI-specific priority score (based on claims only)
+    const priorityScore = calculateAIPriority(claims, []);
 
-    // Calculate AI-specific priority score
-    const priorityScore = calculateAIPriority(claims, callHistory);
-
-    // Convert BigInts and Decimals for JSON serialization
+    // Convert BigInts for JSON serialization
     const convertedClaims = claims.map(claim => ({
       ...claim,
       id: Number(claim.id), // Convert BigInt to number
-      vehiclePackages: claim.vehiclePackages.map(vp => ({
-        ...vp,
-        monthly_payment: vp.monthly_payment ? Number(vp.monthly_payment) : null // Convert Decimal to number
-      }))
+      vehiclePackages: claim.vehiclePackages // Status is already a string, no conversion needed
     }));
 
     const result: AICallerInfo = {
@@ -195,20 +148,18 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
         id: Number(user.id) // Convert BigInt to number for JSON serialization
       },
       claims: convertedClaims,
-      callHistory,
+      callHistory: [], // Empty - not fetching call history anymore
       priorityScore,
       lookupSuccess: true
     };
 
-    console.log(`✅ [AI Voice] Enhanced lookup successful:`, {
+    console.log(`✅ [AI Voice] Simplified lookup successful:`, {
       callerName: `${user.first_name} ${user.last_name}`,
       userId: user.id,
-      phone: user.phone_number,
       hasIdOnFile: !!user.current_user_id_document_id,
       claimsCount: claims.length,
-      totalVehiclePackages: claims.reduce((sum, claim) => sum + (claim.vehiclePackages?.length || 0), 0),
       lenders: [...new Set(claims.map(c => c.lender).filter(Boolean))],
-      priorityScore
+      vehicleStatuses: claims.flatMap(c => c.vehiclePackages?.map(vp => vp.status) || [])
     });
 
     return result;
