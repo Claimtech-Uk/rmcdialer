@@ -74,17 +74,24 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
   try {
     console.log(`🤖 [AI Voice] Starting enhanced AI caller lookup for: ${phoneNumber}`);
     
-    // Normalize phone number to multiple formats for matching
-    const normalizedNumbers = normalizePhoneNumber(phoneNumber);
-    console.log(`🤖 [AI Voice] Searching with phone variants: ${normalizedNumbers.join(', ')}`);
+    // Use EXACT same phone pattern generation as working Voice DB service
+    const cleanPhone = phoneNumber.replace(/\D/g, '');
+    const searchPatterns = [
+      phoneNumber,                    // Original: '+447738585850'
+      cleanPhone,                     // Digits only: '447738585850'
+      `+44${cleanPhone.substring(1)}`, // UK international: '+447738585850' 
+      `0${cleanPhone.substring(2)}`,   // Remove +44, add 0: '07738585850'
+      `44${cleanPhone.substring(1)}`,  // Without + prefix: '447738585850'
+    ];
+    console.log(`🤖 [AI Voice] Searching with phone patterns (Voice DB style): ${searchPatterns.join(', ')}`);
 
-    // Search for user with enhanced fields for AI
+    // Search for user with enhanced fields for AI (NO is_enabled filter like working service)
     const user = await replicaDb.user.findFirst({
       where: {
         phone_number: {
-          in: normalizedNumbers
+          in: searchPatterns
         }
-        // Removed is_enabled filter to match working voice services
+        // NO is_enabled filter - matching working Voice DB service
       },
       select: {
         id: true,
@@ -185,14 +192,22 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
  */
 export async function performAIQuickLookup(phoneNumber: string): Promise<{found: boolean, name?: string, hasId?: boolean} | null> {
   try {
-    const normalizedNumbers = normalizePhoneNumber(phoneNumber);
+    // Use EXACT same phone pattern generation as working Voice DB service
+    const cleanPhone = phoneNumber.replace(/\D/g, '');
+    const searchPatterns = [
+      phoneNumber,                    // Original
+      cleanPhone,                     // Digits only
+      `+44${cleanPhone.substring(1)}`, // UK international
+      `0${cleanPhone.substring(2)}`,   // Remove +44, add 0
+      `44${cleanPhone.substring(1)}`,  // Without + prefix
+    ];
     
     const user = await replicaDb.user.findFirst({
       where: {
         phone_number: {
-          in: normalizedNumbers
+          in: searchPatterns
         }
-        // Removed is_enabled filter to match working voice services
+        // NO is_enabled filter - matching working Voice DB service
       },
       select: {
         first_name: true,
