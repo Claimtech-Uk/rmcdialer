@@ -1,4 +1,3 @@
-import { replicaDb } from '@/lib/mysql';
 import { prisma } from '@/lib/db';
 import { normalizePhoneNumber } from '@/modules/twilio-voice/utils';
 
@@ -73,6 +72,9 @@ function calculateAIPriority(claims: any[], callHistory: any[]): number {
 export async function performAICallerLookup(phoneNumber: string): Promise<AICallerInfo | null> {
   try {
     console.log(`🤖 [AI Voice] Starting enhanced AI caller lookup for: ${phoneNumber}`);
+    
+    // Use dynamic import like working tests
+    const { replicaDb } = await import('@/lib/mysql');
     
     // Use EXACT same phone pattern generation as working Voice DB service
     const cleanPhone = phoneNumber.replace(/\D/g, '');
@@ -192,6 +194,9 @@ export async function performAICallerLookup(phoneNumber: string): Promise<AICall
  */
 export async function performAIQuickLookup(phoneNumber: string): Promise<{found: boolean, name?: string, hasId?: boolean} | null> {
   try {
+    // Use dynamic import like working tests
+    const { replicaDb } = await import('@/lib/mysql');
+    
     // Use EXACT same phone pattern generation as working Voice DB service
     const cleanPhone = phoneNumber.replace(/\D/g, '');
     const searchPatterns = [
