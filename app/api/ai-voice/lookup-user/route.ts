@@ -255,6 +255,114 @@ export async function GET(request: NextRequest) {
     }
   }
   
+  if (testType === 'claims') {
+    try {
+      console.log('🧪 [TEST-CLAIMS] Testing James Campbell claims...')
+      const { replicaDb } = await import('@/lib/mysql')
+      
+      // We know James Campbell is user ID 2064 from the phone test
+      const jamesCampbellId = BigInt(2064)
+      
+      const claims = await replicaDb.claim.findMany({
+        where: {
+          user_id: jamesCampbellId,
+          status: {
+            not: 'completed'
+          }
+        },
+        select: {
+          id: true,
+          status: true,
+          lender: true,
+          created_at: true
+        },
+        orderBy: {
+          created_at: 'desc'
+        }
+      })
+      
+      console.log(`✅ [TEST-CLAIMS] Found ${claims.length} claims for James Campbell`)
+      
+      return NextResponse.json({
+        success: true,
+        test: 'claims_search',
+        userId: 2064,
+        claimsCount: claims.length,
+        claims: claims.map(claim => ({
+          id: Number(claim.id),
+          status: claim.status,
+          lender: claim.lender,
+          createdAt: claim.created_at
+        }))
+      })
+      
+    } catch (error: any) {
+      console.error('❌ [TEST-CLAIMS] Claims search failed:', error)
+      return NextResponse.json({
+        success: false,
+        test: 'claims_search',
+        error: error?.message || 'Unknown error'
+      })
+    }
+  }
+  
+  if (testType === 'vehicles') {
+    try {
+      console.log('🧪 [TEST-VEHICLES] Testing vehicle packages with relations...')
+      const { replicaDb } = await import('@/lib/mysql')
+      
+      // Test claims WITH vehicle packages relation (this might be the issue)
+      const jamesCampbellId = BigInt(2064)
+      
+      const claimsWithVehicles = await replicaDb.claim.findMany({
+        where: {
+          user_id: jamesCampbellId,
+          status: {
+            not: 'completed'
+          }
+        },
+        select: {
+          id: true,
+          status: true,
+          lender: true,
+          // This is what might be causing the Prisma engine error
+          vehiclePackages: {
+            select: {
+              status: true
+            }
+          }
+        },
+        orderBy: {
+          created_at: 'desc'
+        }
+      })
+      
+      console.log(`✅ [TEST-VEHICLES] Found ${claimsWithVehicles.length} claims with vehicle data`)
+      
+      return NextResponse.json({
+        success: true,
+        test: 'vehicle_packages_search',
+        userId: 2064,
+        claimsCount: claimsWithVehicles.length,
+        claims: claimsWithVehicles.map(claim => ({
+          id: Number(claim.id),
+          status: claim.status,
+          lender: claim.lender,
+          vehicleCount: claim.vehiclePackages?.length || 0,
+          vehicleStatuses: claim.vehiclePackages?.map(v => v.status) || []
+        }))
+      })
+      
+    } catch (error: any) {
+      console.error('❌ [TEST-VEHICLES] Vehicle packages query failed:', error)
+      return NextResponse.json({
+        success: false,
+        test: 'vehicle_packages_search',
+        error: error?.message || 'Unknown error'
+      })
+    }
+  }
+  
   return NextResponse.json({
     status: 'AI Voice User Lookup Endpoint',
     enabled: isAIVoiceEnabled || environmentName === 'staging-development',
@@ -263,8 +371,10 @@ export async function GET(request: NextRequest) {
     required: { phone: 'string' },
     testOptions: {
       basicConnection: '?test=basic',
-      anyData: '?test=any-data',
-      phoneSearch: '?test=phone'
+      anyData: '?test=any-data', 
+      phoneSearch: '?test=phone',
+      claimsSearch: '?test=claims',
+      vehiclePackages: '?test=vehicles'
     }
   })
 }
